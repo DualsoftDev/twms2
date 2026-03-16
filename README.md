@@ -1,7 +1,23 @@
-# TWMS 2.0 — 종합설비관리 시스템
+<div align="center">
 
-TWMS2(Total Workshop Management System2)는 제조 라인의 설비 자산을 통합 관리·모니터링하는 웹 애플리케이션입니다.
-DEXA 서버와 Akka.NET 원격 통신으로 연동하며, Blazor Server 기반의 실시간 대시보드와 레이아웃 시각화 기능을 제공합니다.
+# TWMS 2.0
+
+**Total Workshop Management System**
+
+종합설비관리 시스템
+
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
+[![Blazor](https://img.shields.io/badge/Blazor-Server-512BD4)](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor)
+[![Akka.NET](https://img.shields.io/badge/Akka.NET-1.4.24-0D4EA6)](https://getakka.net/)
+[![MudBlazor](https://img.shields.io/badge/MudBlazor-8.15.0-7e6fff)](https://mudblazor.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-Dapper-003B57)](https://www.sqlite.org/)
+
+---
+
+*제조 라인의 설비 자산을 통합 관리·모니터링하는 웹 애플리케이션*
+*DEXA 서버와 Akka.NET 원격 통신으로 연동하며, Blazor Server 기반의 실시간 대시보드와 레이아웃 시각화 기능을 제공합니다.*
+
+</div>
 
 ---
 
@@ -74,23 +90,30 @@ Twms2.0/
 
 ## 페이지 구성
 
-| 경로 | 페이지 | 설명 |
-|------|--------|------|
-| `/` | Home | GridStack 대시보드 (KPI, 히트맵, 자산 분포) |
-| `/layout` | LayoutView | 자산 레이아웃 시각화 |
-| `/layout/blueprint` | BlueprintView | SVG 블루프린트 편집기 |
-| `/layout/placement` | AssetPlacementView | 자산 배치 편집기 |
-| `/layout/groups` | AssetGroupView | 자산 그룹 관리 |
-| `/assets/{id}` | AssetDetail | 자산 상세 정보 |
-| `/assets/explorer` | AssetExplorer | 폴더 트리 자산 탐색기 |
-| `/assets/grid` | AssetEditGrid | 스프레드시트형 자산 편집 |
-| `/history` | ActionHistory | 액션/상태 이력 검색 |
-| `/schedules` | ScheduleList | 스케줄·트리거 관리 |
-| `/settings` | Settings | 앱 설정 (일반, 라인 구성) |
-| `/admin` | AdminIndex | 관리자 대시보드 |
-| `/admin/users` | UserManagement | 사용자·권한 관리 |
-| `/admin/database` | DatabaseManagement | DB 유지보수 |
-| `/status` | StatusMonitor | 실시간 자산 상태 |
+```mermaid
+graph LR
+    Root["/ Home\n대시보드"]
+
+    Root --- Layout["/layout\n레이아웃 시각화"]
+    Layout --- Blueprint["/layout/blueprint\n블루프린트 편집기"]
+    Layout --- Placement["/layout/placement\n자산 배치 편집기"]
+    Layout --- Groups["/layout/groups\n자산 그룹 관리"]
+
+    Root --- Assets["/assets\n자산 관리"]
+    Assets --- Detail["/assets/{id}\n자산 상세"]
+    Assets --- Explorer["/assets/explorer\n트리 탐색기"]
+    Assets --- Grid["/assets/grid\n스프레드시트 편집"]
+
+    Root --- History["/history\n액션·상태 이력"]
+    Root --- Schedules["/schedules\n스케줄·트리거"]
+    Root --- Status["/status\n실시간 상태"]
+
+    Root --- Settings["/settings\n앱 설정"]
+
+    Root --- Admin["/admin\n관리자"]
+    Admin --- Users["/admin/users\n사용자·권한"]
+    Admin --- DB["/admin/database\nDB 유지보수"]
+```
 
 ---
 
