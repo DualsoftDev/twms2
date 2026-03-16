@@ -1,6 +1,8 @@
 @page "/layout"
 @inject AssetStatusService AssetStatusService
 @inject TwmDbService TwmDb
+@inject DexaNotificationService NotificationService
+@implements IDisposable
 
 <PageTitle>TWM - 레이아웃</PageTitle>
 
@@ -8,22 +10,20 @@
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
         <MudText Typo="Typo.h4">레이아웃</MudText>
         <MudSpacer />
-        <MudButtonGroup OverrideStyles="false" Variant="Variant.Outlined" Size="Size.Small">
+        <MudStack Row="true" Spacing="3">
             <MudButton StartIcon="@Icons.Material.Filled.Map"
                        Variant="@(_viewMode == 0 ? Variant.Filled : Variant.Outlined)"
-                       Color="Color.Primary"
+                       Color="Color.Primary" Size="Size.Medium"
                        OnClick="() => SetView(0)">
                 라인별
             </MudButton>
             <MudButton StartIcon="@Icons.Material.Filled.GridView"
                        Variant="@(_viewMode == 1 ? Variant.Filled : Variant.Outlined)"
-                       Color="Color.Primary"
+                       Color="Color.Primary" Size="Size.Medium"
                        OnClick="() => SetView(1)">
                 개별
             </MudButton>
-        </MudButtonGroup>
-        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary"
-                       OnClick="RefreshAsync" Size="Size.Small" Disabled="_loading" />
+        </MudStack>
     </MudStack>
 
     @if (_layouts.Count > 1)
@@ -55,8 +55,7 @@
                             AssetPositions="_assetPositions"
                             AssetStatuses="_assetStatuses"
                             PlacementGroups="_placementGroups"
-                            PlacementGroupMembers="_placementGroupMembers"
-                            OnAssetClicked="HandleAssetEditRequested" />
+                            PlacementGroupMembers="_placementGroupMembers" />
     }
 </div>
 
@@ -92,14 +91,26 @@
         await RefreshAsync();
     }
 
+    private System.Threading.Timer? _statusTimer;
+
     protected override async Task OnInitializedAsync()
     {
+        NotificationService.OnDatabaseChanged += HandleDatabaseChanged;
         _layouts = await TwmDb.GetAllLayoutsAsync();
         _selectedLayoutId = _layouts.FirstOrDefault()?.Id ?? 0;
         if (_selectedLayoutId > 0)
             await RefreshAsync();
         else
             _loading = false;
+
+        _statusTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshStatusOnly();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
 
     private void SetView(int mode)
@@ -146,5 +157,29 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    private async Task RefreshStatusOnly()
+    {
+        if (_selectedLayoutId == 0) return;
+        _assetStatuses = await AssetStatusService.GetAssetStatusesAsync();
+    }
+
+    private async void HandleDatabaseChanged(string tableName)
+    {
+        if (tableName is "action" or "actionlog" or "asset" or "agent" or "ping" or "*")
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshStatusOnly();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose()
+    {
+        NotificationService.OnDatabaseChanged -= HandleDatabaseChanged;
+        _statusTimer?.Dispose();
     }
 }

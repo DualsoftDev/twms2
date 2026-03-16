@@ -85,7 +85,7 @@ else
                     </MudText>
                     <MudSlider T="double" Value="_globalScale"
                                ValueChanged="OnGlobalScaleChanged"
-                               Min="0.5" Max="3.0" Step="0.1"
+                               Min="0.2" Max="3.0" Step="0.1"
                                Style="flex: 1;" />
                 </MudStack>
 
@@ -408,7 +408,7 @@ else
 
     private async Task OnGlobalScaleChanged(double newScale)
     {
-        newScale = Math.Clamp(newScale, 0.5, 3.0);
+        newScale = Math.Clamp(newScale, 0.2, 3.0);
         _globalScale = newScale;
         foreach (var pos in _positions.Values)
             pos.Scale = newScale;

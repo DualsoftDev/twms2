@@ -32,6 +32,17 @@
                        preserveAspectRatio="xMidYMid meet" opacity="0.85" />
             }
 
+            @* ── 라인 영역 clipPath 정의 ── *@
+            <defs>
+                @foreach (var rect in BlueprintRects)
+                {
+                    <clipPath id="line-clip-@rect.LineId">
+                        <rect x="@F(rect.X)" y="@F(rect.Y)"
+                              width="@F(rect.Width)" height="@F(rect.Height)" rx="6" />
+                    </clipPath>
+                }
+            </defs>
+
             @* ── 라인 영역 사각형 + 내부 자산 아이콘 (PLC + standalone만) ── *@
             @foreach (var rect in BlueprintRects)
             {
@@ -62,7 +73,7 @@
                         var totalAssetCount = lineAssets.Count;
                         // 텍스트 폭 추정 (한글≈12, 영숫자≈7)
                         var estW = labelText.Sum(c => c > 127 ? 12.0 : 7.0);
-                        var badgeCx = rect.X + rect.Width / 2 + estW / 2 + 10;
+                        var badgeCx = rect.X + rect.Width / 2 + estW / 2 + 8;
                         var badgeCy = rect.Y + 11;
                     }
                     <text x="@F(rect.X + rect.Width / 2)" y="@F(rect.Y + 15)"
@@ -73,15 +84,16 @@
                     </text>
                     @if (totalAssetCount > 0)
                     {
-                        <circle cx="@F(badgeCx)" cy="@F(badgeCy)" r="7"
-                                fill="@healthColor" stroke="white" stroke-width="0.6" />
-                        @(RenderBadgeText(badgeCx, badgeCy + 3, totalAssetCount))
+                        <circle cx="@F(badgeCx)" cy="@F(badgeCy)" r="5.5"
+                                fill="@healthColor" stroke="white" stroke-width="0.4" />
+                        @(RenderBadgeText(badgeCx, badgeCy + 2.5, totalAssetCount))
                     }
 
-                    @* 자산 아이콘 (PLC 카드 + standalone) *@
+                    @* 자산 아이콘 (PLC 카드 + standalone) - clipPath로 영역 내 제한 *@
                     @{
                         var (standalones, plcCards) = LayoutLineAssets(rect, topLevel);
                     }
+                    <g clip-path="url(#line-clip-@rect.LineId)">
 
                     @* ── PLC 카드 ── *@
                     @foreach (var card in plcCards)
@@ -184,6 +196,7 @@
                             </g>
                         </g>
                     }
+                    </g>@* end clip-path *@
                 </g>
             }
         </svg>
@@ -428,10 +441,10 @@
     }
 
     private static MarkupString RenderBadgeText(double x, double y, int count) =>
-        new($"<text x=\"{F(x)}\" y=\"{F(y)}\" text-anchor=\"middle\" font-size=\"7\" fill=\"white\" font-weight=\"bold\">{count}</text>");
+        new($"<text x=\"{F(x)}\" y=\"{F(y)}\" text-anchor=\"middle\" font-size=\"6\" fill=\"white\" font-weight=\"bold\">{count}</text>");
 
     private static MarkupString RenderIpLabel(double x, double y, string ip) =>
-        new($"<text x=\"{F(x)}\" y=\"{F(y)}\" font-size=\"7\" fill=\"rgba(255,255,255,0.85)\" font-family=\"monospace\">{ip}</text>");
+        new($"<text x=\"{F(x)}\" y=\"{F(y)}\" font-size=\"6.5\" fill=\"rgba(200,220,255,0.9)\" font-family=\"'Consolas','Monaco',monospace\" letter-spacing=\"0.3\">{ip}</text>");
 
     private void NavigateToAsset(int assetId)
     {
@@ -450,7 +463,11 @@
             {
                 <code style="font-size:0.75rem; color:var(--mud-palette-text-secondary);">@a.Ip</code>
             }
-            <span class="blueprint-popover-status" style="background:@GetHealthColor(a.Health);"></span>
+            @{ var (hLabel, hColor) = GetHealthLabel(a.Health); }
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                     Style="@($"height:20px; font-size:0.7rem; background:{hColor}; color:white;")">
+                @hLabel
+            </MudChip>
             @if (a.LatestPing != null)
             {
                 <MudChip T="string" Size="Size.Small"
@@ -459,10 +476,6 @@
                     @(a.LatestPing.Reachable ? "온라인" : "오프라인")
                 </MudChip>
             }
-            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                           Color="Color.Primary" Title="편집"
-                           OnClick="() => OnAssetEditRequested.InvokeAsync(a.AssetId)"
-                           Style="padding:2px;" />
         </div>
     };
 
@@ -479,12 +492,12 @@
                     <th>Slot</th>
                     <th>상태</th>
                     <th>연결</th>
-                    <th style="width:32px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var c in children)
                 {
+                    var (cLabel, cColor) = GetHealthLabel(c.Health);
                     <tr>
                         <td><img src="@GetAssetIcon(c.AssetTypeName, c.AugIsRobotPLC)" style="width:22px;height:22px;" /></td>
                         <td class="blueprint-asset-link" style="white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis;"
@@ -493,22 +506,18 @@
                         <td style="font-family:monospace; font-size:0.75rem;">@c.AugIpVia</td>
                         <td>@c.AugBaseNumber</td>
                         <td>@c.AugSlotNumber</td>
-                        <td><span class="blueprint-popover-status" style="background:@GetHealthColor(c.Health);"></span></td>
+                        <td>
+                            <span style="font-size:0.7rem; font-weight:600; color:@cColor;">@cLabel</span>
+                        </td>
                         <td>
                             @if (c.LatestPing != null)
                             {
                                 <MudChip T="string" Size="Size.Small"
                                          Color="@(c.LatestPing.Reachable ? Color.Success : Color.Error)"
                                          Variant="Variant.Outlined" Style="height:18px; font-size:0.65rem;">
-                                    @(c.LatestPing.Reachable ? "ON" : "OFF")
+                                    @(c.LatestPing.Reachable ? "온라인" : "오프라인")
                                 </MudChip>
                             }
-                        </td>
-                        <td>
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                           Color="Color.Primary" Title="편집"
-                                           OnClick="() => OnAssetEditRequested.InvokeAsync(c.AssetId)"
-                                           Style="padding:2px;" />
                         </td>
                     </tr>
                 }
@@ -543,19 +552,28 @@
         var maxY = rect.Y + rect.Height - 2;
         var availW = rect.Width - pad * 2;
         var availH = rect.Height - headerH - 2;
-
-        if (availH < 14) return (standalones, plcCards);
-
         int totalSlots = topLevel.Count;
 
+        if (availH < 2 || totalSlots == 0) return (standalones, plcCards);
+
         // 영역 비율에 맞는 최적 아이콘 크기
-        var aspectRatio = availW / availH;
+        var aspectRatio = availW / Math.Max(1, availH);
         var bestCols = Math.Max(1, (int)Math.Round(Math.Sqrt(totalSlots * aspectRatio)));
         var cols = Math.Min(bestCols, totalSlots);
         var rows = (int)Math.Ceiling((double)totalSlots / cols);
         var gap = 3.0;
         var cellH = (availH - gap * Math.Max(0, rows - 1)) / Math.Max(1, rows);
-        var sz = Math.Max(16, Math.Min(cellH, 36));
+
+        var sz = Math.Max(6, Math.Min(cellH, 36));
+
+        // PLC 세로 카드: 높이 = 1.45*sz + 16 → sz ≤ (cellH - 16) / 1.45
+        var plcCount = topLevel.Count(a => _plcChildren.ContainsKey(a.AssetId));
+        if (plcCount > 0)
+        {
+            var testHorizW = sz + 80; // 가로 카드 최소 폭 추정
+            if (testHorizW > availW || availH > availW * 1.5)
+                sz = Math.Max(6, Math.Min(sz, (cellH - 16) / 1.45));
+        }
         var childSz = Math.Round(Math.Min(sz * 0.45, sz * 0.5), 1);
         var ipFontSz = 7.0;
         var innerGap = 4.0;
@@ -592,7 +610,6 @@
 
                     if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
                     if (cardW > availW) cardW = availW;
-                    if (y + cardH > maxY) continue;
 
                     var card = new PlcCardInfo
                     {
@@ -643,7 +660,6 @@
 
                     if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
                     if (cardW > availW) cardW = availW;
-                    if (y + cardH > maxY) continue;
 
                     var hasIpH = !string.IsNullOrEmpty(asset.Ip);
                     var card = new PlcCardInfo
@@ -683,7 +699,6 @@
             {
                 var rowH = sz + gap;
                 if (x + sz > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
-                if (y + sz > maxY) continue;
                 standalones.Add(new(x, y, sz, asset));
                 x += sz + gap;
             }
@@ -691,6 +706,15 @@
 
         return (standalones, plcCards);
     }
+
+    private static (string Label, string Color) GetHealthLabel(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp   => ("갱신", "#65B991"),
+        AssetHealthStatus.Unchanged  => ("유지", "#6BA0DE"),
+        AssetHealthStatus.Failed     => ("실패", "#E67E7E"),
+        AssetHealthStatus.InProgress => ("진행중", "#f59e0b"),
+        _                            => ("내역없음", "#999"),
+    };
 
     private static string AggregateHealthColor(List<AssetStatusInfo> assets)
     {

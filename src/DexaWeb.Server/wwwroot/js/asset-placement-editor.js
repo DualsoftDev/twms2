@@ -61,33 +61,29 @@ window.assetPlacementEditor = (() => {
         bindLasso(inst);
     }
 
-    // ── 자산 드래그 (단일 + 다중 이동) ──
+    // ── 자산 드래그 (단일 + 다중 이동, 자산만) ──
     function bindAssetDrag(inst, group, assetId) {
         let startPt = null;
         let startPos = null;
         let moved = false;
-        let bulkStarts = null;       // 다중 이동 시 개별 자산 시작 위치
-        let bulkGroupStarts = null;  // 다중 이동 시 선택된 그룹 시작 위치
+        let bulkStarts = null;
 
         const onDown = (e) => {
             e.preventDefault();
             e.stopPropagation();
 
-            // Ctrl+클릭: 선택 토글
+            // Ctrl+클릭: 자산 선택 토글
             if (inst.mode === 'multi' && (e.ctrlKey || e.metaKey)) {
                 toggleSelect(inst, assetId, group);
                 return;
             }
 
-            // 다중 모드에서 선택된 자산 클릭 → 일괄 이동 준비
+            // 다중 모드에서 선택된 자산 클릭 → 자산끼리만 일괄 이동
             const isSelected = inst.selectedIds.has(assetId);
-            const totalSelected = inst.selectedIds.size + inst.selectedGroupIds.size;
-            if (inst.mode === 'multi' && isSelected && totalSelected > 1) {
-                bulkGroupStarts = collectBulkGroupStarts(inst);
-                bulkStarts = collectBulkStartsExcluding(inst, bulkGroupStarts);
+            if (inst.mode === 'multi' && isSelected && inst.selectedIds.size > 1) {
+                bulkStarts = collectBulkStarts(inst);
             } else {
                 bulkStarts = null;
-                bulkGroupStarts = null;
             }
 
             startPt = { clientX: e.clientX, clientY: e.clientY };
@@ -105,7 +101,6 @@ window.assetPlacementEditor = (() => {
             const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
 
             if (bulkStarts) {
-                // 일괄 이동 — 기준 자산만 스냅, 나머지 동일 delta
                 const refSz = getIconSize(group);
                 const rawX = clampX(startPos.x + d.dx, refSz);
                 const rawY = clampY(startPos.y + d.dy, refSz);
@@ -114,7 +109,6 @@ window.assetPlacementEditor = (() => {
                 const snapDx = snapped.x - (startPos.x + d.dx);
                 const snapDy = snapped.y - (startPos.y + d.dy);
 
-                // 개별 자산 이동
                 for (const [aid, sp] of bulkStarts) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (!el) continue;
@@ -125,11 +119,7 @@ window.assetPlacementEditor = (() => {
                     el.dataset.x = nx;
                     el.dataset.y = ny;
                 }
-
-                // 선택된 그룹 + 멤버 자산 이동
-                moveBulkGroups(inst, bulkGroupStarts, d, snapDx, snapDy);
             } else {
-                // 단일 이동
                 const sz = getIconSize(group);
                 const rawX = clampX(startPos.x + d.dx, sz);
                 const rawY = clampY(startPos.y + d.dy, sz);
@@ -154,7 +144,13 @@ window.assetPlacementEditor = (() => {
 
             if (moved && inst.dotNetRef) {
                 if (bulkStarts) {
-                    reportBulkPositions(inst, bulkStarts, bulkGroupStarts);
+                    const positions = [];
+                    for (const [aid] of bulkStarts) {
+                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                        if (!el) continue;
+                        positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                    }
+                    inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
                 } else {
                     inst.dotNetRef.invokeMethodAsync('OnAssetMoved', assetId,
                         r2(parseFloat(group.dataset.x)), r2(parseFloat(group.dataset.y)));
@@ -164,14 +160,13 @@ window.assetPlacementEditor = (() => {
             startPt = null;
             startPos = null;
             bulkStarts = null;
-            bulkGroupStarts = null;
         };
 
         group.addEventListener('pointerdown', onDown);
         inst.handlers.push({ el: group, type: 'pointerdown', fn: onDown });
     }
 
-    // ── 그룹 드래그 ──
+    // ── 그룹 드래그 (단일 + 다중 그룹 이동) ──
     function bindGroupDrag(inst, groupEl, groupId) {
         const rect = groupEl.querySelector('rect:first-of-type');
         if (!rect) return;
@@ -180,7 +175,6 @@ window.assetPlacementEditor = (() => {
         let startGrp = null;
         let moved = false;
         let memberStarts = null;
-        let bulkAssetStarts = null;
         let bulkGroupStarts = null;
 
         const onDown = (e) => {
@@ -201,15 +195,12 @@ window.assetPlacementEditor = (() => {
             };
             moved = false;
 
-            // 다중 모드에서 선택된 그룹 드래그 → 일괄 이동
+            // 다중 모드에서 선택된 그룹 드래그 → 그룹끼리만 일괄 이동
             const isSelected = inst.selectedGroupIds.has(groupId);
-            const totalSelected = inst.selectedIds.size + inst.selectedGroupIds.size;
-            if (inst.mode === 'multi' && isSelected && totalSelected > 1) {
+            if (inst.mode === 'multi' && isSelected && inst.selectedGroupIds.size > 1) {
                 bulkGroupStarts = collectBulkGroupStarts(inst);
-                bulkAssetStarts = collectBulkStartsExcluding(inst, bulkGroupStarts);
             } else {
                 bulkGroupStarts = null;
-                bulkAssetStarts = null;
                 memberStarts = collectGroupMemberStarts(inst, groupEl);
             }
 
@@ -235,21 +226,8 @@ window.assetPlacementEditor = (() => {
             const snapDy = ny - (startGrp.y + d.dy);
 
             if (bulkGroupStarts) {
-                // 일괄 이동: 선택된 모든 그룹 + 멤버 + 개별 자산
+                // 선택된 모든 그룹 + 멤버 일괄 이동
                 moveBulkGroups(inst, bulkGroupStarts, d, snapDx, snapDy);
-
-                if (bulkAssetStarts) {
-                    for (const [aid, sp] of bulkAssetStarts) {
-                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                        if (!el) continue;
-                        const sz = getIconSize(el);
-                        const ax = clampX(sp.x + d.dx + snapDx, sz);
-                        const ay = clampY(sp.y + d.dy + snapDy, sz);
-                        el.setAttribute('transform', `translate(${ax}, ${ay})`);
-                        el.dataset.x = ax;
-                        el.dataset.y = ay;
-                    }
-                }
             } else {
                 // 단일 그룹 드래그
                 updateGroupPosition(groupEl, nx, ny);
@@ -274,13 +252,26 @@ window.assetPlacementEditor = (() => {
             groupEl.classList.remove('dragging');
 
             if (!moved && inst.mode === 'multi') {
-                // 클릭만: 그룹 단독 선택
                 selectGroupOnly(inst, groupId);
             }
 
             if (moved && startPt && inst.dotNetRef) {
                 if (bulkGroupStarts) {
-                    reportBulkPositions(inst, bulkAssetStarts, bulkGroupStarts);
+                    // 모든 선택된 그룹 위치 보고
+                    const positions = [];
+                    for (const [gid, gsp] of bulkGroupStarts) {
+                        inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
+                            r2(parseFloat(gsp.el.dataset.x)),
+                            r2(parseFloat(gsp.el.dataset.y)),
+                            r2(parseFloat(gsp.el.dataset.w)),
+                            r2(parseFloat(gsp.el.dataset.h)));
+                        for (const [aid] of gsp.members) {
+                            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                            if (!el) continue;
+                            positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                        }
+                    }
+                    if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
                 } else {
                     inst.dotNetRef.invokeMethodAsync('OnGroupMoved', groupId,
                         r2(parseFloat(groupEl.dataset.x)),
@@ -303,7 +294,6 @@ window.assetPlacementEditor = (() => {
             startGrp = null;
             moved = false;
             memberStarts = null;
-            bulkAssetStarts = null;
             bulkGroupStarts = null;
         };
 
@@ -413,28 +403,16 @@ window.assetPlacementEditor = (() => {
                 const lx2 = Math.max(startSvg.x, cur.x);
                 const ly2 = Math.max(startSvg.y, cur.y);
 
-                // 올가미 범위에 중심이 포함된 자산 + 그룹 선택
+                // 올가미 범위에 중심이 포함된 자산 선택 (그룹은 Ctrl+클릭으로만)
                 if (lx2 - lx1 > 5 || ly2 - ly1 > 5) {
                     inst.selectedIds.clear();
                     inst.selectedGroupIds.clear();
-                    // 자산
                     inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
                         const sz = getIconSize(g);
                         const ax = (parseFloat(g.dataset.x) || 0) + sz / 2;
                         const ay = (parseFloat(g.dataset.y) || 0) + sz / 2;
                         if (ax >= lx1 && ax <= lx2 && ay >= ly1 && ay <= ly2) {
                             inst.selectedIds.add(parseInt(g.dataset.assetId));
-                        }
-                    });
-                    // 그룹 (중심이 올가미 범위에 포함된 경우)
-                    inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
-                        const gx = parseFloat(g.dataset.x) || 0;
-                        const gy = parseFloat(g.dataset.y) || 0;
-                        const gw = parseFloat(g.dataset.w) || 150;
-                        const gh = parseFloat(g.dataset.h) || 100;
-                        const cx = gx + gw / 2, cy = gy + gh / 2;
-                        if (cx >= lx1 && cx <= lx2 && cy >= ly1 && cy <= ly2) {
-                            inst.selectedGroupIds.add(parseInt(g.dataset.groupId));
                         }
                     });
                     updateSelectionVisual(inst);
@@ -452,8 +430,13 @@ window.assetPlacementEditor = (() => {
         inst.handlers.push({ el: inst.svg, type: 'pointerdown', fn: onDown });
     }
 
-    // ── 선택 헬퍼 ──
+    // ── 선택 헬퍼 (자산과 그룹은 상호 배타) ──
     function toggleSelect(inst, assetId, el) {
+        // 자산 선택 시 그룹 선택 해제
+        if (inst.selectedGroupIds.size > 0) {
+            inst.selectedGroupIds.clear();
+            updateGroupSelectionVisual(inst);
+        }
         if (inst.selectedIds.has(assetId)) {
             inst.selectedIds.delete(assetId);
             el.classList.remove('ap-selected');
@@ -465,6 +448,11 @@ window.assetPlacementEditor = (() => {
     }
 
     function toggleGroupSelect(inst, groupId, groupEl) {
+        // 그룹 선택 시 자산 선택 해제
+        if (inst.selectedIds.size > 0) {
+            inst.selectedIds.clear();
+            updateSelectionVisual(inst);
+        }
         if (inst.selectedGroupIds.has(groupId)) {
             inst.selectedGroupIds.delete(groupId);
             groupEl.classList.remove('ap-group-selected');
@@ -551,23 +539,6 @@ window.assetPlacementEditor = (() => {
         return map;
     }
 
-    // 선택된 개별 자산 중 선택된 그룹 멤버를 제외한 목록
-    function collectBulkStartsExcluding(inst, groupStarts) {
-        const excludeIds = new Set();
-        if (groupStarts) {
-            for (const [, gsp] of groupStarts) {
-                for (const [aid] of gsp.members) excludeIds.add(aid);
-            }
-        }
-        const map = new Map();
-        for (const aid of inst.selectedIds) {
-            if (excludeIds.has(aid)) continue;
-            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-            if (el) map.set(aid, { x: parseFloat(el.dataset.x) || 0, y: parseFloat(el.dataset.y) || 0 });
-        }
-        return map;
-    }
-
     // 선택된 그룹들과 멤버 자산 일괄 이동
     function moveBulkGroups(inst, groupStarts, d, snapDx, snapDy) {
         if (!groupStarts) return;
@@ -586,36 +557,6 @@ window.assetPlacementEditor = (() => {
                 el.dataset.y = ay;
             }
         }
-    }
-
-    // 벌크 이동 후 C#에 위치 보고
-    function reportBulkPositions(inst, assetStarts, groupStarts) {
-        if (!inst.dotNetRef) return;
-        const positions = [];
-        // 개별 자산 위치
-        if (assetStarts) {
-            for (const [aid] of assetStarts) {
-                const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                if (!el) continue;
-                positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
-            }
-        }
-        // 그룹 위치 + 멤버 자산 위치
-        if (groupStarts) {
-            for (const [gid, gsp] of groupStarts) {
-                inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
-                    r2(parseFloat(gsp.el.dataset.x)),
-                    r2(parseFloat(gsp.el.dataset.y)),
-                    r2(parseFloat(gsp.el.dataset.w)),
-                    r2(parseFloat(gsp.el.dataset.h)));
-                for (const [aid] of gsp.members) {
-                    const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                    if (!el) continue;
-                    positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
-                }
-            }
-        }
-        if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
     }
 
     // ── 그룹 위치/크기 업데이트 ──
