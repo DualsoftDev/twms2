@@ -251,7 +251,10 @@
         {
             if (!Directory.Exists(TwmsDataPath.Uploads)) return null;
             var files = Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*");
-            return files.Length > 0 ? "/uploads/" + Path.GetFileName(files[0]) : null;
+            if (files.Length == 0) return null;
+            var fi = new FileInfo(files[0]);
+            var ts = fi.LastWriteTimeUtc.Ticks;
+            return $"/uploads/{Path.GetFileName(files[0])}?t={ts}";
         }
         catch { return null; }
     }
