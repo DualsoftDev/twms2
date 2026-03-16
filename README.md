@@ -93,27 +93,27 @@ Twms2.0/
 
 ```mermaid
 graph LR
-    Root["/ Home\n대시보드"]
+    Root["/ Home<br/>대시보드"]
 
-    Root --- Layout["/layout\n레이아웃 시각화"]
-    Layout --- Blueprint["/layout/blueprint\n블루프린트 편집기"]
-    Layout --- Placement["/layout/placement\n자산 배치 편집기"]
-    Layout --- Groups["/layout/groups\n자산 그룹 관리"]
+    Root --- Layout["/layout<br/>레이아웃 시각화"]
+    Layout --- Blueprint["/layout/blueprint<br/>블루프린트 편집기"]
+    Layout --- Placement["/layout/placement<br/>자산 배치 편집기"]
+    Layout --- Groups["/layout/groups<br/>자산 그룹 관리"]
 
-    Root --- Assets["/assets\n자산 관리"]
-    Assets --- Detail["/assets/{id}\n자산 상세"]
-    Assets --- Explorer["/assets/explorer\n트리 탐색기"]
-    Assets --- Grid["/assets/grid\n스프레드시트 편집"]
+    Root --- Assets["/assets<br/>자산 관리"]
+    Assets --- Detail["/assets/{id}<br/>자산 상세"]
+    Assets --- Explorer["/assets/explorer<br/>트리 탐색기"]
+    Assets --- Grid["/assets/grid<br/>스프레드시트 편집"]
 
-    Root --- History["/history\n액션·상태 이력"]
-    Root --- Schedules["/schedules\n스케줄·트리거"]
-    Root --- Status["/status\n실시간 상태"]
+    Root --- History["/history<br/>액션·상태 이력"]
+    Root --- Schedules["/schedules<br/>스케줄·트리거"]
+    Root --- Status["/status<br/>실시간 상태"]
 
-    Root --- Settings["/settings\n앱 설정"]
+    Root --- Settings["/settings<br/>앱 설정"]
 
-    Root --- Admin["/admin\n관리자"]
-    Admin --- Users["/admin/users\n사용자·권한"]
-    Admin --- DB["/admin/database\nDB 유지보수"]
+    Root --- Admin["/admin<br/>관리자"]
+    Admin --- Users["/admin/users<br/>사용자·권한"]
+    Admin --- DB["/admin/database<br/>DB 유지보수"]
 ```
 
 ---
@@ -137,8 +137,8 @@ graph TD
             S6["NotifySvc"]
         end
         subgraph Data["Data"]
-            D1["DexaDb\n(SQLite RO)"]
-            D2["TwmDb\n(SQLite RW)"]
+            D1["DexaDb<br/>(SQLite RO)"]
+            D2["TwmDb<br/>(SQLite RW)"]
             D3["Dapper ORM"]
         end
         subgraph Background["Background"]
@@ -149,12 +149,12 @@ graph TD
     end
 
     subgraph Dexa["📡 DexaWeb.Dexa — F# 클라이언트 라이브러리"]
-        DC["DexaClient\n(IDexaClient)"]
-        GA["GuardianActor\n(Ask/Tell)"]
+        DC["DexaClient<br/>(IDexaClient)"]
+        GA["GuardianActor<br/>(Ask/Tell)"]
         DC --> GA
     end
 
-    DS["🖥️ DEXA Server\n(원격 액터 시스템)"]
+    DS["🖥️ DEXA Server<br/>(원격 액터 시스템)"]
 
     Browser -- "SignalR" --> Server
     Server -- "Akka.Remote TCP" --> Dexa
