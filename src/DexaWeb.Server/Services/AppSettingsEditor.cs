@@ -11,26 +11,23 @@ public class AppSettingsEditor
 {
     private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };
 
-    public async Task SaveAppSectionAsync(string title, bool showDate)
+    public Task SaveAppSectionAsync(string title, bool showDate)
+        => UpdateAppSectionAsync(app =>
+        {
+            app["Title"] = title;
+            app["ShowDate"] = showDate;
+        });
+
+    public Task SaveLogoPaddingAsync(int logoPadding)
+        => UpdateAppSectionAsync(app => app["LogoPadding"] = logoPadding);
+
+    private async Task UpdateAppSectionAsync(Action<JsonObject> mutate)
     {
         var path = TwmsDataPath.LocalConfig;
         var root = await ReadOrCreateRootAsync(path);
 
         var appSection = root["App"]?.AsObject() ?? new JsonObject();
-        appSection["Title"] = title;
-        appSection["ShowDate"] = showDate;
-        root["App"] = appSection;
-
-        await File.WriteAllTextAsync(path, root.ToJsonString(WriteOptions));
-    }
-
-    public async Task SaveLogoPaddingAsync(int logoPadding)
-    {
-        var path = TwmsDataPath.LocalConfig;
-        var root = await ReadOrCreateRootAsync(path);
-
-        var appSection = root["App"]?.AsObject() ?? new JsonObject();
-        appSection["LogoPadding"] = logoPadding;
+        mutate(appSection);
         root["App"] = appSection;
 
         await File.WriteAllTextAsync(path, root.ToJsonString(WriteOptions));

@@ -9,12 +9,14 @@ namespace DexaWeb.Server.Services;
 /// </summary>
 public class AssetStatusService
 {
+    private readonly AssetService _assetService;
     private readonly DexaReadService _dexaRead;
     private readonly TwmDbService _twmDb;
     private readonly ILogger<AssetStatusService> _logger;
 
-    public AssetStatusService(DexaReadService dexaRead, TwmDbService twmDb, ILogger<AssetStatusService> logger)
+    public AssetStatusService(AssetService assetService, DexaReadService dexaRead, TwmDbService twmDb, ILogger<AssetStatusService> logger)
     {
+        _assetService = assetService;
         _dexaRead = dexaRead;
         _twmDb = twmDb;
         _logger = logger;
@@ -25,23 +27,19 @@ public class AssetStatusService
     {
         try
         {
-            // 독립적인 쿼리를 병렬 실행
-            var assetsTask     = _dexaRead.GetViewAssetsAsync();
+            // 독립적인 쿼리를 병렬 실행 (자산+aug+conn 병합은 AssetService에 위임)
+            var assetsTask     = _assetService.GetMergedAssetsAsync();
             var agentsTask     = _dexaRead.GetAgentsAsync();
             var actionsTask    = _dexaRead.GetLatestActionPerAssetAsync();
             var allActionsTask = _dexaRead.GetAllActionsAsync();
             var pingTask       = _twmDb.GetAllPingResultsAsync();
-            var augTask        = _twmDb.GetTwmsAssetMapAsync();
-            var connTask       = _twmDb.GetTwmsAssetConnMapAsync();
             var lineTask       = _twmDb.GetTwmsLayoutLineMapAsync();
-            await Task.WhenAll(assetsTask, agentsTask, actionsTask, allActionsTask, pingTask, augTask, connTask, lineTask);
+            await Task.WhenAll(assetsTask, agentsTask, actionsTask, allActionsTask, pingTask, lineTask);
 
             var assets      = assetsTask.Result;
             var agents      = agentsTask.Result;
             var actions     = actionsTask.Result;
             var pingResults = pingTask.Result;
-            var augMap      = augTask.Result;
-            var connMap     = connTask.Result;
             var lineMap     = lineTask.Result;
 
             var agentMap = agents.ToDictionary(a => a.Name ?? "", a => a, StringComparer.OrdinalIgnoreCase);
@@ -77,18 +75,10 @@ public class AssetStatusService
                 latestActionMap.TryGetValue(asset.AssetId, out var lastAction);
                 pingMap.TryGetValue(asset.AssetId, out var ping);
 
-                // Aug 데이터 병합 (HOCON 우선, TwmsAsset/TwmsAssetConn 폴백)
-                augMap.TryGetValue(asset.AssetId, out var aug);
-                connMap.TryGetValue(asset.AssetId, out var conn);
-                if (aug != null || conn != null) asset.ApplyAug(aug, conn);
-
-                var lastBackupSucceeded = lastAction?.Finished != null
-                    && lastAction?.Memo?.ToLower() == "true";
+                var lastBackupSucceeded = lastAction?.Finished != null && lastAction.IsSuccess;
                 var lastBackupTime = lastAction?.Finished ?? lastAction?.Started;
                 var lastBackupChanged = lastAction?.ContentsChanged;
-                var lastBackupInProgress = lastAction != null
-                    && lastAction.Finished == null
-                    && string.IsNullOrEmpty(lastAction.Memo);
+                var lastBackupInProgress = lastAction?.IsInProgress == true;
 
                 var info = new AssetStatusInfo
                 {
@@ -164,8 +154,8 @@ public class AssetStatusService
 
         if (info.LastBackupInProgress)
         {
-            // 5시간 이상 경과: 미완료 → 작업 실패에 포함
-            if (info.LastBackupTime.HasValue && (DateTime.Now - info.LastBackupTime.Value).TotalHours >= 5)
+            // IncompleteThreshold 이상 경과: 미완료 → 작업 실패에 포함
+            if (info.LastBackupTime.HasValue && (DateTime.Now - info.LastBackupTime.Value) >= DexaAction.IncompleteThreshold)
                 return AssetHealthStatus.Failed;
             return AssetHealthStatus.InProgress;
         }

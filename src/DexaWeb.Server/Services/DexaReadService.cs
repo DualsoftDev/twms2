@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Dapper;
 using DexaWeb.Server.Data;
 using DexaWeb.Server.HOCON;
@@ -416,9 +415,7 @@ public class DexaReadService
         catch
         {
             // HOCON 파싱 실패 시 regex fallback
-            var pattern = @"(\.description\.value\s*=\s*)['""]?[^'""$\r\n]*['""]?";
-            var replacement = "${1}\"" + description.Replace("\"", "\\\"") + "\"";
-            updatedParam = Regex.Replace(currentParam, pattern, replacement, RegexOptions.Multiline);
+            updatedParam = ParameterHelper.ReplaceValueFallback(currentParam, @"\.description\.value", description);
 
             if (updatedParam == currentParam)
             {

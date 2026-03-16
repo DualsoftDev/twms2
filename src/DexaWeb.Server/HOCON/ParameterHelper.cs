@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace DexaWeb.Server.HOCON;
 
 /// <summary>
@@ -59,6 +61,17 @@ public static class ParameterHelper
 
     public static string Decode(string? str)
         => str != null ? Unquote(str) : "";
+
+    /// <summary>
+    /// HOCON 파싱 실패 시 regex fallback: keyPattern에 해당하는 값을 newValue로 교체.
+    /// 예) keyPattern = @"\.description\.value" → ".description.value = ..." 형태를 찾아 값 교체.
+    /// </summary>
+    public static string ReplaceValueFallback(string param, string keyPattern, string newValue)
+    {
+        var pattern = @"(" + keyPattern + @"\s*=\s*)['""]?[^'""$\r\n]*['""]?";
+        var replacement = "${1}\"" + newValue.Replace("\"", "\\\"") + "\"";
+        return Regex.Replace(param, pattern, replacement, RegexOptions.Multiline);
+    }
 
     /// <summary>HOCON 파라미터 문자열에서 자산 이름 추출</summary>
     public static string? GetAssetName(this string? parameter)

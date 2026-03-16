@@ -149,8 +149,6 @@ public class DashboardService
             .Where(a => a.Started.HasValue && a.Started.Value.Date == today)
             .Select(a =>
             {
-                var inProgress = a.Finished == null && string.IsNullOrEmpty(a.Memo);
-                var incomplete = inProgress && (DateTime.Now - a.Started!.Value).TotalHours >= 5;
                 assetMap.TryGetValue(a.AssetId, out var name);
                 return new ScheduleEntry
                 {
@@ -158,8 +156,8 @@ public class DashboardService
                     AssetName = name ?? $"Asset #{a.AssetId}",
                     Started = a.Started!.Value,
                     Finished = a.Finished,
-                    InProgress = inProgress && !incomplete,
-                    Success = incomplete ? false : inProgress ? null : a.Memo?.ToLower() == "true",
+                    InProgress = a.IsInProgress && !a.IsIncomplete,
+                    Success = a.IsIncomplete ? false : a.IsInProgress ? null : a.IsSuccess,
                 };
             })
             .OrderBy(s => s.Started)
@@ -175,16 +173,13 @@ public class DashboardService
         foreach (var a in actions)
         {
             assetMap.TryGetValue(a.AssetId, out var name);
-            var inProgress = a.Finished == null && string.IsNullOrEmpty(a.Memo);
-            var incomplete = inProgress && a.Started.HasValue
-                && (DateTime.Now - a.Started.Value).TotalHours >= 5;
             activities.Add(new RecentActivity
             {
                 Source = "dexa",
                 AssetId = a.AssetId,
                 AssetName = name ?? $"Asset #{a.AssetId}",
-                Action = incomplete ? "백업 미완료" : inProgress ? "백업 진행중" : "백업",
-                Success = incomplete ? false : inProgress ? null : a.Memo?.ToLower() == "true",
+                Action = a.IsIncomplete ? "백업 미완료" : a.IsInProgress ? "백업 진행중" : "백업",
+                Success = a.IsIncomplete ? false : a.IsInProgress ? null : a.IsSuccess,
                 Timestamp = a.Started ?? DateTime.MinValue,
             });
         }
@@ -194,19 +189,4 @@ public class DashboardService
             .Take(limit)
             .ToList();
     }
-}
-
-/// <summary>대시보드 핵심 조회 결과 (백업 요약 + 최근 활동 + 당일 스케줄 + 드라이브)</summary>
-public class DashboardCoreResult
-{
-    public BackupSummary Backup { get; set; } = new();
-    public List<RecentActivity> RecentActivities { get; set; } = [];
-    public List<ScheduleEntry> TodaySchedule { get; set; } = [];
-    public DriveStat? Drive { get; set; }
-}
-
-public class DexaConnectionStatus
-{
-    public bool DexaConnected { get; set; }
-    public DateTime Timestamp { get; set; }
 }

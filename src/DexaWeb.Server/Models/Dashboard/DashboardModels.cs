@@ -144,3 +144,18 @@ public class DashboardData
     public List<AssetStatusInfo> Assets { get; set; } = [];
     public List<RecentActivity> RecentActivities { get; set; } = [];
 }
+
+/// <summary>대시보드 핵심 조회 결과 (백업 요약 + 최근 활동 + 당일 스케줄 + 드라이브)</summary>
+public class DashboardCoreResult
+{
+    public BackupSummary Backup { get; set; } = new();
+    public List<RecentActivity> RecentActivities { get; set; } = [];
+    public List<ScheduleEntry> TodaySchedule { get; set; } = [];
+    public DriveStat? Drive { get; set; }
+}
+
+public class DexaConnectionStatus
+{
+    public bool DexaConnected { get; set; }
+    public DateTime Timestamp { get; set; }
+}

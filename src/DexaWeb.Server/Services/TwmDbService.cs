@@ -677,17 +677,14 @@ public class TwmDbService
     public async Task UpsertPlacementGroupBatchAsync(List<TwmsPlacementGroup> groups)
     {
         using var conn = _db.Create();
-        foreach (var g in groups)
-        {
-            await conn.ExecuteAsync("""
-                INSERT INTO TwmsPlacementGroup (Id, LayoutId, Name, X, Y, Width, Height, Color, UpdatedAt)
-                VALUES (@Id, @LayoutId, @Name, @X, @Y, @Width, @Height, @Color, CURRENT_TIMESTAMP)
-                ON CONFLICT(Id) DO UPDATE SET
-                    Name = excluded.Name, X = excluded.X, Y = excluded.Y,
-                    Width = excluded.Width, Height = excluded.Height,
-                    Color = excluded.Color, UpdatedAt = CURRENT_TIMESTAMP
-                """, g);
-        }
+        await conn.ExecuteAsync("""
+            INSERT INTO TwmsPlacementGroup (Id, LayoutId, Name, X, Y, Width, Height, Color, UpdatedAt)
+            VALUES (@Id, @LayoutId, @Name, @X, @Y, @Width, @Height, @Color, CURRENT_TIMESTAMP)
+            ON CONFLICT(Id) DO UPDATE SET
+                Name = excluded.Name, X = excluded.X, Y = excluded.Y,
+                Width = excluded.Width, Height = excluded.Height,
+                Color = excluded.Color, UpdatedAt = CURRENT_TIMESTAMP
+            """, groups);
     }
 
     public async Task DeleteAllPlacementGroupsAsync(int layoutId)
@@ -700,13 +697,4 @@ public class TwmDbService
         await conn.ExecuteAsync("DELETE FROM TwmsPlacementGroup WHERE LayoutId = @LayoutId",
             new { LayoutId = layoutId });
     }
-}
-
-public class TwmDbStats
-{
-    public int SchemaVersion    { get; set; }
-    public int AssetAugCount    { get; set; }
-    public int AssetConnCount   { get; set; }
-    public int LayoutLineCount  { get; set; }
-    public int LayoutGroupCount { get; set; }
 }

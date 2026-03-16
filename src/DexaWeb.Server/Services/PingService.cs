@@ -20,6 +20,7 @@ public class PingService
         string targetIpString, string pingIpString,
         int nBase, int nSlot, int timeoutSec);
 
+    private readonly AssetService _assetService;
     private readonly DexaReadService _dexaRead;
     private readonly TwmDbService _twmDb;
     private readonly ILogger<PingService> _logger;
@@ -28,8 +29,9 @@ public class PingService
     private static readonly TimeSpan Phase2FailDelay = TimeSpan.FromSeconds(6);
     private const int DeepPingTimeoutSec = 5;
 
-    public PingService(DexaReadService dexaRead, TwmDbService twmDb, ILogger<PingService> logger)
+    public PingService(AssetService assetService, DexaReadService dexaRead, TwmDbService twmDb, ILogger<PingService> logger)
     {
+        _assetService = assetService;
         _dexaRead = dexaRead;
         _twmDb = twmDb;
         _logger = logger;
@@ -56,51 +58,6 @@ public class PingService
 
         await _twmDb.UpsertPingResultAsync(dexaAssetId, asset.Ip, result.Reachable, result.RoundtripMs);
         return result;
-    }
-
-    /// <summary>
-    /// 전체 실자산 ping (병렬, SemaphoreSlim 제한).
-    /// progress 콜백으로 진행률 보고.
-    /// </summary>
-    public async Task<List<(int AssetId, PingStatus Result)>> PingAllAsync(
-        IProgress<(int completed, int total)>? progress = null,
-        CancellationToken ct = default,
-        int maxConcurrency = 10)
-    {
-        var assets = await _dexaRead.GetViewAssetsAsync();
-        var targets = assets
-            .Where(a => a.IsRealAsset && !string.IsNullOrEmpty(a.Ip))
-            .ToList();
-
-        if (targets.Count == 0) return [];
-
-        var semaphore = new SemaphoreSlim(maxConcurrency);
-        int completed = 0;
-        int total = targets.Count;
-
-        var tasks = targets.Select(async asset =>
-        {
-            await semaphore.WaitAsync(ct);
-            try
-            {
-                var result = await PingHostAsync(asset.Ip!);
-                await _twmDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, result.Reachable, result.RoundtripMs);
-
-                Interlocked.Increment(ref completed);
-                progress?.Report((completed, total));
-
-                return (asset.AssetId, result);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        var results = await Task.WhenAll(tasks);
-        _logger.LogInformation("전체 Ping 완료: {Reachable}/{Total} 도달 가능",
-            results.Count(r => r.result.Reachable), total);
-        return [.. results];
     }
 
     /// <summary>캐시된 ping 결과 조회</summary>
@@ -139,7 +96,7 @@ public class PingService
     public async Task<(HashSet<string> FailedIps, List<ViewAsset> MergedAssets)> PingPhase1Async(
         CancellationToken ct = default, int maxConcurrency = 10)
     {
-        var mergedAssets = await LoadMergedAssetsAsync();
+        var mergedAssets = await _assetService.GetMergedAssetsAsync();
 
         // 1차 대상: 실자산 + IP 있음 + ViaIp 없음 + SkipPing==0
         var targets = mergedAssets
@@ -280,29 +237,6 @@ public class PingService
             if (!result.Reachable)
                 await Task.Delay(Phase2FailDelay, ct);
         }
-    }
-
-    /// <summary>ViewAssets + TwmsAsset/TwmsAssetConn 병합 로드 (HOCON 우선, Aug 폴백)</summary>
-    private async Task<List<ViewAsset>> LoadMergedAssetsAsync()
-    {
-        var assetsTask  = _dexaRead.GetViewAssetsAsync();
-        var augMapTask  = _twmDb.GetTwmsAssetMapAsync();
-        var connMapTask = _twmDb.GetTwmsAssetConnMapAsync();
-        await Task.WhenAll(assetsTask, augMapTask, connMapTask);
-
-        var assets  = assetsTask.Result;
-        var augMap  = augMapTask.Result;
-        var connMap = connMapTask.Result;
-
-        foreach (var a in assets)
-        {
-            augMap.TryGetValue(a.AssetId, out var aug);
-            connMap.TryGetValue(a.AssetId, out var conn);
-            if (aug != null || conn != null)
-                a.ApplyAug(aug, conn);
-        }
-
-        return assets;
     }
 
     /// <summary>

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using DEX.Core.Actor;
 using DexaWeb.Server.HOCON;
 using DexaWeb.Server.Models.Dexa;
@@ -25,14 +24,18 @@ public class AssetService
     }
 
     /// <summary>
-    /// DEXA SQLite에서 전체 자산 조회 + TWM aug 데이터 조합
+    /// DEXA SQLite에서 전체 자산 조회 + TWM aug 데이터 조합.
+    /// PingService, AssetStatusService 등에서도 공통으로 사용.
     /// </summary>
-    public async Task<List<ViewAsset>> GetAllAssetsAsync()
+    public async Task<List<ViewAsset>> GetMergedAssetsAsync()
     {
         var assets = await _dexaRead.GetViewAssetsAsync();
         await ApplyAugDataAsync(assets);
         return assets;
     }
+
+    /// <summary>GetMergedAssetsAsync()의 기존 별칭 (동일 기능)</summary>
+    public Task<List<ViewAsset>> GetAllAssetsAsync() => GetMergedAssetsAsync();
 
     /// <summary>
     /// ViewAsset 목록에 TwmsAsset (공통) + TwmsAssetConn (연결정보) 병합
@@ -188,12 +191,12 @@ public class AssetService
         {
             // HOCON 파싱 실패 시 regex fallback
             var result = param;
-            if (spec.Name != null) result = ReplaceHoconValueFallback(result, @"\.name\.value", spec.Name);
-            if (spec.Ip != null) result = ReplaceHoconValueFallback(result, @"\.IP\.value", spec.Ip);
-            if (spec.Description != null) result = ReplaceHoconValueFallback(result, @"\.description\.value", spec.Description);
-            if (spec.ViaIp != null) result = ReplaceHoconValueFallback(result, @"\.via1_connection\.value", spec.ViaIp);
-            if (spec.BaseNumber != null) result = ReplaceHoconValueFallback(result, @"\.via1_base\.value", spec.BaseNumber.Value.ToString());
-            if (spec.SlotNumber != null) result = ReplaceHoconValueFallback(result, @"\.via1_slot\.value", spec.SlotNumber.Value.ToString());
+            if (spec.Name != null) result = ParameterHelper.ReplaceValueFallback(result, @"\.name\.value", spec.Name);
+            if (spec.Ip != null) result = ParameterHelper.ReplaceValueFallback(result, @"\.IP\.value", spec.Ip);
+            if (spec.Description != null) result = ParameterHelper.ReplaceValueFallback(result, @"\.description\.value", spec.Description);
+            if (spec.ViaIp != null) result = ParameterHelper.ReplaceValueFallback(result, @"\.via1_connection\.value", spec.ViaIp);
+            if (spec.BaseNumber != null) result = ParameterHelper.ReplaceValueFallback(result, @"\.via1_base\.value", spec.BaseNumber.Value.ToString());
+            if (spec.SlotNumber != null) result = ParameterHelper.ReplaceValueFallback(result, @"\.via1_slot\.value", spec.SlotNumber.Value.ToString());
             return result;
         }
     }
@@ -217,14 +220,6 @@ public class AssetService
         var at = hoconParam.AssetTypeName;
         tpls.Add(($"{at}.{key}.type", "String"));
         tpls.Add(($"{at}.{key}.value", ParameterHelper.WrapQuoteOnDemand(ParameterHelper.Escape(value))));
-    }
-
-    /// <summary>HOCON regex fallback: malformed HOCON 대비</summary>
-    private static string ReplaceHoconValueFallback(string param, string keyPattern, string newValue)
-    {
-        var pattern = @"(" + keyPattern + @"\s*=\s*)['""]?[^'""$\r\n]*['""]?";
-        var replacement = "${1}\"" + newValue.Replace("\"", "\\\"") + "\"";
-        return Regex.Replace(param, pattern, replacement, RegexOptions.Multiline);
     }
 
     /// <summary>

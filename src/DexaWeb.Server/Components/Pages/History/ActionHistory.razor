@@ -879,16 +879,12 @@
         UpdateUrl();
     }
 
-    private static bool IsInProgress(DexaAction a)
-        => a.Finished == null && string.IsNullOrEmpty(a.Memo)
-            && (!a.Started.HasValue || (DateTime.Now - a.Started.Value).TotalHours < 5);
+    private static bool IsInProgress(DexaAction a) => a.IsInProgress && !a.IsIncomplete;
 
-    private static bool IsStaleIncomplete(DexaAction a)
-        => a.Finished == null && string.IsNullOrEmpty(a.Memo)
-            && a.Started.HasValue && (DateTime.Now - a.Started.Value).TotalHours >= 5;
+    private static bool IsStaleIncomplete(DexaAction a) => a.IsIncomplete;
 
     private bool IsNewUpdate(DexaAction a)
-        => a.Memo?.ToLower() == "true" && a.ContentsChanged == true;
+        => a.IsSuccess && a.ContentsChanged == true;
 
     private Color GetResultColor(DexaAction a)
         => IsInProgress(a) ? Color.Warning
