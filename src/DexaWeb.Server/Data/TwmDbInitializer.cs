@@ -252,6 +252,17 @@ public class TwmDbInitializer
         (25, "TwmsAssetPosition.Scale 컬럼 추가", """
             ALTER TABLE TwmsAssetPosition ADD COLUMN Scale REAL NOT NULL DEFAULT 1.0;
             """),
+
+        // V26: 매뉴얼 관리 테이블
+        (26, "TwmsManual 테이블 생성", """
+            CREATE TABLE IF NOT EXISTS TwmsManual (
+                Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                Keyword        TEXT NOT NULL,
+                FileName       TEXT NOT NULL,
+                StoredFileName TEXT NOT NULL,
+                UploadedAt     DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            """),
     ];
 
     public async Task InitializeAsync()

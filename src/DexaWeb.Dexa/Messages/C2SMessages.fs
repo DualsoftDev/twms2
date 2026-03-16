@@ -69,11 +69,13 @@ type AmC2SRequestSchedulesChange(adds: Tuple<int, int> seq, removes: Tuple<int, 
     inherit ActorMessage()
     member val Adds: Tuple<int, int> array = adds |> Seq.toArray with get, set
     member val Removes: Tuple<int, int> array = removes |> Seq.toArray with get, set
+    private new() = AmC2SRequestSchedulesChange(Seq.empty, Seq.empty)
 
 // Execute operations
 type AmC2SExecuteTriggerOnce(triggerId: int) =
     inherit ActorMessage()
     member val TriggerId: int = triggerId with get, set
+    private new() = AmC2SExecuteTriggerOnce(0)
 
 // Agent restart
 type AmC2SRequestAgentRestart() =

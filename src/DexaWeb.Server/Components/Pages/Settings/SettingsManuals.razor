@@ -1,0 +1,196 @@
+@inject TwmDbService TwmDb
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudPaper Class="pa-6 neu-card">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h6" Style="font-weight: 600;">
+            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Class="mr-2" Style="vertical-align: middle;" />
+            매뉴얼 관리
+        </MudText>
+        <MudSpacer />
+    </MudStack>
+
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        키워드를 등록하고 PDF 매뉴얼을 업로드하세요. 자산의 사양(Spec)에 키워드가 포함되면 해당 매뉴얼이 자동으로 매칭됩니다.
+    </MudText>
+
+    @* ── 업로드 폼 ── *@
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_keyword" Label="키워드" Placeholder="예: XGT, MX2N"
+                              Variant="Variant.Outlined" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Style="height: 100%;">
+                    <InputFile id="manual-file-input" OnChange="OnFileSelected" accept=".pdf" style="display:none;" />
+                    <MudButton HtmlTag="label" Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AttachFile" for="manual-file-input">
+                        PDF 선택
+                    </MudButton>
+                    <MudText Typo="Typo.body2" Class="ml-2">
+                        @(_selectedFile != null ? _selectedFile.Name : "선택된 파일 없음")
+                    </MudText>
+                </MudStack>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Upload"
+                           OnClick="UploadAsync"
+                           Disabled="@(_uploading || string.IsNullOrWhiteSpace(_keyword) || _selectedFile == null)"
+                           FullWidth="true">
+                    @if (_uploading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        @:업로드 중...
+                    }
+                    else
+                    {
+                        @:업로드
+                    }
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @* ── 매뉴얼 목록 ── *@
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_manuals.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            등록된 매뉴얼이 없습니다.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_manuals" Dense="true" Hover="true" Bordered="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>키워드</MudTh>
+                <MudTh>파일명</MudTh>
+                <MudTh Style="width: 180px;">업로드일</MudTh>
+                <MudTh Style="width: 120px;">작업</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="키워드">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        @context.Keyword
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="파일명">@context.FileName</MudTd>
+                <MudTd DataLabel="업로드일">@context.UploadedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                <MudTd DataLabel="작업">
+                    <MudStack Row="true" Spacing="1">
+                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                       Size="Size.Small" Color="Color.Primary"
+                                       Href="@($"/manuals/{context.StoredFileName}")" Target="_blank" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => DeleteManualAsync(context)" />
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private List<TwmsManual> _manuals = [];
+    private bool _loading;
+    private bool _uploading;
+    private string _keyword = "";
+    private IBrowserFile? _selectedFile;
+
+    private const long MaxFileSize = 50 * 1024 * 1024; // 50MB
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadManualsAsync();
+    }
+
+    private async Task LoadManualsAsync()
+    {
+        _loading = true;
+        _manuals = await TwmDb.GetAllManualsAsync();
+        _loading = false;
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_keyword) || _selectedFile == null) return;
+
+        if (_selectedFile.Size > MaxFileSize)
+        {
+            Snackbar.Add("파일 크기가 50MB를 초과합니다.", Severity.Error);
+            return;
+        }
+
+        _uploading = true;
+        StateHasChanged();
+
+        try
+        {
+            var storedFileName = $"{Guid.NewGuid():N}.pdf";
+            var filePath = Path.Combine(TwmsDataPath.Manuals, storedFileName);
+
+            await using var fs = File.Create(filePath);
+            await _selectedFile.OpenReadStream(MaxFileSize).CopyToAsync(fs);
+
+            await TwmDb.InsertManualAsync(new TwmsManual
+            {
+                Keyword = _keyword.Trim(),
+                FileName = _selectedFile.Name,
+                StoredFileName = storedFileName,
+            });
+
+            Snackbar.Add($"매뉴얼 '{_selectedFile.Name}'이(가) 업로드되었습니다.", Severity.Success);
+
+            _keyword = "";
+            _selectedFile = null;
+            await LoadManualsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"업로드 실패: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task DeleteManualAsync(TwmsManual manual)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"매뉴얼 '{manual.FileName}' (키워드: {manual.Keyword})을(를) 삭제하시겠습니까?" },
+            { x => x.ButtonText, "삭제" },
+            { x => x.ButtonColor, Color.Error }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("삭제 확인", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            // 파일 삭제
+            var filePath = Path.Combine(TwmsDataPath.Manuals, manual.StoredFileName);
+            if (File.Exists(filePath))
+            {
+                try { File.Delete(filePath); }
+                catch { /* 파일 삭제 실패는 무시 */ }
+            }
+
+            await TwmDb.DeleteManualAsync(manual.Id);
+            await LoadManualsAsync();
+            Snackbar.Add($"매뉴얼 '{manual.FileName}'이(가) 삭제되었습니다.", Severity.Success);
+        }
+    }
+}

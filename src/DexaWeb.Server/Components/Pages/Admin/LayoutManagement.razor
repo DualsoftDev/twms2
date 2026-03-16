@@ -468,8 +468,7 @@
                     return;
                 }
 
-                var uploadsDir = Path.Combine(WebHostEnv.WebRootPath, "uploads");
-                Directory.CreateDirectory(uploadsDir);
+                var uploadsDir = TwmsDataPath.Uploads;
 
                 // 해당 레이아웃의 기존 도면 이미지 삭제
                 foreach (var f in Directory.GetFiles(uploadsDir, $"blueprint-bg-{_selectedLayoutId}.*"))
@@ -509,7 +508,7 @@
             // 파일 삭제
             if (!string.IsNullOrEmpty(_currentImagePath))
             {
-                var fullPath = Path.Combine(WebHostEnv.WebRootPath, _currentImagePath);
+                var fullPath = Path.Combine(TwmsDataPath.Base, _currentImagePath);
                 if (File.Exists(fullPath))
                     File.Delete(fullPath);
             }

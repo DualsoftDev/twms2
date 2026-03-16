@@ -52,6 +52,15 @@ public class ScheduleService
         return reply != null;
     }
 
+    public async Task<bool> UpdateTriggerCronAsync(int triggerId, string cronExpression)
+    {
+        var triggers = await _dexaRead.GetTriggersAsync();
+        var existing = triggers.FirstOrDefault(t => t.Id == triggerId);
+        if (existing == null) return false;
+
+        return await UpdateTriggerAsync(existing.Id, existing.Name, cronExpression, existing.Enabled, existing.Description);
+    }
+
     public async Task<bool> DeleteTriggerAsync(int id)
     {
         var trigger = new ORM.Trigger(id, null, null, null);
@@ -69,23 +78,39 @@ public class ScheduleService
 
     public async Task<bool> UpdateSchedulesAsync(int triggerId, int[] assetIds)
     {
-        // SQLite에서 현재 스케줄 조회하여 변경사항 계산
-        var currentSchedules = await _dexaRead.GetSchedulesAsync();
+        try
+        {
+            var currentSchedules = await _dexaRead.GetSchedulesAsync();
 
-        var currentAssetIds = currentSchedules
-            .Where(s => s.TriggerId == triggerId)
-            .Select(s => s.AssetId)
-            .ToHashSet();
+            var currentAssetIds = currentSchedules
+                .Where(s => s.TriggerId == triggerId)
+                .Select(s => s.AssetId)
+                .ToHashSet();
 
-        var targetAssetIds = assetIds.ToHashSet();
+            var targetAssetIds = assetIds.ToHashSet();
 
-        var adds = targetAssetIds.Except(currentAssetIds)
-            .Select(assetId => Tuple.Create(triggerId, assetId));
-        var removes = currentAssetIds.Except(targetAssetIds)
-            .Select(assetId => Tuple.Create(triggerId, assetId));
+            foreach (var assetId in targetAssetIds.Except(currentAssetIds))
+                await _dexaRead.AddScheduleAsync(triggerId, assetId);
 
-        var reply = await _dexa.AskAsync<AmS2CReplySchedulesChange>(
-            new AmC2SRequestSchedulesChange(adds, removes));
-        return reply != null;
+            foreach (var assetId in currentAssetIds.Except(targetAssetIds))
+                await _dexaRead.RemoveScheduleAsync(triggerId, assetId);
+
+            // UpdateTrigger 메시지를 보내 DEXA Server의 Quartz 리스케줄링 유도
+            // (DataChanged → ScheduleFromDatabase() → DB에서 전체 스케줄 다시 읽음)
+            var triggers = await _dexaRead.GetTriggersAsync();
+            var trigger = triggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                await UpdateTriggerAsync(trigger.Id, trigger.Name, trigger.CronExpression,
+                    trigger.Enabled, trigger.Description);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "스케줄 매핑 업데이트 실패 (triggerId={TriggerId})", triggerId);
+            return false;
+        }
     }
 }

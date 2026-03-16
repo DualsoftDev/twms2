@@ -164,6 +164,22 @@ public class DexaReadService
         }
     }
 
+    public async Task AddScheduleAsync(int triggerId, int assetId)
+    {
+        using var conn = _dexaDb.CreateReadWrite();
+        await conn.ExecuteAsync(
+            "INSERT INTO schedule (triggerId, assetId, deleted) VALUES (@TriggerId, @AssetId, 0)",
+            new { TriggerId = triggerId, AssetId = assetId });
+    }
+
+    public async Task RemoveScheduleAsync(int triggerId, int assetId)
+    {
+        using var conn = _dexaDb.CreateReadWrite();
+        await conn.ExecuteAsync(
+            "UPDATE schedule SET deleted = 1 WHERE triggerId = @TriggerId AND assetId = @AssetId AND deleted = 0",
+            new { TriggerId = triggerId, AssetId = assetId });
+    }
+
     // ── 사용자 / 권한 ──
 
     /// <summary>

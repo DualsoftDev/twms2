@@ -14,6 +14,7 @@
     <PackageReference Include="MudBlazor" Version="8.15.0" />
     <PackageReference Include="Makaretu.Dns.Multicast.New" Version="0.38.0" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,7 +22,7 @@
   </ItemGroup>
 
   <!-- DeepPinger.dll: 서버 빌드 전 C++ DLL 자동 빌드 -->
-  <Target Name="BuildDeepPinger" BeforeTargets="Build">
+  <Target Name="BuildDeepPinger" BeforeTargets="Build" Condition="'$(SkipDeepPinger)' != 'true'">
     <MSBuild Projects="..\DeepPinger\DeepPinger.vcxproj"
              Properties="Configuration=$(Configuration);Platform=x64;SolutionDir=$(SolutionDir)" />
   </Target>

@@ -9,6 +9,19 @@ using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 런타임 데이터 디렉토리 생성 (C:\ProgramData\DualSoft\TWMS2\)
+TwmsDataPath.EnsureDirectories();
+
+// 런타임 로컬 설정 파일 (ProgramData — appsettings.json 위의 오버라이드 레이어)
+builder.Configuration.AddJsonFile(TwmsDataPath.LocalConfig, optional: true, reloadOnChange: true);
+
+// 프로덕션 기본 바인딩 (Kestrel:Endpoints 미설정 시 적용, Development에서는 launchSettings 우선)
+if (!builder.Environment.IsDevelopment())
+    builder.WebHost.UseUrls("http://0.0.0.0:80");
+
+// Windows 서비스로 실행 가능하게 설정 (콘솔 실행도 동일하게 동작)
+builder.Host.UseWindowsService();
+
 // 인메모리 캐시 (DEXA DB 중복 조회 방지)
 builder.Services.AddMemoryCache();
 
@@ -187,13 +200,18 @@ app.MapGet("/api/download/backup/{assetId:int}/{version:int}", (int assetId, int
     return Results.File(fullPath, "application/zip", fileName);
 });
 
-// 업로드 파일 서빙 (wwwroot/uploads — 런타임에 생성되므로 MapStaticAssets 이전에 등록)
-var uploadsPath = Path.Combine(app.Environment.WebRootPath, "uploads");
-Directory.CreateDirectory(uploadsPath);
+// 업로드 파일 서빙 (ProgramData\DualSoft\TWMS2\uploads → /uploads)
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(uploadsPath),
+    FileProvider = new PhysicalFileProvider(TwmsDataPath.Uploads),
     RequestPath = "/uploads"
+});
+
+// 매뉴얼 PDF 파일 서빙 (ProgramData\DualSoft\TWMS2\manuals → /manuals)
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(TwmsDataPath.Manuals),
+    RequestPath = "/manuals"
 });
 
 app.MapStaticAssets();

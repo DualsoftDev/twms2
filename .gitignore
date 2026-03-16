@@ -53,6 +53,10 @@ TestResult.xml
 # Project-specific
 # ============================================================
 
+# Installer build artifacts
+installer/output/
+installer/redist/
+
 # SQLite DB files (runtime generated)
 *.db
 *.db-shm
@@ -92,3 +96,4 @@ appsettings.*.json
 .env.*
 src/DexaWeb.Server/twm.db.sqlite3
 src/DexaWeb.Server/wwwroot/uploads/app-logo.svg
+src/DexaWeb.Server/manuals/

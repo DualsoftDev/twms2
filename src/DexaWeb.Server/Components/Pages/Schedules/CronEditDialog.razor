@@ -1,0 +1,48 @@
+@inject ScheduleService ScheduleService
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            트리거 <strong>@TriggerName</strong>의 스케줄을 수정합니다.
+        </MudText>
+        <CronBuilder @bind-Value="_cronExpression" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">취소</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Submit" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            저장
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int TriggerId { get; set; }
+    [Parameter] public string TriggerName { get; set; } = "";
+    [Parameter] public string CurrentCron { get; set; } = "0 0 * * * ?";
+
+    private string _cronExpression = "";
+    private bool _saving;
+
+    protected override void OnInitialized()
+    {
+        _cronExpression = CurrentCron;
+    }
+
+    private async Task Submit()
+    {
+        _saving = true;
+        var ok = await ScheduleService.UpdateTriggerCronAsync(TriggerId, _cronExpression);
+        _saving = false;
+
+        if (ok)
+            MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -78,6 +78,9 @@ public class DexaNotificationService : IDisposable
         _cache.Remove("dexa_actions_100");
     }
 
+    /// <summary>설정 변경 등 수동으로 UI 갱신 트리거</summary>
+    public void NotifyRefresh() => OnDatabaseChanged?.Invoke("*");
+
     public void Dispose()
     {
         _subscription.Dispose();

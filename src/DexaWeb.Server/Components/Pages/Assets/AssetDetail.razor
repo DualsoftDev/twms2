@@ -7,6 +7,7 @@
 @inject IJSRuntime JS
 @using DexaWeb.Server.Models.Dashboard
 @using DexaWeb.Server.Models.Dexa
+@using DexaWeb.Server.Models.Twm
 
 <MudPaper Class="pa-4" Elevation="2" Style="height: calc(100vh - 180px); overflow-y: auto;">
     @* ── 헤더 1행: 아이콘 + 이름 + 상태 ── *@
@@ -78,6 +79,30 @@
         <Authorized>
             @if (_editRow != null)
             {
+                @* ── 매뉴얼 (자산 정보 위) ── *@
+                @if (_matchedManuals.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.MenuBook" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                        매뉴얼
+                    </MudText>
+                    <MudStack Spacing="1" Class="mb-4">
+                        @foreach (var m in _matchedManuals)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@m.Keyword</MudChip>
+                                <MudText Typo="Typo.body2" Style="flex:1;">@m.FileName</MudText>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                           Href="@($"/manuals/{m.StoredFileName}")" Target="_blank">
+                                    보기
+                                </MudButton>
+                            </MudStack>
+                        }
+                    </MudStack>
+                    <MudDivider Class="mb-4" />
+                }
+
                 <MudGrid>
                     @* ── 왼쪽: 자산 정보 ── *@
                     <MudItem xs="12" md="6">
@@ -195,9 +220,66 @@
                         저장
                     </MudButton>
                 </MudStack>
+
+                @* ── 전체 매뉴얼 드롭다운 ── *@
+                @if (_allManuals.Count > 0)
+                {
+                    <MudDivider Class="my-4" />
+                    <MudExpansionPanels Elevation="0" Dense="true">
+                        <MudExpansionPanel>
+                            <TitleContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Small" Color="Color.Secondary" />
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">전체 매뉴얼 목록</MudText>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Default">@_allManuals.Count</MudChip>
+                                </MudStack>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudStack Spacing="1">
+                                    @foreach (var m in _allManuals)
+                                    {
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@m.Keyword</MudChip>
+                                            <MudText Typo="Typo.body2" Style="flex:1;">@m.FileName</MudText>
+                                            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                                       Href="@($"/manuals/{m.StoredFileName}")" Target="_blank">
+                                                보기
+                                            </MudButton>
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
             }
         </Authorized>
         <NotAuthorized>
+            @* ── 매뉴얼 (자산 정보 위) ── *@
+            @if (_matchedManuals.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.MenuBook" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    매뉴얼
+                </MudText>
+                <MudStack Spacing="1" Class="mb-4">
+                    @foreach (var m in _matchedManuals)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@m.Keyword</MudChip>
+                            <MudText Typo="Typo.body2" Style="flex:1;">@m.FileName</MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                       Href="@($"/manuals/{m.StoredFileName}")" Target="_blank">
+                                보기
+                            </MudButton>
+                        </MudStack>
+                    }
+                </MudStack>
+                <MudDivider Class="mb-4" />
+            }
+
             <MudGrid>
                 @* ── 왼쪽: 자산 정보 ── *@
                 <MudItem xs="12" md="6">
@@ -287,6 +369,39 @@
                     </MudItem>
                 }
             </MudGrid>
+
+            @* ── 전체 매뉴얼 드롭다운 ── *@
+            @if (_allManuals.Count > 0)
+            {
+                <MudDivider Class="my-4" />
+                <MudExpansionPanels Elevation="0" Dense="true">
+                    <MudExpansionPanel>
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Small" Color="Color.Secondary" />
+                                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">전체 매뉴얼 목록</MudText>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Default">@_allManuals.Count</MudChip>
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudStack Spacing="1">
+                                @foreach (var m in _allManuals)
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@m.Keyword</MudChip>
+                                        <MudText Typo="Typo.body2" Style="flex:1;">@m.FileName</MudText>
+                                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                                                   Href="@($"/manuals/{m.StoredFileName}")" Target="_blank">
+                                            보기
+                                        </MudButton>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
         </NotAuthorized>
     </AuthorizeView>
 </MudPaper>
@@ -304,11 +419,22 @@
     private AssetStatusInfo? _statusInfo;
     private int? _latestVersion;
     private DateTime? _lastBackupChangedTime;
+    private List<TwmsManual> _matchedManuals = [];
+    private List<TwmsManual> _allManuals = [];
 
     protected override async Task OnParametersSetAsync()
     {
         _typeId = Asset.AssetTypeId ?? 0;
-        await Task.WhenAll(LoadEditRowAsync(), LoadStatusAsync());
+        await Task.WhenAll(LoadEditRowAsync(), LoadStatusAsync(), LoadManualsAsync());
+    }
+
+    private async Task LoadManualsAsync()
+    {
+        var matchedTask = TwmDb.GetManualsByKeywordMatchAsync(Asset.AugSpec ?? "");
+        var allTask = TwmDb.GetAllManualsAsync();
+        await Task.WhenAll(matchedTask, allTask);
+        _matchedManuals = matchedTask.Result;
+        _allManuals = allTask.Result;
     }
 
     private async Task LoadEditRowAsync()

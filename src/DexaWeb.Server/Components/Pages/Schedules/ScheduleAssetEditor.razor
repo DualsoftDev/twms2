@@ -1,14 +1,74 @@
 @inject ScheduleService ScheduleService
+@inject AssetService AssetService
 
 <MudDialog>
     <DialogContent>
-        <MudText Typo="Typo.subtitle1" Class="mb-3">
-            트리거 <strong>@TriggerName</strong>에 연결할 자산을 선택하세요.
-        </MudText>
-        <MudDivider Class="mb-3" />
-        <div style="max-height: 400px; overflow-y: auto;">
-            <AssetTreeView @ref="_assetTree" MultiSelect="true" />
-        </div>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.subtitle1">
+                    트리거 <strong>@TriggerName</strong>에 연결할 자산을 선택하세요.
+                </MudText>
+                <MudSpacer />
+                <MudChip T="string" Color="Color.Info" Size="Size.Small">
+                    @(_selectedIds.Count)개 선택
+                </MudChip>
+            </MudStack>
+
+            <MudStack Row="true" Spacing="2" Class="mb-3">
+                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="SelectAll">전체 선택</MudButton>
+                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="DeselectAll">전체 해제</MudButton>
+            </MudStack>
+
+            <div style="max-height: 450px; overflow-y: auto;">
+                @foreach (var group in _groupedAssets)
+                {
+                    <MudPaper Class="pa-2 mb-2" Elevation="0" Outlined="true">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+                            <MudCheckBox T="bool"
+                                         Value="@IsGroupAllSelected(group)"
+                                         ValueChanged="@(v => ToggleGroup(group, v))"
+                                         Dense="true" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:600;">
+                                @group.LineName
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="ml-1" Style="color:var(--mud-palette-text-secondary);">
+                                (@SelectedCountInGroup(group) / @group.Assets.Count)
+                            </MudText>
+                        </MudStack>
+                        <MudDivider Class="mb-1" />
+                        @foreach (var asset in group.Assets)
+                        {
+                            <div class="d-flex align-center" style="padding: 2px 0 2px 24px;">
+                                <MudCheckBox T="bool"
+                                             Value="@_selectedIds.Contains(asset.AssetId)"
+                                             ValueChanged="@(v => ToggleAsset(asset.AssetId, v))"
+                                             Dense="true" Color="Color.Primary" />
+                                @{
+                                    var iconPath = GetIconPath(asset);
+                                }
+                                @if (!string.IsNullOrEmpty(iconPath))
+                                {
+                                    <img src="@iconPath" class="asset-type-icon-sm" style="margin-right:6px;" />
+                                }
+                                <MudText Typo="Typo.body2">@asset.DisplayName</MudText>
+                                @if (!string.IsNullOrEmpty(asset.Ip))
+                                {
+                                    <MudText Typo="Typo.caption" Class="ml-2"
+                                             Style="color:var(--mud-palette-text-secondary);">
+                                        @asset.Ip
+                                    </MudText>
+                                }
+                            </div>
+                        }
+                    </MudPaper>
+                }
+            </div>
+        }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">취소</MudButton>
@@ -18,7 +78,7 @@
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
             }
-            저장 (@(_assetTree?.GetSelectedAssets().Count ?? 0)개 선택)
+            저장
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -28,31 +88,76 @@
     [Parameter] public int TriggerId { get; set; }
     [Parameter] public string TriggerName { get; set; } = "";
 
-    private AssetTreeView _assetTree = null!;
+    private bool _loading = true;
     private bool _saving;
+    private HashSet<int> _selectedIds = [];
+    private List<AssetGroup> _groupedAssets = [];
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender)
-        {
-            var schedules = await ScheduleService.GetSchedulesAsync();
-            var currentAssetIds = schedules
-                .Where(s => s.TriggerId == TriggerId)
-                .Select(s => s.AssetId)
-                .ToHashSet();
+        var assetsTask = AssetService.GetAllAssetsAsync();
+        var schedulesTask = ScheduleService.GetSchedulesAsync();
+        await Task.WhenAll(assetsTask, schedulesTask);
 
-            if (currentAssetIds.Count > 0)
+        var assets = assetsTask.Result;
+        var schedules = schedulesTask.Result;
+
+        // 기존 매핑된 자산 ID 복원
+        _selectedIds = schedules
+            .Where(s => s.TriggerId == TriggerId)
+            .Select(s => s.AssetId)
+            .ToHashSet();
+
+        // 라인별 그룹핑 (실제 자산만)
+        _groupedAssets = assets
+            .Where(a => a.IsRealAsset)
+            .GroupBy(a => a.LayoutLineName ?? "라인없음")
+            .OrderBy(g => g.Key == "라인없음" ? 1 : 0)
+            .ThenBy(g => g.Key)
+            .Select(g => new AssetGroup
             {
-                _assetTree.SetSelectedAssetIds(currentAssetIds);
-            }
+                LineName = g.Key,
+                Assets = g.OrderBy(a => a.DisplayName).ToList()
+            })
+            .ToList();
+
+        _loading = false;
+    }
+
+    private void ToggleAsset(int assetId, bool selected)
+    {
+        if (selected) _selectedIds.Add(assetId);
+        else _selectedIds.Remove(assetId);
+    }
+
+    private bool IsGroupAllSelected(AssetGroup group)
+        => group.Assets.All(a => _selectedIds.Contains(a.AssetId));
+
+    private int SelectedCountInGroup(AssetGroup group)
+        => group.Assets.Count(a => _selectedIds.Contains(a.AssetId));
+
+    private void ToggleGroup(AssetGroup group, bool selected)
+    {
+        foreach (var asset in group.Assets)
+        {
+            if (selected) _selectedIds.Add(asset.AssetId);
+            else _selectedIds.Remove(asset.AssetId);
         }
     }
+
+    private void SelectAll()
+    {
+        foreach (var group in _groupedAssets)
+            foreach (var asset in group.Assets)
+                _selectedIds.Add(asset.AssetId);
+    }
+
+    private void DeselectAll() => _selectedIds.Clear();
 
     private async Task Submit()
     {
         _saving = true;
-        var assetIds = _assetTree.GetSelectedAssets().Select(a => a.AssetId).ToArray();
-        var ok = await ScheduleService.UpdateSchedulesAsync(TriggerId, assetIds);
+        var ok = await ScheduleService.UpdateSchedulesAsync(TriggerId, _selectedIds.ToArray());
         _saving = false;
 
         if (ok)
@@ -60,4 +165,21 @@
     }
 
     private void Cancel() => MudDialog.Cancel();
+
+    private static string GetIconPath(ViewAsset asset) => asset.AssetTypeUserFriendlyName switch
+    {
+        var n when n != null && n.Contains("PLC") && asset.AugIsRobotPLC is > 0 => "images/icons/robot.png",
+        var n when n != null && n.Contains("PLC") => "images/icons/plc.png",
+        var n when n != null && n.Contains("Servo") => "images/icons/servo.png",
+        var n when n != null && (n.Contains("HMI") || n.Contains("XP")) => "images/icons/hmi.png",
+        var n when n != null && n.Contains("Drive") => "images/icons/drive.png",
+        var n when n != null && n.Contains("FTP") => "images/icons/ftp.png",
+        _ => ""
+    };
+
+    private class AssetGroup
+    {
+        public string LineName { get; set; } = "";
+        public List<ViewAsset> Assets { get; set; } = [];
+    }
 }

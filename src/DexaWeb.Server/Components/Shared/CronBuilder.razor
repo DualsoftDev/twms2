@@ -69,6 +69,48 @@
     private int _hour = 0;
     private string _dayOfWeek = "MON";
     private string _customCron = "0 0 * * * ?";
+    private bool _initialized;
+
+    protected override void OnParametersSet()
+    {
+        if (_initialized || string.IsNullOrWhiteSpace(Value)) return;
+        _initialized = true;
+        ParseCron(Value);
+    }
+
+    private void ParseCron(string cron)
+    {
+        var parts = cron.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 6) { _mode = "custom"; _customCron = cron; return; }
+
+        var min = parts[1];
+        var hour = parts[2];
+        var dom = parts[3];
+        var dow = parts[5];
+
+        if (!int.TryParse(min, out var m)) { _mode = "custom"; _customCron = cron; return; }
+        _minute = m;
+
+        // hourly: 0 {min} * * * ?
+        if (hour == "*" && dom == "*" && dow == "?") { _mode = "hourly"; return; }
+
+        if (!int.TryParse(hour, out var h)) { _mode = "custom"; _customCron = cron; return; }
+        _hour = h;
+
+        // daily: 0 {min} {hour} * * ?
+        if (dom == "*" && dow == "?") { _mode = "daily"; return; }
+
+        // weekly: 0 {min} {hour} ? * {DOW}
+        if (dom == "?" && dow != "*" && dow != "?")
+        {
+            _mode = "weekly";
+            _dayOfWeek = dow.ToUpper();
+            return;
+        }
+
+        _mode = "custom";
+        _customCron = cron;
+    }
 
     public string GetCronExpression()
     {

@@ -249,9 +249,8 @@
     {
         try
         {
-            var uploadsPath = Path.Combine(Env.WebRootPath, "uploads");
-            if (!Directory.Exists(uploadsPath)) return null;
-            var files = Directory.GetFiles(uploadsPath, "app-logo.*");
+            if (!Directory.Exists(TwmsDataPath.Uploads)) return null;
+            var files = Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*");
             return files.Length > 0 ? "/uploads/" + Path.GetFileName(files[0]) : null;
         }
         catch { return null; }
@@ -266,6 +265,7 @@
             var assetTask = AssetStatusService.GetAssetStatusesAsync();
             await Task.WhenAll(connTask, agentTask, assetTask);
 
+            _logoPadding = Config.GetValue("App:LogoPadding", 10);
             _dexaConnected = connTask.Result.DexaConnected;
             _agents = agentTask.Result;
             _assetStatuses = assetTask.Result;

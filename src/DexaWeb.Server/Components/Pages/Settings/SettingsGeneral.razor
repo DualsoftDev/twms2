@@ -4,6 +4,7 @@
 @inject AppSettingsEditor SettingsEditor
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject DexaNotificationService NotificationService
 
 <MudGrid>
     @* ── 헤더 이름 ── *@
@@ -208,8 +209,8 @@
         try
         {
             await SettingsEditor.SaveLogoPaddingAsync(_logoPadding);
+            NotificationService.NotifyRefresh();
             Snackbar.Add("로고 여유 설정이 저장되었습니다.", Severity.Success);
-            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }
         catch (Exception ex)
         {
@@ -227,9 +228,8 @@
     {
         try
         {
-            var uploadsPath = Path.Combine(WebHostEnv.WebRootPath, "uploads");
-            if (!Directory.Exists(uploadsPath)) return null;
-            var files = Directory.GetFiles(uploadsPath, "app-logo.*");
+            if (!Directory.Exists(TwmsDataPath.Uploads)) return null;
+            var files = Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*");
             return files.Length > 0 ? "/uploads/" + Path.GetFileName(files[0]) : null;
         }
         catch { return null; }
@@ -258,10 +258,7 @@
         _uploadingLogo = true;
         try
         {
-            var uploadsDir = Path.Combine(WebHostEnv.WebRootPath, "uploads");
-            Directory.CreateDirectory(uploadsDir);
-
-            foreach (var f in Directory.GetFiles(uploadsDir, "app-logo.*"))
+            foreach (var f in Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*"))
                 File.Delete(f);
 
             string savedExt;
@@ -275,13 +272,13 @@
                 var mimeType = ext == ".png" ? "image/png" : "image/jpeg";
                 var svgContent = await JS.InvokeAsync<string>("logoConverter.convertToSvg", base64, mimeType);
                 savedExt = ".svg";
-                filePath = Path.Combine(uploadsDir, $"app-logo{savedExt}");
+                filePath = Path.Combine(TwmsDataPath.Uploads, $"app-logo{savedExt}");
                 await File.WriteAllTextAsync(filePath, svgContent, new System.Text.UTF8Encoding(false));
             }
             else
             {
                 savedExt = ext;
-                filePath = Path.Combine(uploadsDir, $"app-logo{savedExt}");
+                filePath = Path.Combine(TwmsDataPath.Uploads, $"app-logo{savedExt}");
                 await using var stream = File.Create(filePath);
                 await _selectedLogoFile.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024).CopyToAsync(stream);
             }
@@ -306,10 +303,9 @@
     {
         try
         {
-            var uploadsDir = Path.Combine(WebHostEnv.WebRootPath, "uploads");
-            if (Directory.Exists(uploadsDir))
+            if (Directory.Exists(TwmsDataPath.Uploads))
             {
-                foreach (var f in Directory.GetFiles(uploadsDir, "app-logo.*"))
+                foreach (var f in Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*"))
                     File.Delete(f);
             }
 

@@ -545,6 +545,49 @@ public class TwmDbService
             "SELECT * FROM TwmMigration ORDER BY Version")).AsList();
     }
 
+    // ──────────────── TwmsManual (매뉴얼) ────────────────
+
+    public async Task<List<TwmsManual>> GetAllManualsAsync()
+    {
+        using var conn = _db.Create();
+        return (await conn.QueryAsync<TwmsManual>(
+            "SELECT * FROM TwmsManual ORDER BY UploadedAt DESC")).AsList();
+    }
+
+    public async Task<List<TwmsManual>> GetManualsByKeywordMatchAsync(string spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec))
+            return [];
+
+        using var conn = _db.Create();
+        return (await conn.QueryAsync<TwmsManual>(
+            "SELECT * FROM TwmsManual WHERE LOWER(@Spec) LIKE '%' || LOWER(Keyword) || '%' ORDER BY Keyword",
+            new { Spec = spec })).AsList();
+    }
+
+    public async Task<int> InsertManualAsync(TwmsManual manual)
+    {
+        using var conn = _db.Create();
+        return await conn.ExecuteScalarAsync<int>("""
+            INSERT INTO TwmsManual (Keyword, FileName, StoredFileName, UploadedAt)
+            VALUES (@Keyword, @FileName, @StoredFileName, CURRENT_TIMESTAMP);
+            SELECT last_insert_rowid();
+            """, manual);
+    }
+
+    public async Task<TwmsManual?> GetManualByIdAsync(int id)
+    {
+        using var conn = _db.Create();
+        return await conn.QueryFirstOrDefaultAsync<TwmsManual>(
+            "SELECT * FROM TwmsManual WHERE Id = @Id", new { Id = id });
+    }
+
+    public async Task DeleteManualAsync(int id)
+    {
+        using var conn = _db.Create();
+        await conn.ExecuteAsync("DELETE FROM TwmsManual WHERE Id = @Id", new { Id = id });
+    }
+
     // ──────────────── DB 통계 ────────────────
 
     public async Task<TwmDbStats> GetStatsAsync()
