@@ -13,13 +13,13 @@
                        Variant="@(_viewMode == 0 ? Variant.Filled : Variant.Outlined)"
                        Color="Color.Primary"
                        OnClick="() => SetView(0)">
-                도면
+                라인별
             </MudButton>
             <MudButton StartIcon="@Icons.Material.Filled.GridView"
                        Variant="@(_viewMode == 1 ? Variant.Filled : Variant.Outlined)"
                        Color="Color.Primary"
                        OnClick="() => SetView(1)">
-                배치도
+                개별
             </MudButton>
         </MudButtonGroup>
         <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary"

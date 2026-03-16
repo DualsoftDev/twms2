@@ -38,6 +38,15 @@
     public List<ViewAsset> GetSelectedAssets()
         => _selectedValues.Where(a => a.IsRealAsset).ToList();
 
+    /// <summary>
+    /// 지정된 AssetId 목록으로 선택 상태를 설정 (편집 시 기존 매핑 복원용).
+    /// </summary>
+    public void SetSelectedAssetIds(HashSet<int> assetIds)
+    {
+        _selectedValues = _allAssets.Where(a => assetIds.Contains(a.AssetId)).ToList();
+        StateHasChanged();
+    }
+
     private void BuildLookup()
     {
         _childMap = _allAssets
