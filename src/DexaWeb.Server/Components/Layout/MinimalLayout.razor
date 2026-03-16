@@ -1,0 +1,93 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<style>
+    :root {
+        --neu-shadow-light: @(_isDarkMode ? "rgba(50, 55, 62, 0.8)" : "rgba(255, 255, 255, 0.9)");
+        --neu-shadow-dark: @(_isDarkMode ? "rgba(20, 22, 25, 0.8)" : "rgba(163, 177, 198, 0.5)");
+        --neu-border-subtle: @(_isDarkMode ? "rgba(50, 55, 62, 0.5)" : "rgba(163, 177, 198, 0.2)");
+        --neu-border-faint: @(_isDarkMode ? "rgba(50, 55, 62, 0.3)" : "rgba(163, 177, 198, 0.1)");
+    }
+</style>
+
+@Body
+
+@code {
+    private bool _isDarkMode = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var stored = await JS.InvokeAsync<string>("themeStorage.get");
+            if (stored != null)
+            {
+                _isDarkMode = stored == "true";
+                StateHasChanged();
+            }
+        }
+    }
+
+    private static readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Background = "#e0e5ec",
+            Surface = "#e0e5ec",
+            TextPrimary = "#2d3748",
+            TextSecondary = "#718096",
+            Primary = "#8E8CD8",
+            PrimaryDarken = "#7270C0",
+            PrimaryLighten = "#ABA9E4",
+            PrimaryContrastText = "#ffffff",
+            Secondary = "#64748b",
+            Success = "#65B991",
+            Info = "#6BA0DE",
+            Warning = "#f59e0b",
+            Error = "#E67E7E",
+            ActionDefault = "#718096",
+            Divider = "rgba(163, 177, 198, 0.4)",
+            LinesDefault = "rgba(163, 177, 198, 0.3)",
+            LinesInputs = "rgba(163, 177, 198, 0.4)",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Background = "#26292e",
+            Surface = "#26292e",
+            TextPrimary = "#e2e8f0",
+            TextSecondary = "#a0aec0",
+            TextDisabled = "#4a5568",
+            Primary = "#A09EE8",
+            PrimaryDarken = "#8E8CD8",
+            PrimaryLighten = "#B8B6F0",
+            PrimaryContrastText = "#1a1a2e",
+            Secondary = "#94a3b8",
+            SecondaryContrastText = "#1a1a2e",
+            Success = "#7DCBA4",
+            Info = "#85B5E8",
+            Warning = "#fbbf24",
+            Error = "#f87171",
+            ActionDefault = "#a0aec0",
+            ActionDisabled = "#4a5568",
+            Divider = "rgba(50, 55, 62, 0.6)",
+            LinesDefault = "rgba(50, 55, 62, 0.5)",
+            LinesInputs = "rgba(50, 55, 62, 0.6)",
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["Pretendard", "-apple-system", "BlinkMacSystemFont", "sans-serif"]
+            },
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "12px",
+        }
+    };
+}

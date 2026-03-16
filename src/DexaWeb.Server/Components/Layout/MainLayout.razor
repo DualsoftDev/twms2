@@ -1,0 +1,279 @@
+@inherits LayoutComponentBase
+@inject AuthStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IConfiguration Config
+@inject DashboardService DashboardService
+@inject DexaNotificationService NotificationService
+@implements IDisposable
+
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<style>
+    :root {
+        --neu-shadow-light: @(_isDarkMode ? "rgba(40, 44, 56, 0.8)" : "#FFFFFF");
+        --neu-shadow-dark: @(_isDarkMode ? "rgba(10, 14, 26, 0.8)" : "#D1D9E6");
+        --neu-border-subtle: @(_isDarkMode ? "rgba(40, 44, 56, 0.5)" : "rgba(163, 177, 198, 0.25)");
+        --neu-border-faint: @(_isDarkMode ? "rgba(40, 44, 56, 0.3)" : "rgba(163, 177, 198, 0.15)");
+        --date-picker-icon-filter: @(_isDarkMode ? "invert(1)" : "none");
+        --logo-filter: @(_isDarkMode ? "brightness(0) invert(1)" : "brightness(0)");
+    }
+</style>
+
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="@ToggleDrawer" />
+        <MudLink Href="/" Underline="Underline.None" Color="Color.Inherit"
+                 Class="ml-3" Style="font-weight: 700; letter-spacing: -0.5px; font-size: 1.25rem;">
+            @_appTitle@(_showDate ? $"  {DateTime.Now:yyyy.MM.dd}" : "")
+        </MudLink>
+        <MudSpacer />
+
+        <div class="header-status-group">
+            <MudTooltip Text="@(_dexaConnected ? "DEXA 연결됨" : "DEXA 연결 안됨")">
+                <div class="header-status-chip">
+                    <span class="header-status-dot @(_dexaConnected ? "nav-status-online" : "nav-status-offline")"></span>
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" />
+                    <span class="header-status-text">DEXA</span>
+                </div>
+            </MudTooltip>
+            <MudTooltip Text="@($"에이전트 {_agents.OnlineCount} / {_agents.TotalCount}")">
+                <div class="header-status-chip">
+                    <span class="header-status-dot @(_agents.OnlineCount > 0 ? "nav-status-online" : "nav-status-idle")"></span>
+                    <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Small" />
+                    <span class="header-status-text">@_agents.OnlineCount / @_agents.TotalCount</span>
+                </div>
+            </MudTooltip>
+        </div>
+
+        <MudTooltip Text="@(_isDarkMode ? "라이트 모드" : "다크 모드")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit" Class="header-action-btn ml-2"
+                           OnClick="ToggleDarkMode" />
+        </MudTooltip>
+
+        <div class="ml-3"></div>
+        <AuthorizeView>
+            <Authorized>
+                <MudText Typo="Typo.body2" Class="mr-2">@context.User.Identity?.Name</MudText>
+                <MudTooltip Text="로그아웃">
+                    <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit"
+                                   Class="header-action-btn"
+                                   OnClick="HandleLogout" />
+                </MudTooltip>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Variant="Variant.Text" Color="Color.Inherit"
+                           StartIcon="@Icons.Material.Filled.Login"
+                           Class="header-action-btn"
+                           Href="/login">
+                    로그인
+                </MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Never" Elevation="0" DisableOverlay="true">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent Class="pt-16 px-4">
+        <MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
+            <CascadingValue Value="_isDarkMode" Name="IsDarkMode">
+                @Body
+            </CascadingValue>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = true;
+    private string _appTitle => Config["App:Title"] ?? "TWM";
+    private bool _showDate => Config.GetValue<bool>("App:ShowDate");
+
+    private bool _dexaConnected;
+    private AgentSummary _agents = new();
+    private System.Threading.Timer? _statusTimer;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    protected override void OnInitialized()
+    {
+        NotificationService.OnDatabaseChanged += HandleDatabaseChanged;
+        _statusTimer = new System.Threading.Timer(async _ =>
+        {
+            await LoadHeaderStatusAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var stored = await JS.InvokeAsync<string>("themeStorage.get");
+            if (stored != null)
+                _isDarkMode = stored == "true";
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadHeaderStatusAsync()
+    {
+        try
+        {
+            var connTask = DashboardService.GetConnectionStatusAsync();
+            var agentTask = DashboardService.GetAgentSummaryAsync();
+            await Task.WhenAll(connTask, agentTask);
+            _dexaConnected = connTask.Result.DexaConnected;
+            _agents = agentTask.Result;
+        }
+        catch { }
+    }
+
+    private async void HandleDatabaseChanged(string tableName)
+    {
+        if (tableName is "agent" or "connectivity" or "*")
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadHeaderStatusAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("themeStorage.set", _isDarkMode.ToString().ToLower());
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthStateProvider.LogoutAsync();
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    private static readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Background = "#F0F4F8",
+            Surface = "#F0F4F8",
+            AppbarBackground = "#F8FAFC",
+            AppbarText = "#2d3748",
+            DrawerBackground = "#F8FAFC",
+            DrawerText = "#2d3748",
+            DrawerIcon = "#5a6a7e",
+
+            TextPrimary = "#2d3748",
+            TextSecondary = "#5a6a7e",
+            TextDisabled = "#8a96a6",
+
+            Primary = "#8E8CD8",
+            PrimaryDarken = "#7270C0",
+            PrimaryLighten = "#ABA9E4",
+            PrimaryContrastText = "#ffffff",
+
+            Secondary = "#64748b",
+            SecondaryContrastText = "#ffffff",
+            Success = "#65B991",
+            SuccessContrastText = "#ffffff",
+            Info = "#6BA0DE",
+            InfoContrastText = "#ffffff",
+            Warning = "#f59e0b",
+            WarningContrastText = "#ffffff",
+            Error = "#E67E7E",
+            ErrorContrastText = "#ffffff",
+
+            ActionDefault = "#718096",
+            ActionDisabled = "#a0aec0",
+
+            Divider = "rgba(163, 177, 198, 0.4)",
+            DividerLight = "rgba(163, 177, 198, 0.2)",
+
+            TableHover = "rgba(129, 140, 248, 0.06)",
+            TableStriped = "rgba(163, 177, 198, 0.08)",
+
+            LinesDefault = "rgba(163, 177, 198, 0.3)",
+            LinesInputs = "rgba(163, 177, 198, 0.4)",
+        },
+
+        PaletteDark = new PaletteDark
+        {
+            Background = "#1C202C",
+            Surface = "#1C202C",
+            AppbarBackground = "#151822",
+            AppbarText = "#e2e8f0",
+            DrawerBackground = "#151822",
+            DrawerText = "#e2e8f0",
+            DrawerIcon = "#a0aec0",
+
+            TextPrimary = "#e2e8f0",
+            TextSecondary = "#a0aec0",
+            TextDisabled = "#4a5568",
+
+            Primary = "#A09EE8",
+            PrimaryDarken = "#8E8CD8",
+            PrimaryLighten = "#B8B6F0",
+            PrimaryContrastText = "#1a1a2e",
+
+            Secondary = "#94a3b8",
+            SecondaryContrastText = "#1a1a2e",
+            Success = "#7DCBA4",
+            SuccessContrastText = "#1a1a2e",
+            Info = "#85B5E8",
+            InfoContrastText = "#1a1a2e",
+            Warning = "#fbbf24",
+            WarningContrastText = "#1a1a2e",
+            Error = "#F09595",
+            ErrorContrastText = "#1a1a2e",
+
+            ActionDefault = "#a0aec0",
+            ActionDisabled = "#4a5568",
+
+            Divider = "rgba(50, 55, 62, 0.6)",
+            DividerLight = "rgba(50, 55, 62, 0.3)",
+
+            TableHover = "rgba(129, 140, 248, 0.08)",
+            TableStriped = "rgba(50, 55, 62, 0.3)",
+
+            LinesDefault = "rgba(50, 55, 62, 0.5)",
+            LinesInputs = "rgba(50, 55, 62, 0.6)",
+        },
+
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["Pretendard", "-apple-system", "BlinkMacSystemFont", "sans-serif"]
+            },
+            H1 = new H1Typography { FontFamily = ["Pretendard", "sans-serif"] },
+            H2 = new H2Typography { FontFamily = ["Pretendard", "sans-serif"] },
+            H3 = new H3Typography { FontFamily = ["Pretendard", "sans-serif"] },
+            H4 = new H4Typography { FontFamily = ["Pretendard", "sans-serif"] },
+            H5 = new H5Typography { FontFamily = ["Pretendard", "sans-serif"] },
+            H6 = new H6Typography { FontFamily = ["Pretendard", "sans-serif"] },
+            Button = new ButtonTypography { FontFamily = ["Pretendard", "sans-serif"] },
+        },
+
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "12px",
+            DrawerWidthLeft = "320px",
+        }
+    };
+
+    public void Dispose()
+    {
+        NotificationService.OnDatabaseChanged -= HandleDatabaseChanged;
+        _statusTimer?.Dispose();
+    }
+}

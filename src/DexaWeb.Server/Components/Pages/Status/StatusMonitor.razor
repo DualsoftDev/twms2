@@ -1,0 +1,276 @@
+@page "/status"
+@inject AssetStatusService AssetStatusService
+@inject PingService PingService
+@inject ISnackbar Snackbar
+
+<PageTitle>TWM - 상태 모니터</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">상태 모니터</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.NetworkPing"
+               OnClick="PingAll" Disabled="_pinging">
+        @(_pinging ? $"Ping 중... (Phase {_pingCompleted}/{_pingTotal})" : "전체 Ping")
+    </MudButton>
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary"
+                   OnClick="LoadData" Disabled="_loading" />
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+
+@* 필터 바 *@
+<MudPaper Class="pa-3 mb-4" Elevation="1">
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="4" md="3">
+            <MudTextField @bind-Value="_searchText" Placeholder="자산명/IP 검색"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="6" sm="4" md="2">
+            <MudSelect T="string" @bind-Value="_filterType" Label="자산 타입" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Clearable="true">
+                @foreach (var type in _assetTypes)
+                {
+                    <MudSelectItem Value="@type">@type</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" sm="4" md="2">
+            <MudSelect T="AssetHealthStatus?" @bind-Value="_filterHealth" Label="상태" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem T="AssetHealthStatus?" Value="AssetHealthStatus.BackedUp">백업 갱신</MudSelectItem>
+                <MudSelectItem T="AssetHealthStatus?" Value="AssetHealthStatus.Unchanged">변경 없음</MudSelectItem>
+                <MudSelectItem T="AssetHealthStatus?" Value="AssetHealthStatus.Failed">작업 실패</MudSelectItem>
+                <MudSelectItem T="AssetHealthStatus?" Value="AssetHealthStatus.Unknown">내역 없음</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@* 자산 상태 테이블 *@
+<MudDataGrid T="AssetStatusInfo" Items="@FilteredAssets" Hover="true" Dense="true"
+             SortMode="SortMode.Single" Filterable="false" RowClick="OnRowClick">
+    <Columns>
+        <PropertyColumn Property="x => x.Health" Title="상태" Sortable="true">
+            <CellTemplate>
+                <BackupStatusBadge Health="@context.Item.Health" AgentOnline="@context.Item.AgentOnline" />
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x.Name" Title="자산명" Sortable="true" />
+        <PropertyColumn Property="x => x.AssetTypeName" Title="타입" Sortable="true" />
+        <PropertyColumn Property="x => x.Ip" Title="IP" Sortable="true" />
+        <PropertyColumn Property="x => x.AgentName" Title="에이전트" Sortable="true">
+            <CellTemplate>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    @if (context.Item.AgentOnline)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Success" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Default" />
+                    }
+                    <MudText Typo="Typo.body2">@(context.Item.AgentName ?? "-")</MudText>
+                </MudStack>
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x.LastBackupTime" Title="마지막 백업" Sortable="true">
+            <CellTemplate>
+                @if (context.Item.LastBackupTime != null)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        @if (!context.Item.LastBackupSucceeded)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Color="Color.Error" />
+                        }
+                        else if (context.Item.LastBackupChanged == true)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.RemoveCircle" Size="Size.Small" Color="Color.Info" />
+                        }
+                        <MudText Typo="Typo.body2">@context.Item.LastBackupTime.Value.ToString("MM/dd HH:mm")</MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">-</MudText>
+                }
+            </CellTemplate>
+        </PropertyColumn>
+        <TemplateColumn Title="Ping" Sortable="false">
+            <CellTemplate>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <PingIndicator Ping="@context.Item.LatestPing" />
+                    <MudIconButton Icon="@Icons.Material.Filled.NetworkPing" Size="Size.Small"
+                                   OnClick="() => PingSingle(context.Item)" />
+                </MudStack>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+</MudDataGrid>
+
+@* 상세 팝업 *@
+@if (_selectedAsset != null)
+{
+    <MudDrawer @bind-Open="_detailOpen" Anchor="Anchor.End" Width="380px" Elevation="4" Variant="DrawerVariant.Temporary">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6">@_selectedAsset.Name</MudText>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <MudList T="string" Dense="true">
+                <MudListItem>
+                    <MudText Typo="Typo.caption">타입</MudText>
+                    <MudText>@(_selectedAsset.AssetTypeName ?? "-")</MudText>
+                </MudListItem>
+                <MudListItem>
+                    <MudText Typo="Typo.caption">IP</MudText>
+                    <MudText>@(_selectedAsset.Ip ?? "-")</MudText>
+                </MudListItem>
+                <MudListItem>
+                    <MudText Typo="Typo.caption">에이전트</MudText>
+                    <MudText>@(_selectedAsset.AgentName ?? "-") (@(_selectedAsset.AgentOnline ? "온라인" : "오프라인"))</MudText>
+                </MudListItem>
+                <MudListItem>
+                    <MudText Typo="Typo.caption">마지막 백업</MudText>
+                    <MudText>@(_selectedAsset.LastBackupTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "없음")</MudText>
+                </MudListItem>
+                <MudListItem>
+                    <MudText Typo="Typo.caption">상태</MudText>
+                    <BackupStatusBadge Health="@_selectedAsset.Health" AgentOnline="@_selectedAsset.AgentOnline" />
+                </MudListItem>
+                @if (_selectedAsset.LatestPing != null)
+                {
+                    <MudListItem>
+                        <MudText Typo="Typo.caption">Ping</MudText>
+                        <MudText>
+                            @(_selectedAsset.LatestPing.Reachable ? $"도달 ({_selectedAsset.LatestPing.RoundtripMs}ms)" : "미도달")
+                            — @_selectedAsset.LatestPing.CheckedAt.ToString("HH:mm:ss")
+                        </MudText>
+                    </MudListItem>
+                }
+                @if (_selectedAsset.GroupName != null)
+                {
+                    <MudListItem>
+                        <MudText Typo="Typo.caption">그룹</MudText>
+                        <MudText>@_selectedAsset.GroupName</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudNavMenu>
+    </MudDrawer>
+}
+
+@code {
+    private bool _loading;
+    private bool _pinging;
+    private bool _detailOpen;
+    private int _pingCompleted;
+    private int _pingTotal;
+
+    private string? _searchText;
+    private string? _filterType;
+    private AssetHealthStatus? _filterHealth;
+
+    private List<AssetStatusInfo> _assets = [];
+    private List<string> _assetTypes = [];
+    private AssetStatusInfo? _selectedAsset;
+
+    private IEnumerable<AssetStatusInfo> FilteredAssets
+    {
+        get
+        {
+            var q = _assets.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_searchText))
+            {
+                var search = _searchText.Trim();
+                q = q.Where(a =>
+                    (a.Name?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (a.Ip?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+
+            if (!string.IsNullOrEmpty(_filterType))
+                q = q.Where(a => a.AssetTypeName == _filterType);
+
+            if (_filterHealth != null)
+                q = q.Where(a => a.Health == _filterHealth);
+
+            return q;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            _assets = await AssetStatusService.GetAssetStatusesAsync();
+            _assetTypes = _assets
+                .Select(a => a.AssetTypeName)
+                .Where(t => !string.IsNullOrEmpty(t))
+                .Distinct()
+                .OrderBy(t => t)
+                .ToList()!;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task PingAll()
+    {
+        _pinging = true;
+        _pingCompleted = 0;
+        _pingTotal = 2; // Phase 1 + Phase 2
+        StateHasChanged();
+
+        try
+        {
+            var progress = new Progress<(int completed, int total)>(p =>
+            {
+                _pingCompleted = p.completed;
+                _pingTotal = p.total;
+                InvokeAsync(StateHasChanged);
+            });
+
+            await PingService.PingAllPhasesAsync(progress);
+            await LoadData();
+            Snackbar.Add($"전체 Ping 완료 (1차 + 2차)", Severity.Success);
+        }
+        finally
+        {
+            _pinging = false;
+        }
+    }
+
+    private async Task PingSingle(AssetStatusInfo asset)
+    {
+        var result = await PingService.PingAssetAsync(asset.AssetId);
+        if (result != null)
+        {
+            asset.LatestPing = result;
+            Snackbar.Add(
+                result.Reachable ? $"{asset.Name}: {result.RoundtripMs}ms" : $"{asset.Name}: 미도달",
+                result.Reachable ? Severity.Success : Severity.Warning);
+        }
+    }
+
+    private void OnRowClick(DataGridRowClickEventArgs<AssetStatusInfo> args)
+    {
+        _selectedAsset = args.Item;
+        _detailOpen = true;
+    }
+}

@@ -1,0 +1,122 @@
+@page "/layout"
+@inject AssetStatusService AssetStatusService
+@inject TwmDbService TwmDb
+
+<PageTitle>TWM - 레이아웃</PageTitle>
+
+<div class="layout-page-root">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h4">레이아웃</MudText>
+        <MudSpacer />
+        <MudButtonGroup OverrideStyles="false" Variant="Variant.Outlined" Size="Size.Small">
+            <MudButton StartIcon="@Icons.Material.Filled.Map"
+                       Variant="@(_viewMode == 0 ? Variant.Filled : Variant.Outlined)"
+                       Color="Color.Primary"
+                       OnClick="() => SetView(0)">
+                도면
+            </MudButton>
+            <MudButton StartIcon="@Icons.Material.Filled.GridView"
+                       Variant="@(_viewMode == 1 ? Variant.Filled : Variant.Outlined)"
+                       Color="Color.Primary"
+                       OnClick="() => SetView(1)">
+                배치도
+            </MudButton>
+        </MudButtonGroup>
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary"
+                       OnClick="RefreshAsync" Size="Size.Small" Disabled="_loading" />
+    </MudStack>
+
+    @if (_layouts.Count > 1)
+    {
+        <MudTabs ActivePanelIndex="_activeLayoutIndex" Elevation="0" Rounded="true"
+                 ApplyEffectsToContainer="false" PanelClass="" Border="true"
+                 Class="mb-3" ActivePanelIndexChanged="OnLayoutTabChanged">
+            @foreach (var lyt in _layouts)
+            {
+                <MudTabPanel Text="@lyt.Name" />
+            }
+        </MudTabs>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+    }
+    else if (_viewMode == 0)
+    {
+        <BlueprintView Lines="_lines" BlueprintRects="_blueprintRects"
+                       BlueprintConfig="_blueprintConfig"
+                       AssetStatuses="_assetStatuses" />
+    }
+    else
+    {
+        <AssetPlacementView BlueprintConfig="_blueprintConfig"
+                            AssetPositions="_assetPositions"
+                            AssetStatuses="_assetStatuses" />
+    }
+</div>
+
+@code {
+    private int _viewMode;
+    private bool _loading = true;
+    private int _activeLayoutIndex;
+    private int _selectedLayoutId;
+    private List<TwmsLayout> _layouts = [];
+    private List<TwmsLayoutLine> _lines = [];
+    private List<TwmsBlueprintRect> _blueprintRects = [];
+    private TwmsBlueprintConfig? _blueprintConfig;
+    private List<AssetStatusInfo> _assetStatuses = [];
+    private List<TwmsAssetPosition> _assetPositions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _layouts = await TwmDb.GetAllLayoutsAsync();
+        _selectedLayoutId = _layouts.FirstOrDefault()?.Id ?? 0;
+        if (_selectedLayoutId > 0)
+            await RefreshAsync();
+        else
+            _loading = false;
+    }
+
+    private void SetView(int mode)
+    {
+        _viewMode = mode;
+    }
+
+    private async Task OnLayoutTabChanged(int index)
+    {
+        _activeLayoutIndex = index;
+        if (index >= 0 && index < _layouts.Count)
+        {
+            _selectedLayoutId = _layouts[index].Id;
+            await RefreshAsync();
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_selectedLayoutId == 0) return;
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var linesTask  = TwmDb.GetAllTwmsLayoutLinesAsync();
+            var rectsTask  = TwmDb.GetAllBlueprintRectsAsync(_selectedLayoutId);
+            var configTask = TwmDb.GetBlueprintConfigAsync(_selectedLayoutId);
+            var posTask    = TwmDb.GetAllAssetPositionsAsync(_selectedLayoutId);
+            var statusTask = AssetStatusService.GetAssetStatusesAsync();
+            await Task.WhenAll(linesTask, rectsTask, configTask, posTask, statusTask);
+
+            _lines          = linesTask.Result;
+            _blueprintRects = rectsTask.Result;
+            _blueprintConfig = configTask.Result;
+            _assetPositions = posTask.Result;
+            _assetStatuses  = statusTask.Result;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+}

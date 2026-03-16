@@ -1,0 +1,143 @@
+@inject TwmDbService TwmDb
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudPaper Class="pa-6 neu-card">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h6" Style="font-weight: 600;">
+            <MudIcon Icon="@Icons.Material.Filled.LinearScale" Class="mr-2" Style="vertical-align: middle;" />
+            라인 관리
+        </MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="AddLineAsync"
+                   Size="Size.Small">
+            라인 추가
+        </MudButton>
+    </MudStack>
+
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        자산 편집 시 선택할 수 있는 라인 목록입니다. 자산이 배정된 라인은 삭제할 수 없습니다.
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_lines.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            등록된 라인이 없습니다. "라인 추가" 버튼으로 새 라인을 추가하세요.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_lines" Dense="true" Hover="true" Bordered="true" Elevation="0">
+            <HeaderContent>
+                <MudTh Style="width: 80px;">ID</MudTh>
+                <MudTh>이름</MudTh>
+                <MudTh Style="width: 180px;">수정일</MudTh>
+                <MudTh Style="width: 100px;">작업</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="ID">@context.Id</MudTd>
+                <MudTd DataLabel="이름">@context.Name</MudTd>
+                <MudTd DataLabel="수정일">@context.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                <MudTd DataLabel="작업">
+                    <MudStack Row="true" Spacing="1">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small" Color="Color.Primary"
+                                       OnClick="() => EditLineAsync(context)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => DeleteLineAsync(context)" />
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private List<TwmsLayoutLine> _lines = [];
+    private bool _loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLinesAsync();
+    }
+
+    private async Task LoadLinesAsync()
+    {
+        _loading = true;
+        _lines = await TwmDb.GetAllTwmsLayoutLinesAsync();
+        _loading = false;
+    }
+
+    private async Task AddLineAsync()
+    {
+        var nextId = _lines.Count > 0 ? _lines.Max(l => l.Id) + 1 : 1;
+
+        var parameters = new DialogParameters<InputDialog>
+        {
+            { x => x.Message, $"새 라인 이름을 입력하세요. (ID: {nextId})" }
+        };
+        var dialog = await DialogService.ShowAsync<InputDialog>("라인 추가", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string name } && !string.IsNullOrWhiteSpace(name))
+        {
+            await TwmDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine { Id = nextId, Name = name.Trim() });
+            await LoadLinesAsync();
+            Snackbar.Add($"라인 '{name.Trim()}'이(가) 추가되었습니다.", Severity.Success);
+        }
+    }
+
+    private async Task EditLineAsync(TwmsLayoutLine line)
+    {
+        var parameters = new DialogParameters<InputDialog>
+        {
+            { x => x.Message, $"라인 이름을 수정하세요. (ID: {line.Id})" },
+            { x => x.DefaultValue, line.Name }
+        };
+        var dialog = await DialogService.ShowAsync<InputDialog>("라인 편집", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string name } && !string.IsNullOrWhiteSpace(name))
+        {
+            await TwmDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine { Id = line.Id, Name = name.Trim() });
+            await LoadLinesAsync();
+            Snackbar.Add($"라인 이름이 '{name.Trim()}'(으)로 변경되었습니다.", Severity.Success);
+        }
+    }
+
+    private async Task DeleteLineAsync(TwmsLayoutLine line)
+    {
+        var assetCount = await TwmDb.CountAssetsByLineIdAsync(line.Id);
+        if (assetCount > 0)
+        {
+            Snackbar.Add($"라인 '{line.Name}'에 {assetCount}개의 자산이 배정되어 있어 삭제할 수 없습니다.", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"라인 '{line.Name}'을(를) 삭제하시겠습니까?" },
+            { x => x.ButtonText, "삭제" },
+            { x => x.ButtonColor, Color.Error }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("삭제 확인", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await TwmDb.DeleteTwmsLayoutLineAsync(line.Id);
+            await LoadLinesAsync();
+            Snackbar.Add($"라인 '{line.Name}'이(가) 삭제되었습니다.", Severity.Success);
+        }
+    }
+}

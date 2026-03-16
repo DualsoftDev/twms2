@@ -1,0 +1,150 @@
+@using static DexaWeb.Server.Helpers.LayoutHelpers
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* ── 범례 ── *@
+<MudPaper Class="pa-3 mb-3" Elevation="1">
+    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center" Justify="Justify.Center">
+        @foreach (var (label, color) in _legendItems)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <div class="topology-legend-dot" style="background: @color;"></div>
+                <MudText Typo="Typo.body2">@label</MudText>
+            </MudStack>
+        }
+        <MudSpacer />
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            @VisiblePositions.Count 개 자산 배치됨 · 휠로 확대/축소
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@* ── 배치도 뷰 ── *@
+<MudPaper Class="pa-0 blueprint-container" Elevation="2">
+    <div id="apv-container" class="blueprint-viewport"
+         style="background-color: @(BlueprintConfig?.BgColor ?? "#1a1a2e")">
+        <svg class="drawing-editor-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+            @* ── 도면 이미지 배경 ── *@
+            @if (!string.IsNullOrEmpty(BlueprintConfig?.ImagePath))
+            {
+                <image href="@BlueprintConfig.ImagePath" x="0" y="0" width="1000" height="600"
+                       preserveAspectRatio="xMidYMid meet" opacity="0.85" />
+            }
+
+            @* ── 배치된 자산 아이콘 ── *@
+            @foreach (var pos in VisiblePositions)
+            {
+                var asset = AssetStatuses.FirstOrDefault(a => a.AssetId == pos.AssetId);
+                if (asset == null) continue;
+
+                var healthColor = GetHealthColor(asset.Health);
+                var isOffline = asset.LatestPing is { Reachable: false };
+                var s = pos.Scale;
+                var sz = 36 * s;
+                var imgSz = 28 * s;
+                var imgOff = 4 * s;
+                <g transform="translate(@F(pos.X), @F(pos.Y))" class="apv-asset-icon">
+                    @(RenderSvgTitle(asset))
+                    <rect width="@F(sz)" height="@F(sz)" rx="4"
+                          fill="white" stroke="@healthColor" stroke-width="1.5" opacity="0.9" />
+                    <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
+                           width="@F(imgSz)" height="@F(imgSz)" x="@F(imgOff)" y="@F(imgOff)" />
+                    @* 오프라인 배경 *@
+                    @if (isOffline)
+                    {
+                        <rect x="@F(sz - 11)" y="-3" width="14" height="14" rx="3" fill="#333" opacity="0.7" />
+                    }
+                    @* 건강상태 인디케이터 *@
+                    <circle cx="@F(sz - 4)" cy="4" r="4" fill="@healthColor" stroke="white" stroke-width="1" />
+                    @* 자산 이름 *@
+                    <text x="@F(sz / 2)" y="@F(sz + 14)" text-anchor="middle" font-size="9"
+                          fill="#333" class="ap-icon-label">@TruncName(asset.Name)</text>
+                </g>
+            }
+        </svg>
+
+        @* ── 줌 컨트롤 ── *@
+        <div class="blueprint-zoom-controls">
+            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                           OnClick="ZoomIn" Title="확대" />
+            <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small"
+                           OnClick="ZoomOut" Title="축소" />
+            <MudIconButton Icon="@Icons.Material.Filled.CenterFocusWeak" Size="Size.Small"
+                           OnClick="ZoomReset" Title="초기화" />
+            <MudIconButton Icon="@(_isFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)"
+                           Size="Size.Small" OnClick="ToggleFullscreen" Title="전체화면" />
+        </div>
+    </div>
+</MudPaper>
+
+@if (VisiblePositions.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+        배치된 자산이 없습니다. 관리 > 레이아웃 관리에서 자산을 배치해 주세요.
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public TwmsBlueprintConfig? BlueprintConfig { get; set; }
+    [Parameter] public List<TwmsAssetPosition> AssetPositions { get; set; } = [];
+    [Parameter] public List<AssetStatusInfo> AssetStatuses { get; set; } = [];
+
+    private bool _jsInitialized;
+    private bool _isFullscreen;
+
+    private List<TwmsAssetPosition> VisiblePositions =>
+        AssetPositions.Where(p => p.Visible).ToList();
+
+    private static readonly (string Label, string Color)[] _legendItems =
+    [
+        ("갱신", "#65B991"),
+        ("유지", "#6BA0DE"),
+        ("실패", "#E67E7E"),
+        ("내역없음", "#999"),
+    ];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInitialized)
+        {
+            _jsInitialized = true;
+            try { await JS.InvokeVoidAsync("blueprintZoom.init", "apv-container"); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    private async Task ZoomIn()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.zoomIn", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ZoomOut()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.zoomOut", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ZoomReset()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.reset", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ToggleFullscreen()
+    {
+        try
+        {
+            _isFullscreen = !_isFullscreen;
+            await JS.InvokeVoidAsync("blueprintZoom.toggleFullscreen", "apv-container", _isFullscreen);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.dispose", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+}

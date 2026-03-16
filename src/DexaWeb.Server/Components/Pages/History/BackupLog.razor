@@ -1,0 +1,99 @@
+@inject DexaReadService DexaRead
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_logs.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">로그가 없습니다.</MudAlert>
+        }
+        else
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.body2">
+                    Asset ID: @AssetId | 로그: @_logs.Count / @_totalCount 건
+                </MudText>
+                <MudSpacer />
+                @if (!_allLoaded && _totalCount > _logs.Count)
+                {
+                    <MudButton Variant="Variant.Text" Color="Color.Primary"
+                               Size="Size.Small" OnClick="LoadAllLogs"
+                               Disabled="_loadingAll">
+                        @if (_loadingAll)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" />
+                        }
+                        전체 보기 (@(_totalCount)건)
+                    </MudButton>
+                }
+            </MudStack>
+            <MudDataGrid Items="_logs" Dense="true" Hover="true" Bordered="true" Style="max-height: 500px; overflow-y: auto;">
+                <Columns>
+                    <TemplateColumn Title="시간" SortBy="x => x.DateTime">
+                        <CellTemplate>
+                            <MudText Typo="Typo.caption">@context.Item.DateTime?.ToString("HH:mm:ss.fff")</MudText>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="레벨">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small" Color="@GetLevelColor(context.Item.Level)">
+                                @context.Item.Level
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Property="x => x.Message" Title="메시지" />
+                </Columns>
+            </MudDataGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">닫기</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int ActionId { get; set; }
+    [Parameter] public int AssetId { get; set; }
+
+    private List<ActionLog> _logs = [];
+    private int _totalCount;
+    private bool _loading;
+    private bool _loadingAll;
+    private bool _allLoaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        var (logs, total) = await DexaRead.GetActionLogsAsync(ActionId);
+        _logs = logs;
+        _totalCount = total;
+        _allLoaded = logs.Count >= total;
+        _loading = false;
+    }
+
+    private async Task LoadAllLogs()
+    {
+        _loadingAll = true;
+        var (logs, total) = await DexaRead.GetActionLogsAsync(ActionId, loadAll: true);
+        _logs = logs;
+        _totalCount = total;
+        _allLoaded = true;
+        _loadingAll = false;
+    }
+
+    private Color GetLevelColor(string? level) => level switch
+    {
+        "INFO" => Color.Info,
+        "WARN" => Color.Warning,
+        "ERROR" => Color.Error,
+        "FATAL" => Color.Error,
+        "DEBUG" => Color.Default,
+        _ => Color.Default
+    };
+
+    private void Close() => MudDialog.Close();
+}

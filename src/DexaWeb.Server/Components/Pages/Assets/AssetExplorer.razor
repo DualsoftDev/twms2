@@ -1,0 +1,68 @@
+@page "/assets"
+@page "/assets/{AssetId:int}"
+@inject AssetService AssetService
+@inject ISnackbar Snackbar
+
+<PageTitle>TWM - 자산 관리</PageTitle>
+
+@if (_selectedAsset != null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">자산 관리</MudText>
+    </MudStack>
+
+    <AssetDetail Asset="_selectedAsset" OnSaved="OnAssetSaved" />
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">자산 관리</MudText>
+    </MudStack>
+
+    <MudPaper Class="pa-8 d-flex align-center justify-center" Elevation="2"
+              Style="height: calc(100vh - 180px);">
+        <MudStack AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary">좌측 메뉴에서 자산을 선택하세요</MudText>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public int? AssetId { get; set; }
+
+    private ViewAsset? _selectedAsset;
+    private List<ViewAsset> _allAssets = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAssetsAsync();
+        SelectAssetFromRoute();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectAssetFromRoute();
+    }
+
+    private void SelectAssetFromRoute()
+    {
+        if (AssetId.HasValue)
+        {
+            _selectedAsset = _allAssets.FirstOrDefault(a => a.AssetId == AssetId.Value);
+        }
+    }
+
+    private async Task LoadAssetsAsync()
+    {
+        var all = await AssetService.GetAllAssetsAsync();
+        _allAssets = all.Where(a => a.IsRealAsset).ToList();
+    }
+
+    private async Task OnAssetSaved()
+    {
+        Snackbar.Add("자산 정보가 저장되었습니다.", Severity.Success);
+        await LoadAssetsAsync();
+        SelectAssetFromRoute();
+    }
+}

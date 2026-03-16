@@ -1,0 +1,129 @@
+@inject AssetService AssetService
+
+<MudTreeView T="ViewAsset"
+             SelectionMode="@(MultiSelect ? SelectionMode.MultiSelection : SelectionMode.SingleSelection)"
+             @bind-SelectedValues="_selectedValues"
+             SelectedValueChanged="OnSelectedChanged"
+             Hover="true"
+             Dense="true"
+             ExpandOnClick="true">
+    @RenderNodes(_rootItems)
+</MudTreeView>
+
+@code {
+    [Parameter] public bool MultiSelect { get; set; }
+    [Parameter] public EventCallback<ViewAsset?> OnAssetSelected { get; set; }
+
+    private List<ViewAsset> _allAssets = [];
+    private List<ViewAsset> _rootItems = [];
+    private Dictionary<int, List<ViewAsset>> _childMap = [];
+    private IReadOnlyCollection<ViewAsset> _selectedValues = Array.Empty<ViewAsset>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    public async Task RefreshAsync()
+    {
+        _allAssets = await AssetService.GetAllAssetsAsync();
+        _selectedValues = Array.Empty<ViewAsset>();
+        BuildLookup();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 멀티셀렉트 모드에서 선택된 실제 자산 목록 반환 (폴더 제외).
+    /// </summary>
+    public List<ViewAsset> GetSelectedAssets()
+        => _selectedValues.Where(a => a.IsRealAsset).ToList();
+
+    private void BuildLookup()
+    {
+        _childMap = _allAssets
+            .Where(a => a.AssetParentId != 0 && _allAssets.Any(p => p.AssetId == a.AssetParentId))
+            .GroupBy(a => a.AssetParentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        _rootItems = _allAssets
+            .Where(a => a.AssetParentId == 0 || !_allAssets.Any(p => p.AssetId == a.AssetParentId))
+            .ToList();
+    }
+
+    private RenderFragment RenderNodes(List<ViewAsset> items) => builder =>
+    {
+        foreach (var asset in items)
+        {
+            var hasChildren = _childMap.ContainsKey(asset.AssetId);
+            var children = hasChildren ? _childMap[asset.AssetId] : null;
+            var materialIcon = GetIcon(asset);
+            var pngPath = asset.IsFolder ? "" : GetIconPath(asset);
+
+            builder.OpenComponent<MudTreeViewItem<ViewAsset>>(0);
+            builder.AddAttribute(1, "Value", asset);
+            builder.AddAttribute(4, "Expanded", asset.IsFolder);
+
+            if (!string.IsNullOrEmpty(materialIcon))
+            {
+                // 폴더: Material 아이콘 + Text
+                builder.AddAttribute(2, "Text", asset.DisplayName);
+                builder.AddAttribute(3, "Icon", materialIcon);
+            }
+            else
+            {
+                // 자산: PNG 아이콘 + 이름을 Content로
+                var name = asset.DisplayName;
+                var iconSrc = pngPath;
+                builder.AddAttribute(2, "Content", (RenderFragment)(b2 =>
+                {
+                    b2.OpenElement(0, "div");
+                    b2.AddAttribute(1, "class", "d-flex align-center");
+                    b2.AddAttribute(2, "style", "gap:6px;");
+                    if (!string.IsNullOrEmpty(iconSrc))
+                    {
+                        b2.OpenElement(3, "img");
+                        b2.AddAttribute(4, "src", iconSrc);
+                        b2.AddAttribute(5, "class", "asset-type-icon-sm");
+                        b2.CloseElement();
+                    }
+                    b2.OpenElement(6, "span");
+                    b2.AddContent(7, name);
+                    b2.CloseElement();
+                    b2.CloseElement();
+                }));
+            }
+
+            if (hasChildren)
+            {
+                builder.AddAttribute(5, "ChildContent", RenderNodes(children!));
+            }
+            builder.CloseComponent();
+        }
+    };
+
+    private async Task OnSelectedChanged(ViewAsset? asset)
+    {
+        if (!MultiSelect)
+            await OnAssetSelected.InvokeAsync(asset);
+    }
+
+    private string GetIcon(ViewAsset asset)
+    {
+        if (asset.IsSystemRootFolder) return Icons.Material.Filled.FolderSpecial;
+        if (asset.IsNonRootFolder) return Icons.Material.Filled.Folder;
+
+        // 실제 자산은 빈 문자열 (PNG 아이콘은 IconTemplate에서 렌더링)
+        return "";
+    }
+
+    private string GetIconPath(ViewAsset asset) => asset.AssetTypeUserFriendlyName switch
+    {
+        var n when n != null && n.Contains("PLC") && asset.AugIsRobotPLC is > 0 => "images/icons/robot.png",
+        var n when n != null && n.Contains("PLC") => "images/icons/plc.png",
+        var n when n != null && n.Contains("Servo") => "images/icons/servo.png",
+        var n when n != null && (n.Contains("HMI") || n.Contains("XP")) => "images/icons/hmi.png",
+        var n when n != null && n.Contains("Drive") => "images/icons/drive.png",
+        var n when n != null && n.Contains("FTP") => "images/icons/ftp.png",
+        _ => ""
+    };
+}

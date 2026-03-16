@@ -1,0 +1,211 @@
+/* MudNavMenu handles all navigation styling via app.css neumorphism overrides */
+
+/* 최상위 링크(대시보드, 레이아웃, 자산 통합조회, 관리) - 정렬, 볼드 */
+/* MudNavLink: Class→.mud-nav-item, active→자식 .mud-nav-link */
+::deep .nav-top-link .mud-nav-link {
+    padding-left: 16px;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    border-left: 3px solid transparent;
+    transition: var(--neu-transition), border-color 0.3s;
+}
+
+/* 최상위 링크 active 상태 - 테두리 없음 */
+::deep .nav-top-link .mud-nav-link.active {
+    border-left: 3px solid transparent;
+}
+
+::deep .nav-plc-row {
+    position: relative;
+}
+
+/* 토글 버튼 옆 nav-link 좌측 패딩 축소 */
+::deep .nav-plc-row .mud-nav-link {
+    padding-left: 4px;
+}
+
+::deep .nav-plc-toggle.mud-icon-button {
+    flex-shrink: 0;
+    margin-right: 2px;
+    margin-left: 6px;
+    padding: 4px 12px;
+    min-width: 52px;
+    height: 30px;
+    border-radius: 8px !important;
+    background: color-mix(in srgb, var(--status-color, transparent) 12%, var(--mud-palette-surface));
+    border: none;
+    border-bottom: 3px solid var(--status-color, transparent);
+    box-shadow: 3px 3px 6px var(--neu-shadow-dark),
+                -3px -3px 6px var(--neu-shadow-light);
+    transition: box-shadow 0.2s, border-color 0.3s;
+    position: relative;
+}
+
+/* 펼치기/접기 아이콘 색상 + 크기 */
+::deep .nav-plc-toggle.mud-icon-button .mud-icon-root {
+    color: var(--status-color, var(--mud-palette-text-secondary)) !important;
+    width: 28px !important;
+    height: 28px !important;
+}
+
+::deep .nav-plc-toggle.mud-icon-button .mud-icon-root svg {
+    stroke: currentColor;
+    stroke-width: 0.8px;
+    width: 28px !important;
+    height: 28px !important;
+}
+
+::deep .nav-plc-toggle.mud-icon-button:hover {
+    box-shadow: 4px 4px 8px var(--neu-shadow-dark),
+                -4px -4px 8px var(--neu-shadow-light);
+}
+
+::deep .nav-plc-toggle.mud-icon-button:active {
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+}
+
+/* 라인 레벨 토글 - 중간 크기 */
+::deep .nav-tree-row--line .nav-plc-toggle.mud-icon-button {
+    min-width: 44px;
+    height: 26px;
+    padding: 4px 10px;
+    border-bottom-width: 3px;
+}
+
+/* 자산(PLC) 레벨 토글 - 가장 작음 */
+::deep .nav-tree-branch > .nav-tree-node > .nav-plc-row > .nav-plc-toggle.mud-icon-button {
+    min-width: 36px;
+    height: 22px;
+    padding: 2px 8px;
+    border-bottom-width: 2px;
+    box-shadow: 2px 2px 4px var(--neu-shadow-dark),
+                -2px -2px 4px var(--neu-shadow-light);
+    opacity: 0.7;
+}
+
+/* 다크 테마: PLC 레벨 토글 opacity 올려서 가시성 확보 */
+:global(.mud-theme-dark) ::deep .nav-tree-branch > .nav-tree-node > .nav-plc-row > .nav-plc-toggle.mud-icon-button {
+    opacity: 0.85;
+}
+
+::deep .nav-tree-branch > .nav-tree-node > .nav-plc-row > .nav-plc-toggle.mud-icon-button:hover {
+    opacity: 1;
+    box-shadow: 3px 3px 6px var(--neu-shadow-dark),
+                -3px -3px 6px var(--neu-shadow-light);
+}
+
+/* === 트리 구조 === */
+
+/* 라인 목록 컨테이너 */
+::deep .nav-tree-lines {
+    padding-left: 8px;
+}
+
+/* 라인 그룹 - 하단 간격 */
+::deep .nav-tree-line-group {
+    margin-bottom: 2px;
+}
+
+/* 라인 레벨 - 중간 크기 */
+::deep .nav-tree-row--line .mud-nav-link {
+    font-weight: 600;
+    font-size: 0.93rem;
+}
+
+::deep .nav-tree-label--line {
+    font-weight: 600;
+    font-size: 0.93rem;
+    letter-spacing: 0.01em;
+}
+
+/* PLC/자산 레벨 */
+::deep .nav-tree-branch .mud-nav-link {
+    font-size: 0.87rem;
+}
+
+/* 리프(하위 자산) 레벨 */
+::deep .nav-tree-branch--leaf .mud-nav-link {
+    font-size: 0.82rem;
+}
+
+/* 가지(branch) 컨테이너 */
+::deep .nav-tree-branch {
+    position: relative;
+    margin-left: 12px;
+    padding-left: 14px;
+}
+
+/* 리프 가지 - PLC 토글 버튼 폭만큼 오프셋하여 부모 텍스트보다 안쪽 정렬 */
+::deep .nav-tree-branch--leaf {
+    margin-left: 40px;
+    padding-left: 14px;
+}
+
+/* 각 노드 */
+::deep .nav-tree-node {
+    position: relative;
+}
+
+/* 세로선 - 각 노드별로 그려서 마지막 노드에서 자연스럽게 끊김 */
+::deep .nav-tree-node::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -15.5px;
+    bottom: 0;
+    border-left: 1.5px solid var(--mud-palette-lines-default);
+}
+
+/* 마지막 노드 - 세로선을 커넥터 위치까지만 */
+::deep .nav-tree-node:last-child::after {
+    bottom: auto;
+    height: 19.5px;
+}
+
+/* 가로선(ㄴ) */
+::deep .nav-tree-node::before {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: -14px;
+    width: 12px;
+    height: 0;
+    border-top: 1.5px solid var(--mud-palette-lines-default);
+}
+
+/* 리프 노드 - dashed 스타일 */
+::deep .nav-tree-branch--leaf > .nav-tree-node::after {
+    left: -15.5px;
+    border-left-style: dashed;
+    border-left-color: var(--mud-palette-text-disabled);
+}
+
+::deep .nav-tree-branch--leaf > .nav-tree-node:last-child::after {
+    bottom: auto;
+    height: 19.5px;
+}
+
+::deep .nav-tree-branch--leaf > .nav-tree-node::before {
+    border-top-style: dashed;
+    border-top-color: var(--mud-palette-text-disabled);
+    left: -12px;
+    width: 10px;
+}
+
+/* 다크 테마: 트리 연결선 밝기 향상 */
+:global(.mud-theme-dark) ::deep .nav-tree-node::after {
+    border-left-color: rgba(100, 110, 130, 0.5);
+}
+
+:global(.mud-theme-dark) ::deep .nav-tree-node::before {
+    border-top-color: rgba(100, 110, 130, 0.5);
+}
+
+:global(.mud-theme-dark) ::deep .nav-tree-branch--leaf > .nav-tree-node::after {
+    border-left-color: rgba(100, 110, 130, 0.4);
+}
+
+:global(.mud-theme-dark) ::deep .nav-tree-branch--leaf > .nav-tree-node::before {
+    border-top-color: rgba(100, 110, 130, 0.4);
+}

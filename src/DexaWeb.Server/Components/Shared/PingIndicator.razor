@@ -1,0 +1,24 @@
+@using DexaWeb.Server.Models.Dashboard
+
+@if (Ping == null)
+{
+    <MudTooltip Text="Ping 미확인">
+        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Default" />
+    </MudTooltip>
+}
+else if (Ping.Reachable)
+{
+    <MudTooltip Text="@($"도달 가능 ({Ping.RoundtripMs}ms, {Ping.CheckedAt:HH:mm:ss})")">
+        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Success" />
+    </MudTooltip>
+}
+else
+{
+    <MudTooltip Text="@($"도달 불가 ({Ping.CheckedAt:HH:mm:ss})")">
+        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Error" />
+    </MudTooltip>
+}
+
+@code {
+    [Parameter] public PingStatus? Ping { get; set; }
+}

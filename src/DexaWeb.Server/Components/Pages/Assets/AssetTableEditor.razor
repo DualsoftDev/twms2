@@ -1,0 +1,218 @@
+@page "/assets/table"
+@attribute [Authorize]
+@inject AssetService AssetService
+@inject TwmDbService TwmDb
+@inject ISnackbar Snackbar
+
+<PageTitle>TWM - 자산 테이블 편집</PageTitle>
+
+@* ── 헤더 바 ──────────────────────────────────────────── *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.h4">자산 테이블 편집</MudText>
+    <MudSpacer />
+    @if (_loaded)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mr-3">
+            총 @(_allRows.Count)건 / 수정 @(ModifiedCount)건
+        </MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="LoadAll" Disabled="_saving">
+            새로고침
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAll"
+                   Disabled="@(ModifiedCount == 0 || _saving)">
+            저장 (@(ModifiedCount)건)
+        </MudButton>
+    }
+</MudStack>
+
+@* ── 진행 / 결과 표시 ────────────────────────────────── *@
+@if (_saving)
+{
+    <MudProgressLinear Value="_progressPercent" Color="Color.Primary" Class="mb-2" />
+    <MudText Class="mb-2">저장 중... (@_completed / @_total)</MudText>
+}
+@if (_resultMsg != null)
+{
+    <MudAlert Severity="@_resultSeverity" Dense="true" Class="mb-3"
+              ShowCloseIcon="true" CloseIconClicked="() => _resultMsg = null">
+        @_resultMsg
+    </MudAlert>
+}
+
+@* ── 본문 ───────────────────────────────────────────── *@
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <MudText Class="mt-2">자산 목록 로딩 중...</MudText>
+}
+else if (!_loaded)
+{
+    <MudAlert Severity="Severity.Error">
+        자산 목록을 가져올 수 없습니다. DEXA 서버 연결을 확인하세요.
+    </MudAlert>
+}
+else
+{
+    <MudTabs Elevation="1" Rounded="true" PanelClass="pt-3" @bind-ActivePanelIndex="_activeTab">
+
+        @* 전체 *@
+        <MudTabPanel Text='@AllTabLabel()'>
+            <AssetEditGrid Rows="@_allRows"
+                           ShowAllTypes="true"
+                           LineMap="_lineMap"
+                           OnFieldChanged="StateHasChanged" />
+        </MudTabPanel>
+
+        @* FTP (assetTypeId=3) *@
+        <MudTabPanel Text='@TabLabel(3, "FTP")'>
+            <AssetEditGrid Rows="@RowsOf(3)"
+                           ShowIp="true"
+                           LineMap="_lineMap"
+                           OnFieldChanged="StateHasChanged" />
+        </MudTabPanel>
+
+        @* LS Drive (assetTypeId=4) *@
+        <MudTabPanel Text='@TabLabel(4, "드라이브")'>
+            <AssetEditGrid Rows="@RowsOf(4)"
+                           ShowIp="true" ShowVia="true" ShowVersion="true"
+                           LineMap="_lineMap"
+                           OnFieldChanged="StateHasChanged" />
+        </MudTabPanel>
+
+        @* LS XP Series (assetTypeId=5) *@
+        <MudTabPanel Text='@TabLabel(5, "XP Series")'>
+            <AssetEditGrid Rows="@RowsOf(5)"
+                           ShowIp="true"
+                           LineMap="_lineMap"
+                           OnFieldChanged="StateHasChanged" />
+        </MudTabPanel>
+
+        @* XGT PLC (assetTypeId=6) *@
+        <MudTabPanel Text='@TabLabel(6, "XGT PLC")'>
+            <AssetEditGrid Rows="@RowsOf(6)"
+                           ShowIp="false" ShowConn="true" ShowVia="true" ShowRobot="true"
+                           LineMap="_lineMap"
+                           OnFieldChanged="StateHasChanged" />
+        </MudTabPanel>
+
+        @* LS Servo (assetTypeId=7) *@
+        <MudTabPanel Text='@TabLabel(7, "서보")'>
+            <AssetEditGrid Rows="@RowsOf(7)"
+                           ShowIp="false" ShowConn="true" ShowVia="true"
+                           LineMap="_lineMap"
+                           OnFieldChanged="StateHasChanged" />
+        </MudTabPanel>
+
+    </MudTabs>
+}
+
+@code {
+    private List<AssetEditRow>     _allRows = [];
+    private Dictionary<int, IReadOnlyList<AssetEditRow>> _rowsByType = [];
+    private Dictionary<int, string> _lineMap = [];
+    private bool   _loaded;
+    private bool   _loading = true;
+    private bool   _saving;
+    private int    _completed, _total;
+    private double _progressPercent;
+    private int    _activeTab;
+    private string? _resultMsg;
+    private Severity _resultSeverity = Severity.Success;
+
+    private int ModifiedCount => _allRows.Count(r => r.IsModified);
+
+    protected override async Task OnInitializedAsync() => await LoadAll();
+
+    private async Task LoadAll()
+    {
+        _loading = true;
+        _loaded = false;
+        _resultMsg = null;
+        StateHasChanged();
+
+        try
+        {
+            var rowsTask = AssetService.GetAssetEditRowsAsync();
+            var lineTask = TwmDb.GetTwmsLayoutLineMapAsync();
+            await Task.WhenAll(rowsTask, lineTask);
+
+            _allRows = rowsTask.Result;
+            _lineMap = lineTask.Result;
+            foreach (var r in _allRows)
+                r.LineName = r.LineId.HasValue && _lineMap.TryGetValue(r.LineId.Value, out var ln) ? ln : "";
+            _rowsByType = _allRows
+                .GroupBy(r => r.AssetTypeId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<AssetEditRow>)g.ToList());
+            _loaded = true;
+        }
+        catch
+        {
+            _allRows = [];
+            _rowsByType = [];
+        }
+
+        _loading = false;
+    }
+
+    private IReadOnlyList<AssetEditRow> RowsOf(int typeId) =>
+        _rowsByType.TryGetValue(typeId, out var list) ? list : [];
+
+    private string AllTabLabel()
+    {
+        var count = _allRows.Count;
+        var mod   = ModifiedCount;
+        return mod > 0 ? $"전체 ({count}) *" : $"전체 ({count})";
+    }
+
+    private string TabLabel(int typeId, string name)
+    {
+        var count = RowsOf(typeId).Count;
+        var mod   = RowsOf(typeId).Count(r => r.IsModified);
+        return mod > 0 ? $"{name} ({count}) *" : $"{name} ({count})";
+    }
+
+    private async Task SaveAll()
+    {
+        var modified = _allRows.Where(r => r.IsModified).ToList();
+        if (modified.Count == 0) return;
+
+        _saving = true;
+        _completed = 0;
+        _total = modified.Count;
+        _progressPercent = 0;
+        StateHasChanged();
+
+        var progress = new Progress<(int completed, int total)>(p =>
+        {
+            _completed = p.completed;
+            _total     = p.total;
+            _progressPercent = _total > 0 ? (double)_completed / _total * 100 : 0;
+            InvokeAsync(StateHasChanged);
+        });
+
+        var results = await AssetService.SaveAssetEditRowsAsync(modified, progress);
+        _saving = false;
+
+        var fail    = results.Count(r => !r.Success);
+        var success = results.Count - fail;
+        if (fail == 0)
+        {
+            _resultMsg      = $"{success}건 저장 완료";
+            _resultSeverity = Severity.Success;
+            Snackbar.Add(_resultMsg, Severity.Success);
+        }
+        else
+        {
+            _resultMsg      = $"성공 {success}건, 실패 {fail}건";
+            _resultSeverity = Severity.Warning;
+            Snackbar.Add(_resultMsg, Severity.Warning);
+        }
+
+        // 탭 레이블 갱신 (IsModified 상태 반영)
+        StateHasChanged();
+    }
+}

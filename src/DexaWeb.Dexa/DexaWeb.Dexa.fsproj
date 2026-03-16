@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>DexaWeb.Dexa</RootNamespace>
+    <AssemblyName>DexaWeb.Dexa</AssemblyName>
+
+	<NoWarn>$(NoWarn);NU1901;NU1902;NU1903;NU1904</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Utilities/EmDns.fs" />
+    <Compile Include="Utilities/ActorErrors.fs" />
+    <Compile Include="Models/NullableDateTimeHandler.fs" />
+    <Compile Include="Models/ActorBase.fs" />
+    <Compile Include="Models/User.fs" />
+    <Compile Include="Models/AssetType.fs" />
+    <Compile Include="Models/ProjectFile.fs" />
+    <Compile Include="Models/Asset.fs" />
+    <Compile Include="Models/ViewAsset.fs" />
+    <Compile Include="Models/Trigger.fs" />
+    <Compile Include="Models/Schedule.fs" />
+    <Compile Include="Models/Permission.fs" />
+    <Compile Include="Models/ViewPermission.fs" />
+    <Compile Include="Models/Action.fs" />
+    <Compile Include="Models/ActionLog.fs" />
+    <Compile Include="Models/Agent.fs" />
+    <Compile Include="Models/DeepPingError.fs" />
+    <Compile Include="Models/DashboardAssetReport.fs" />
+    <Compile Include="Models/ViewSchedule.fs" />
+    <Compile Include="Messages/DEXActorGlobal.fs" />
+    <Compile Include="Messages/ActorType.fs" />
+    <Compile Include="Messages/Base/ActorMessage.fs" />
+    <Compile Include="Messages/Base/AmReply.fs" />
+    <Compile Include="Messages/Base/AmReplyError.fs" />
+    <Compile Include="Messages/Base/AmPing.fs" />
+    <Compile Include="Messages/Base/AmPong.fs" />
+    <Compile Include="Messages/Base/AmSubscribe.fs" />
+    <Compile Include="Messages/Base/AmReplySubscription.fs" />
+    <Compile Include="Messages/Locker.fs" />
+    <Compile Include="Messages/AssetExplorerResult.fs" />
+    <Compile Include="Messages/ActorInfo.fs" />
+    <Compile Include="Messages/HardwarePerformance.fs" />
+    <Compile Include="Messages/ClientInfo.fs" />
+    <Compile Include="Messages/AgentInfo.fs" />
+    <Compile Include="Messages/AmC2SRequestAssetExplorerBase.fs" />
+    <Compile Include="Messages/AmC2SRequestAssetsToFolderBase.fs" />
+    <Compile Include="Messages/AmC2STrigger.fs" />
+    <Compile Include="Messages/AmExecuteBackup.fs" />
+    <Compile Include="Messages/AmInjectSubscription.fs" />
+    <Compile Include="Messages/Notifications.fs" />
+    <Compile Include="Messages/C2SMessages.fs" />
+    <Compile Include="Messages/A2SMessages.fs" />
+    <Compile Include="Messages/S2CMessages.fs" />
+    <Compile Include="DexaClientOptions.fs" />
+    <Compile Include="Infrastructure/DexaAssemblyResolver.fs" />
+    <Compile Include="Infrastructure/DexaSerializationBinder.fs" />
+    <Compile Include="Infrastructure/DexaJsonSerializer.fs" />
+    <Compile Include="Infrastructure/AkkaExt.fs" />
+    <Compile Include="Infrastructure/DexaBaseActor.fs" />
+    <Compile Include="Infrastructure/DexaActorSystem.fs" />
+    <Compile Include="Infrastructure/DexaGuardianActor.fs" />
+    <Compile Include="Infrastructure/DexaClientGuardian.fs" />
+    <Compile Include="IDexaClient.fs" />
+    <Compile Include="DexaClient.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka" Version="1.4.24" />
+    <PackageReference Include="Akka.Remote" Version="1.4.24" />
+    <PackageReference Include="System.Reactive" Version="6.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.*" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.*" />
+    <PackageReference Include="Dapper" Version="2.*" />
+  </ItemGroup>
+
+</Project>

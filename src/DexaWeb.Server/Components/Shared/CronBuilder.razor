@@ -1,0 +1,87 @@
+<MudPaper Class="pa-4" Elevation="0">
+    <MudText Typo="Typo.subtitle2" Class="mb-2">Cron 스케줄 설정</MudText>
+
+    <MudRadioGroup @bind-Value="_mode">
+        <MudRadio Value="@("hourly")" Color="Color.Primary">매시간</MudRadio>
+        <MudRadio Value="@("daily")" Color="Color.Primary">매일</MudRadio>
+        <MudRadio Value="@("weekly")" Color="Color.Primary">매주</MudRadio>
+        <MudRadio Value="@("custom")" Color="Color.Primary">직접 입력</MudRadio>
+    </MudRadioGroup>
+
+    @if (_mode == "hourly")
+    {
+        <MudGrid Class="mt-2">
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="_minute" Label="분" Min="0" Max="59" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    }
+    else if (_mode == "daily")
+    {
+        <MudGrid Class="mt-2">
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="_hour" Label="시" Min="0" Max="23" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="_minute" Label="분" Min="0" Max="59" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    }
+    else if (_mode == "weekly")
+    {
+        <MudGrid Class="mt-2">
+            <MudItem xs="4">
+                <MudSelect @bind-Value="_dayOfWeek" Label="요일" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("MON")">월요일</MudSelectItem>
+                    <MudSelectItem Value="@("TUE")">화요일</MudSelectItem>
+                    <MudSelectItem Value="@("WED")">수요일</MudSelectItem>
+                    <MudSelectItem Value="@("THU")">목요일</MudSelectItem>
+                    <MudSelectItem Value="@("FRI")">금요일</MudSelectItem>
+                    <MudSelectItem Value="@("SAT")">토요일</MudSelectItem>
+                    <MudSelectItem Value="@("SUN")">일요일</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_hour" Label="시" Min="0" Max="23" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_minute" Label="분" Min="0" Max="59" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        <MudTextField @bind-Value="_customCron" Label="Cron 표현식" Class="mt-2"
+                      Variant="Variant.Outlined" Placeholder="0 0 * * * ?" HelperText="초 분 시 일 월 요일" />
+    }
+
+    <MudText Typo="Typo.body2" Class="mt-2" Color="Color.Secondary">
+        Cron: <code>@GetCronExpression()</code>
+    </MudText>
+</MudPaper>
+
+@code {
+    [Parameter] public string Value { get; set; } = "0 0 * * * ?";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private string _mode = "daily";
+    private int _minute = 0;
+    private int _hour = 0;
+    private string _dayOfWeek = "MON";
+    private string _customCron = "0 0 * * * ?";
+
+    public string GetCronExpression()
+    {
+        var cron = _mode switch
+        {
+            "hourly" => $"0 {_minute} * * * ?",
+            "daily" => $"0 {_minute} {_hour} * * ?",
+            "weekly" => $"0 {_minute} {_hour} ? * {_dayOfWeek}",
+            "custom" => _customCron,
+            _ => "0 0 * * * ?"
+        };
+
+        _ = ValueChanged.InvokeAsync(cron);
+        return cron;
+    }
+}

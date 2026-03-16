@@ -1,0 +1,94 @@
+# ============================================================
+# .NET / Visual Studio
+# ============================================================
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Pp]lan/
+[Ss]ample/
+x64/
+x86/
+.vs/
+.claude/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# NuGet
+**/packages/
+*.nupkg
+**/[Pp]ackages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+
+# Build results
+[Dd]ebugPublic/
+[Rr]eleases/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+TestResult.xml
+[Ll]og/
+
+# MSBuild
+*.metaproj
+*.metaproj.tmp
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ============================================================
+# Project-specific
+# ============================================================
+
+# SQLite DB files (runtime generated)
+*.db
+*.db-shm
+*.db-wal
+
+# DEXA data directory (local runtime data)
+ProgramData/
+
+# Bridge lib/ DLLs are tracked (needed for .NET 4.8 references)
+# Do NOT ignore src/DexaWeb.Bridge/lib/
+
+# Logs
+*.log
+logs/
+
+# ============================================================
+# OS / Editor
+# ============================================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Secrets / Environment
+# ============================================================
+appsettings.Development.json
+appsettings.*.json
+!appsettings.json
+*.pfx
+*.key
+.env
+.env.*
+src/DexaWeb.Server/twm.db.sqlite3
+src/DexaWeb.Server/wwwroot/uploads/app-logo.svg

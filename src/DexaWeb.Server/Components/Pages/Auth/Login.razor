@@ -1,0 +1,103 @@
+@page "/login"
+@layout MinimalLayout
+@inject UserService UserService
+@inject AuthStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>TWM - 로그인</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="d-flex align-center" Style="height: 100vh;">
+    <MudPaper Class="pa-8" Elevation="4" Style="width: 100%;">
+        <MudStack Spacing="4">
+            <MudText Typo="Typo.h4" Align="Align.Center">TWM</MudText>
+            <MudText Typo="Typo.subtitle1" Align="Align.Center" Color="Color.Secondary">
+                Tool & Workspace Manager
+            </MudText>
+
+            <MudDivider />
+
+            <MudTextField @bind-Value="_userName"
+                          Label="사용자 ID"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Person"
+                          Immediate="true"
+                          OnKeyDown="HandleKeyDown" />
+
+            <MudTextField @bind-Value="_password"
+                          Label="비밀번호"
+                          Variant="Variant.Outlined"
+                          InputType="InputType.Password"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Lock"
+                          Immediate="true"
+                          OnKeyDown="HandleKeyDown" />
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Size="Size.Large"
+                       OnClick="HandleLogin"
+                       Disabled="_loading">
+                @if (_loading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                로그인
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string _userName = "";
+    private string _password = "";
+    private string? _errorMessage;
+    private bool _loading;
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await HandleLogin();
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(_userName))
+        {
+            _errorMessage = "사용자 ID를 입력하세요.";
+            return;
+        }
+
+        _loading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await UserService.LoginAsync(_userName, _password);
+
+            if (result?.Success == true && result.User != null)
+            {
+                await AuthStateProvider.LoginAsync(result.User.Id, result.User.Name!, result.User.Admin);
+                Navigation.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                _errorMessage = result?.Message ?? "로그인에 실패했습니다. ID와 비밀번호를 확인하세요.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"연결 오류: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

@@ -1,0 +1,26 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Class="mb-3">@Message</MudText>
+        <MudTextField @bind-Value="_value" Variant="Variant.Outlined" AutoFocus="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">취소</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">확인</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string? DefaultValue { get; set; }
+
+    private string? _value;
+
+    protected override void OnInitialized()
+    {
+        _value = DefaultValue;
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_value));
+    private void Cancel() => MudDialog.Cancel();
+}

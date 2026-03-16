@@ -1,0 +1,45 @@
+@page "/admin"
+@inject NavigationManager Navigation
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>TWM - 관리</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-6">관리</MudText>
+
+<div class="admin-tile-grid">
+    <div class="admin-tile" @onclick='() => Navigation.NavigateTo("/settings")'>
+        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="admin-tile-icon" />
+        <span class="admin-tile-label">종합설비관리 설정</span>
+        <span class="admin-tile-desc">백업 및 설비관리 정책 설정</span>
+    </div>
+
+    <div class="admin-tile" @onclick='() => Navigation.NavigateTo("/schedules")'>
+        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="admin-tile-icon" />
+        <span class="admin-tile-label">스케줄</span>
+        <span class="admin-tile-desc">작업 스케줄 관리</span>
+    </div>
+
+    <div class="admin-tile" @onclick='() => Navigation.NavigateTo("/assets/table")'>
+        <MudIcon Icon="@Icons.Material.Filled.TableChart" Class="admin-tile-icon" />
+        <span class="admin-tile-label">자산 테이블 편집</span>
+        <span class="admin-tile-desc">자산 데이터 편집 및 관리</span>
+    </div>
+
+    <div class="admin-tile" @onclick='() => Navigation.NavigateTo("/admin/config")'>
+        <MudIcon Icon="@Icons.Material.Filled.Tune" Class="admin-tile-icon" />
+        <span class="admin-tile-label">서버 설정</span>
+        <span class="admin-tile-desc">에이전트 및 서버 구성</span>
+    </div>
+
+    <div class="admin-tile" @onclick='() => Navigation.NavigateTo("/admin/database")'>
+        <MudIcon Icon="@Icons.Material.Filled.Storage" Class="admin-tile-icon" />
+        <span class="admin-tile-label">DB 관리</span>
+        <span class="admin-tile-desc">데이터베이스 관리 및 마이그레이션</span>
+    </div>
+
+    <div class="admin-tile" @onclick='() => Navigation.NavigateTo("/admin/layout")'>
+        <MudIcon Icon="@Icons.Material.Filled.Map" Class="admin-tile-icon" />
+        <span class="admin-tile-label">레이아웃 관리</span>
+        <span class="admin-tile-desc">도면 편집 및 자산 배치 관리</span>
+    </div>
+</div>

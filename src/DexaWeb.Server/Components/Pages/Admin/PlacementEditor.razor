@@ -1,0 +1,674 @@
+@using static DexaWeb.Server.Helpers.LayoutHelpers
+@inject TwmDbService TwmDb
+@inject AssetStatusService AssetStatusService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+else
+{
+    <MudGrid>
+        @* ── 자산 목록 (좌측) ── *@
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 neu-card">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                        <MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2"
+                                 Style="vertical-align: middle;" />
+                        자산 배치 목록
+                    </MudText>
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="SavePositionsAsync" Disabled="_saving">
+                        @(_saving ? "저장 중..." : "저장")
+                    </MudButton>
+                </MudStack>
+
+                @* ── 툴바 ── *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3" Spacing="1">
+                    <MudToggleIconButton Toggled="_multiSelectMode"
+                                         Icon="@Icons.Material.Filled.SelectAll"
+                                         ToggledIcon="@Icons.Material.Filled.SelectAll"
+                                         Title="다중 선택 모드 (Ctrl+클릭 또는 올가미)"
+                                         Size="Size.Small"
+                                         Color="Color.Default" ToggledColor="Color.Primary"
+                                         ToggledChanged="OnMultiSelectToggled" />
+                    @if (_selectedAssetIds.Count > 1)
+                    {
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.GroupWork"
+                                   OnClick="CreateGroupFromSelection">
+                            그룹 (@_selectedAssetIds.Count)
+                        </MudButton>
+                    }
+                    @if (_selectedAssetIds.Count > 0)
+                    {
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="ClearSelection">
+                            선택 해제
+                        </MudButton>
+                    }
+                </MudStack>
+
+                @* ── 아이콘 크기 조절 슬라이더 (전체 일괄) ── *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2 pa-2"
+                          Style="background: rgba(33,150,243,0.06); border-radius: 8px;">
+                    <MudIcon Icon="@Icons.Material.Filled.AspectRatio" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Style="min-width: 56px;">
+                        크기 @($"{_globalScale:F1}x")
+                    </MudText>
+                    <MudSlider T="double" Value="_globalScale"
+                               ValueChanged="OnGlobalScaleChanged"
+                               Min="0.5" Max="3.0" Step="0.1"
+                               Style="flex: 1;" />
+                </MudStack>
+
+                @* ── 그룹 목록 (확장 가능) ── *@
+                @if (_groups.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mb-1" Style="font-weight: 600;">
+                        그룹 (@_groups.Count)
+                    </MudText>
+                    <div style="max-height: 300px; overflow-y: auto; margin-bottom: 8px;">
+                        @foreach (var grp in _groups)
+                        {
+                            var isExpanded = _expandedGroupIds.Contains(grp.Id);
+                            var memberIds = GetGroupMemberIds(grp.Id);
+                            <div style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+                                @* 그룹 헤더 *@
+                                <div class="d-flex align-center gap-2 pa-1" style="cursor: pointer;"
+                                     @onclick="() => ToggleGroupExpand(grp.Id)">
+                                    <MudIcon Icon="@(isExpanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
+                                             Size="Size.Small" />
+                                    <MudIcon Icon="@Icons.Material.Filled.GroupWork" Size="Size.Small"
+                                             Style="@($"color: {grp.Color ?? "#4a90d9"}")" />
+                                    <MudText Typo="Typo.body2" Class="flex-grow-1" Style="font-weight: 500;">
+                                        @(string.IsNullOrEmpty(grp.Name) ? $"그룹 #{grp.Id}" : grp.Name)
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @(memberIds.Count)개
+                                    </MudText>
+                                    <span @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                       Color="Color.Error"
+                                                       OnClick="() => DeleteGroupAsync(grp.Id)" />
+                                    </span>
+                                </div>
+                                @* 그룹 멤버 자산 목록 *@
+                                @if (isExpanded)
+                                {
+                                    <div style="padding-left: 24px; background: rgba(0,0,0,0.02);">
+                                        @foreach (var assetId in memberIds)
+                                        {
+                                            var asset = _statuses.FirstOrDefault(a => a.AssetId == assetId);
+                                            if (asset == null) continue;
+                                            var pos = GetPosition(assetId);
+                                            var isSel = _selectedAssetIds.Contains(assetId);
+                                            <div class="d-flex align-center gap-2 pa-1"
+                                                 style="border-bottom: 1px solid rgba(0,0,0,0.03); @(isSel ? "background: rgba(33,150,243,0.08);" : "")">
+                                                <MudCheckBox T="bool" Value="pos.Visible"
+                                                             ValueChanged="v => ToggleVisible(assetId, v)"
+                                                             Size="Size.Small" Color="Color.Primary" />
+                                                <img src="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)" class="asset-type-icon-sm" />
+                                                <div class="flex-grow-1" style="cursor: pointer;"
+                                                     @onclick="() => ToggleAssetSelection(assetId)">
+                                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@asset.Name</MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@asset.Ip</MudText>
+                                                </div>
+                                                <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline"
+                                                               Size="Size.Small" Color="Color.Warning" Title="그룹에서 제거"
+                                                               OnClick="() => RemoveFromGroupAsync(grp.Id, assetId)" />
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <MudTextField @bind-Value="_searchText" Placeholder="자산 검색..."
+                              Variant="Variant.Outlined" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true" Class="mb-3" />
+
+                <div style="max-height: 500px; overflow-y: auto;">
+                    @foreach (var asset in FilteredAssets)
+                    {
+                        var pos = GetPosition(asset.AssetId);
+                        <div class="d-flex align-center gap-2 pa-2" style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+                            <MudCheckBox T="bool" Value="pos.Visible"
+                                         ValueChanged="v => ToggleVisible(asset.AssetId, v)"
+                                         Size="Size.Small" Color="Color.Primary" />
+                            <img src="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)" class="asset-type-icon-sm" />
+                            <div class="flex-grow-1">
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@asset.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@asset.Ip</MudText>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        </MudItem>
+
+        @* ── 배치 뷰포트 (우측) ── *@
+        <MudItem xs="12" md="8">
+            <MudPaper Class="pa-4 neu-card">
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-3">
+                    @if (_multiSelectMode)
+                    {
+                        <span>Ctrl+클릭 또는 빈 영역 드래그로 다중 선택. 선택된 자산을 드래그하면 일괄 이동.</span>
+                    }
+                    else
+                    {
+                        <span>체크된 자산을 드래그하여 도면 위에 배치하세요.</span>
+                    }
+                </MudText>
+
+                <div id="ap-editor-container" class="drawing-editor-container">
+                    <svg id="ap-editor-svg" class="drawing-editor-svg" viewBox="0 0 1000 600"
+                         preserveAspectRatio="xMidYMid meet">
+                        @* 그리드 배경 *@
+                        <defs>
+                            <pattern id="ap-grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
+                                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e0e0e0" stroke-width="0.5" opacity="0.3" />
+                            </pattern>
+                            <pattern id="ap-grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
+                                <rect width="100" height="100" fill="url(#ap-grid-small)" />
+                                <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#ccc" stroke-width="0.8" opacity="0.3" />
+                            </pattern>
+                        </defs>
+                        @* 배경색 + 그리드 *@
+                        <rect width="1000" height="600" fill="@(_config?.BgColor ?? "#1a1a2e")" />
+                        <rect width="1000" height="600" fill="url(#ap-grid-large)" />
+
+                        @* ── 도면 이미지 배경 (읽기전용) ── *@
+                        @if (!string.IsNullOrEmpty(_config?.ImagePath))
+                        {
+                            <image href="@_config.ImagePath" x="0" y="0" width="1000" height="600"
+                                   preserveAspectRatio="xMidYMid meet" opacity="0.5" />
+                        }
+
+                        @* ── 그룹 컨테이너 (자산 아래 레이어) ── *@
+                        @foreach (var grp in _groups)
+                        {
+                            var members = GetGroupMemberIds(grp.Id);
+                            <g class="ap-group-container" data-group-id="@grp.Id"
+                               data-x="@F(grp.X)" data-y="@F(grp.Y)"
+                               data-w="@F(grp.Width)" data-h="@F(grp.Height)"
+                               data-members="@string.Join(",", members)">
+                                <rect x="@F(grp.X)" y="@F(grp.Y)"
+                                      width="@F(grp.Width)" height="@F(grp.Height)"
+                                      rx="6"
+                                      fill="@(grp.Color ?? "#4a90d9")10"
+                                      stroke="@(grp.Color ?? "#4a90d9")"
+                                      stroke-width="1.5" stroke-dasharray="6 3" />
+                                <text x="@F(grp.X + 4)" y="@F(grp.Y - 4)"
+                                      font-size="10"
+                                      fill="@(grp.Color ?? "#4a90d9")"
+                                      class="ap-group-label">@(string.IsNullOrEmpty(grp.Name) ? $"그룹 #{grp.Id}" : grp.Name)</text>
+                                @* 리사이즈 핸들 *@
+                                <rect class="ap-group-resize"
+                                      x="@F(grp.X + grp.Width - 8)" y="@F(grp.Y + grp.Height - 8)"
+                                      width="16" height="16" rx="2"
+                                      fill="@(grp.Color ?? "#4a90d9")" fill-opacity="0.4" />
+                            </g>
+                        }
+
+                        @* ── 배치된 자산 아이콘 ── *@
+                        @foreach (var asset in _statuses)
+                        {
+                            var pos = GetPosition(asset.AssetId);
+                            if (!pos.Visible) continue;
+                            var s = pos.Scale;
+                            var sz = 32 * s;
+                            var imgSz = 24 * s;
+                            var imgOff = 4 * s;
+
+                            <g class="ap-asset-icon @(_selectedAssetIds.Contains(asset.AssetId) ? "ap-selected" : "")"
+                               data-asset-id="@asset.AssetId"
+                               data-x="@F(pos.X)" data-y="@F(pos.Y)"
+                               data-scale="@F(s)"
+                               transform="translate(@F(pos.X), @F(pos.Y))"
+                               style="cursor: grab;">
+                                <rect width="@F(sz)" height="@F(sz)" rx="4" fill="white" stroke="#ccc"
+                                      stroke-width="1" opacity="0.9" />
+                                <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
+                                       width="@F(imgSz)" height="@F(imgSz)" x="@F(imgOff)" y="@F(imgOff)" />
+                                <text x="@F(sz / 2)" y="@F(sz + 12)" text-anchor="middle" font-size="9"
+                                      fill="#333" class="ap-icon-label">@TruncName(asset.Name)</text>
+                            </g>
+                        }
+                    </svg>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int LayoutId { get; set; }
+
+    private bool _loading = true;
+    private bool _saving;
+    private string? _searchText;
+    private int _prevLayoutId;
+    private bool _multiSelectMode;
+
+    private List<AssetStatusInfo> _statuses = [];
+    private TwmsBlueprintConfig? _config;
+    private Dictionary<int, TwmsAssetPosition> _positions = new();
+    private DotNetObjectReference<PlacementEditor>? _dotNetRef;
+
+    // 그룹
+    private List<TwmsPlacementGroup> _groups = [];
+    private Dictionary<int, List<int>> _groupMembers = new(); // groupId → assetIds
+    private HashSet<int> _selectedAssetIds = new();
+    private HashSet<int> _groupedAssetIds = new(); // 그룹에 속한 자산 빠른 조회
+    private HashSet<int> _expandedGroupIds = new(); // 펼쳐진 그룹
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dotNetRef = DotNetObjectReference.Create(this);
+        _prevLayoutId = LayoutId;
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (LayoutId != _prevLayoutId && LayoutId > 0)
+        {
+            _prevLayoutId = LayoutId;
+            await LoadDataAsync();
+            StateHasChanged();
+            await Task.Delay(50);
+            await InitEditorJs();
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (LayoutId == 0) return;
+        _loading = true;
+        try
+        {
+            var statusTask  = AssetStatusService.GetAssetStatusesAsync();
+            var posTask     = TwmDb.GetAllAssetPositionsAsync(LayoutId);
+            var configTask  = TwmDb.GetBlueprintConfigAsync(LayoutId);
+            var groupTask   = TwmDb.GetAllPlacementGroupsAsync(LayoutId);
+            var memberTask  = TwmDb.GetPlacementGroupMembersAsync(LayoutId);
+            await Task.WhenAll(statusTask, posTask, configTask, groupTask, memberTask);
+
+            _statuses = statusTask.Result;
+            _positions = posTask.Result.ToDictionary(p => p.AssetId);
+            _config = configTask.Result;
+            _groups = groupTask.Result;
+
+            _groupMembers = memberTask.Result
+                .GroupBy(m => m.GroupId)
+                .ToDictionary(g => g.Key, g => g.Select(m => m.AssetId).ToList());
+
+            RebuildGroupedAssetIds();
+
+            // 기존 저장된 스케일 값 반영
+            var scales = _positions.Values.Where(p => p.Scale > 0).Select(p => p.Scale).ToList();
+            _globalScale = scales.Count > 0 ? Math.Round(scales.Average(), 1) : 1.0;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_loading)
+            await InitEditorJs();
+    }
+
+    private async Task InitEditorJs()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("assetPlacementEditor.init", "ap-editor-container", _dotNetRef);
+            if (_multiSelectMode)
+                await JS.InvokeVoidAsync("assetPlacementEditor.setMode", "ap-editor-container", "multi");
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private IEnumerable<AssetStatusInfo> FilteredAssets
+    {
+        get
+        {
+            var ungrouped = _statuses.Where(a => !_groupedAssetIds.Contains(a.AssetId));
+            return string.IsNullOrWhiteSpace(_searchText)
+                ? ungrouped
+                : ungrouped.Where(a =>
+                    (a.Name?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (a.Ip?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+    }
+
+    private void RebuildGroupedAssetIds()
+    {
+        _groupedAssetIds = new HashSet<int>(_groupMembers.Values.SelectMany(ids => ids));
+    }
+
+    private TwmsAssetPosition GetPosition(int assetId)
+    {
+        if (_positions.TryGetValue(assetId, out var pos)) return pos;
+        var newPos = new TwmsAssetPosition { LayoutId = LayoutId, AssetId = assetId, X = 100, Y = 100 };
+        _positions[assetId] = newPos;
+        return newPos;
+    }
+
+    private async Task ToggleVisible(int assetId, bool visible)
+    {
+        var pos = GetPosition(assetId);
+        pos.Visible = visible;
+        StateHasChanged();
+
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    // ──────────────── 크기 조절 ────────────────
+
+    private double _globalScale = 1.0;
+
+    private async Task OnGlobalScaleChanged(double newScale)
+    {
+        newScale = Math.Clamp(newScale, 0.5, 3.0);
+        _globalScale = newScale;
+        foreach (var pos in _positions.Values)
+            pos.Scale = newScale;
+
+        StateHasChanged();
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    // ──────────────── JS 콜백 ────────────────
+
+    [JSInvokable]
+    public void OnAssetMoved(int assetId, double x, double y)
+    {
+        var pos = GetPosition(assetId);
+        pos.X = x;
+        pos.Y = y;
+    }
+
+    [JSInvokable]
+    public void OnBulkMoved(List<JsAssetPos> positions)
+    {
+        foreach (var jp in positions)
+        {
+            var pos = GetPosition(jp.AssetId);
+            pos.X = jp.X;
+            pos.Y = jp.Y;
+        }
+    }
+
+    [JSInvokable]
+    public void OnSelectionChanged(int[] assetIds)
+    {
+        _selectedAssetIds = new HashSet<int>(assetIds);
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnGroupMoved(int groupId, double x, double y, double w, double h)
+    {
+        var grp = _groups.FirstOrDefault(g => g.Id == groupId);
+        if (grp != null)
+        {
+            grp.X = x;
+            grp.Y = y;
+            grp.Width = w;
+            grp.Height = h;
+        }
+    }
+
+    // ──────────────── 선택/그룹 UI ────────────────
+
+    private async Task OnMultiSelectToggled(bool toggled)
+    {
+        _multiSelectMode = toggled;
+        try
+        {
+            await JS.InvokeVoidAsync("assetPlacementEditor.setMode",
+                "ap-editor-container", toggled ? "multi" : "single");
+        }
+        catch (JSDisconnectedException) { }
+
+        if (!toggled)
+        {
+            _selectedAssetIds.Clear();
+        }
+    }
+
+    private async Task ClearSelection()
+    {
+        _selectedAssetIds.Clear();
+        try { await JS.InvokeVoidAsync("assetPlacementEditor.clearSelection", "ap-editor-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private void ToggleGroupExpand(int groupId)
+    {
+        if (!_expandedGroupIds.Remove(groupId))
+            _expandedGroupIds.Add(groupId);
+    }
+
+    private void ToggleAssetSelection(int assetId)
+    {
+        if (!_selectedAssetIds.Remove(assetId))
+            _selectedAssetIds.Add(assetId);
+    }
+
+    private async Task RemoveFromGroupAsync(int groupId, int assetId)
+    {
+        if (_groupMembers.TryGetValue(groupId, out var members))
+        {
+            members.Remove(assetId);
+            await TwmDb.SetPlacementGroupMembersAsync(groupId, members);
+
+            // 멤버가 1개 이하면 그룹 삭제
+            if (members.Count < 2)
+            {
+                await TwmDb.DeletePlacementGroupAsync(groupId);
+                _groups.RemoveAll(g => g.Id == groupId);
+                _groupMembers.Remove(groupId);
+                _expandedGroupIds.Remove(groupId);
+                Snackbar.Add("멤버 부족으로 그룹이 삭제되었습니다.", Severity.Info);
+            }
+        }
+        RebuildGroupedAssetIds();
+        StateHasChanged();
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    private async Task CreateGroupFromSelection()
+    {
+        if (_selectedAssetIds.Count < 2) return;
+
+        // 선택된 자산 목록 (이름순 정렬)
+        var memberIds = _selectedAssetIds
+            .OrderBy(id => _statuses.FirstOrDefault(a => a.AssetId == id)?.Name ?? "")
+            .ToList();
+        var count = memberIds.Count;
+
+        // 그리드 레이아웃 계산 (열 수 → 행 수)
+        var cols = (int)Math.Ceiling(Math.Sqrt(count));
+        var rows = (int)Math.Ceiling((double)count / cols);
+
+        // 셀 크기: 가장 큰 아이콘 기준
+        var maxScale = memberIds.Max(id => GetPosition(id).Scale);
+        var cellW = 32.0 * maxScale + 12;  // 아이콘 + 간격
+        var cellH = 32.0 * maxScale + 24;  // 아이콘 + 라벨 + 간격
+
+        // 기존 자산 중심 위치 계산 (그룹 배치 기준점)
+        double cx = 0, cy = 0;
+        foreach (var id in memberIds)
+        {
+            var p = GetPosition(id);
+            cx += p.X; cy += p.Y;
+        }
+        cx /= count; cy /= count;
+
+        // 그룹 크기
+        var padding = 14.0;
+        var headerH = 18.0; // 그룹 이름 영역
+        var grpW = cols * cellW + padding * 2;
+        var grpH = rows * cellH + padding * 2 + headerH;
+
+        // 그룹 좌상단 (중심 기준, 캔버스 범위 내)
+        var grpX = Math.Clamp(cx - grpW / 2, 0, Math.Max(0, 1000 - grpW));
+        var grpY = Math.Clamp(cy - grpH / 2, 0, Math.Max(0, 600 - grpH));
+
+        // 자산을 그리드 셀에 배치
+        for (var i = 0; i < count; i++)
+        {
+            var col = i % cols;
+            var row = i / cols;
+            var pos = GetPosition(memberIds[i]);
+            pos.X = Math.Round(grpX + padding + col * cellW, 2);
+            pos.Y = Math.Round(grpY + padding + headerH + row * cellH, 2);
+        }
+
+        var newGroup = new TwmsPlacementGroup
+        {
+            LayoutId = LayoutId,
+            Name     = $"그룹",
+            X        = Math.Round(grpX, 2),
+            Y        = Math.Round(grpY, 2),
+            Width    = Math.Round(grpW, 2),
+            Height   = Math.Round(grpH, 2),
+        };
+
+        var newId = await TwmDb.InsertPlacementGroupAsync(newGroup);
+        newGroup.Id = newId;
+        await TwmDb.SetPlacementGroupMembersAsync(newId, memberIds);
+
+        _groups.Add(newGroup);
+        _groupMembers[newId] = memberIds;
+        RebuildGroupedAssetIds();
+
+        _selectedAssetIds.Clear();
+        Snackbar.Add($"그룹이 생성되었습니다. ({newId})", Severity.Success);
+
+        StateHasChanged();
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    private async Task DeleteGroupAsync(int groupId)
+    {
+        await TwmDb.DeletePlacementGroupAsync(groupId);
+        _groups.RemoveAll(g => g.Id == groupId);
+        _groupMembers.Remove(groupId);
+        _expandedGroupIds.Remove(groupId);
+        RebuildGroupedAssetIds();
+        Snackbar.Add("그룹이 삭제되었습니다.", Severity.Info);
+
+        StateHasChanged();
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    // ──────────────── 그룹 헬퍼 ────────────────
+
+    private List<int> GetGroupMemberIds(int groupId) =>
+        _groupMembers.TryGetValue(groupId, out var ids) ? ids : [];
+
+    private int GetGroupMemberCount(int groupId) =>
+        _groupMembers.TryGetValue(groupId, out var ids) ? ids.Count : 0;
+
+    private string? GetGroupNameForAsset(int assetId)
+    {
+        foreach (var (gid, members) in _groupMembers)
+        {
+            if (members.Contains(assetId))
+            {
+                var grp = _groups.FirstOrDefault(g => g.Id == gid);
+                return grp != null ? (string.IsNullOrEmpty(grp.Name) ? $"#{gid}" : grp.Name) : null;
+            }
+        }
+        return null;
+    }
+
+    // ──────────────── 저장 ────────────────
+
+    private async Task SavePositionsAsync()
+    {
+        _saving = true;
+        try
+        {
+            // JS에서 최신 위치 가져오기
+            var jsPositions = await JS.InvokeAsync<List<JsAssetPos>>(
+                "assetPlacementEditor.getPositions", "ap-editor-container");
+            if (jsPositions != null)
+            {
+                foreach (var jp in jsPositions)
+                {
+                    var pos = GetPosition(jp.AssetId);
+                    pos.X = jp.X;
+                    pos.Y = jp.Y;
+                }
+            }
+
+            // Visible인 자산만 저장
+            var toSave = _positions.Values.Where(p => p.Visible).ToList();
+            foreach (var p in toSave) p.LayoutId = LayoutId;
+            if (toSave.Count > 0)
+                await TwmDb.UpsertAssetPositionBatchAsync(toSave);
+
+            // 그룹 위치 저장
+            var jsGroups = await JS.InvokeAsync<List<JsGroupPos>>(
+                "assetPlacementEditor.getGroupPositions", "ap-editor-container");
+            if (jsGroups != null)
+            {
+                foreach (var jg in jsGroups)
+                {
+                    var grp = _groups.FirstOrDefault(g => g.Id == jg.GroupId);
+                    if (grp != null)
+                    {
+                        grp.X = jg.X;
+                        grp.Y = jg.Y;
+                        grp.Width = jg.W;
+                        grp.Height = jg.H;
+                    }
+                }
+            }
+            if (_groups.Count > 0)
+                await TwmDb.UpsertPlacementGroupBatchAsync(_groups);
+
+            Snackbar.Add($"{toSave.Count}개 자산, {_groups.Count}개 그룹 배치가 저장되었습니다.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"저장 중 오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("assetPlacementEditor.dispose", "ap-editor-container"); }
+        catch (JSDisconnectedException) { }
+        _dotNetRef?.Dispose();
+    }
+
+    public record JsAssetPos(int AssetId, double X, double Y);
+    public record JsGroupPos(int GroupId, double X, double Y, double W, double H);
+}

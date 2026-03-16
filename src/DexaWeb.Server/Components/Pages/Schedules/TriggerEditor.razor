@@ -1,0 +1,36 @@
+@inject ScheduleService ScheduleService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_name" Label="트리거 이름" Variant="Variant.Outlined"
+                          Required="true" />
+            <MudTextField @bind-Value="_description" Label="설명" Variant="Variant.Outlined" />
+            <CronBuilder @bind-Value="_cronExpression" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">취소</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   Disabled="@(string.IsNullOrWhiteSpace(_name))">
+            저장
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _name = "";
+    private string _description = "";
+    private string _cronExpression = "0 0 * * * ?";
+
+    private async Task Submit()
+    {
+        var ok = await ScheduleService.AddTriggerAsync(_name, _cronExpression, _description);
+        if (ok)
+            MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

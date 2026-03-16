@@ -1,0 +1,2938 @@
+/* =========================================================
+   TWM Neumorphism Theme
+   =========================================================
+   Colors: var(--mud-palette-*) from MudBlazor (auto-switches on dark mode)
+   Shadows: var(--neu-shadow-*) from MainLayout dynamic <style> block
+   ========================================================= */
+
+/* --- Structural CSS Custom Properties (non-color) --- */
+:root {
+    --neu-radius-outer: 16px;
+    --neu-radius-inner: 12px;
+    --neu-radius-button: 10px;
+    --neu-transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* --- Base --- */
+*, *::before, *::after {
+    transition: var(--neu-transition);
+}
+
+html, body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+
+/* =========================================================
+   MudPaper - Core Neumorphic Outer
+   ========================================================= */
+
+.mud-paper {
+    background-color: var(--mud-palette-surface) !important;
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-outer) !important;
+    border: none !important;
+    transition: var(--neu-transition);
+}
+
+.mud-paper.mud-elevation-0 {
+    box-shadow: none !important;
+}
+
+.mud-paper.mud-elevation-1,
+.mud-paper.mud-elevation-2,
+.mud-paper.mud-elevation-3,
+.mud-paper.mud-elevation-4,
+.mud-paper.mud-elevation-5,
+.mud-paper.mud-elevation-6,
+.mud-paper.mud-elevation-7,
+.mud-paper.mud-elevation-8 {
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light) !important;
+}
+
+
+/* =========================================================
+   MudAppBar
+   ========================================================= */
+
+.mud-appbar {
+    background-color: var(--mud-palette-appbar-background) !important;
+    box-shadow: 0 2px 6px var(--neu-shadow-dark) !important;
+    border-bottom: none !important;
+    color: var(--mud-palette-text-primary) !important;
+    min-height: 64px !important;
+    z-index: 1099 !important;
+}
+.mud-appbar.mud-appbar-dense {
+    min-height: 64px !important;
+}
+.mud-appbar .mud-toolbar {
+    min-height: 64px !important;
+}
+
+.mud-appbar .mud-icon-button {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+.mud-appbar .header-action-btn {
+    border-radius: 10px;
+    box-shadow: none;
+    transition: box-shadow 0.2s ease;
+}
+
+.mud-appbar .header-action-btn:hover {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.mud-appbar .header-action-btn:active {
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+}
+
+
+/* =========================================================
+   MudDrawer
+   ========================================================= */
+
+.mud-drawer {
+    background-color: var(--mud-palette-drawer-background) !important;
+    box-shadow: 4px 0 10px var(--neu-shadow-dark),
+                -2px 0 6px var(--neu-shadow-light) !important;
+    border-right: none !important;
+    z-index: 1100 !important;
+}
+
+
+/* =========================================================
+   MudNavMenu
+   ========================================================= */
+
+.mud-nav-item .mud-nav-link {
+    border-radius: var(--neu-radius-button) !important;
+    margin: 2px 8px;
+    transition: var(--neu-transition);
+}
+
+.mud-nav-item .mud-nav-link:hover {
+    background-color: transparent !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.mud-nav-item .mud-nav-link.active {
+    background-color: transparent !important;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light) !important;
+    color: var(--mud-palette-text-primary) !important;
+    font-weight: 700;
+}
+
+.mud-nav-item .mud-nav-link.active .mud-nav-link-icon {
+    color: var(--mud-palette-primary) !important;
+}
+
+.mud-nav-group .mud-nav-link {
+    border-radius: var(--neu-radius-button) !important;
+    margin: 2px 8px;
+}
+
+/* --- Asset Type PNG Icons --- */
+.asset-type-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+.asset-type-icon-sm {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+.asset-type-icon-lg {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+.asset-type-icon-nav {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+/* 다크 테마: 자산 아이콘에 밝은 배경 추가하여 가시성 확보 */
+.mud-theme-dark .asset-type-icon-nav {
+    background: rgba(255, 255, 255, 0.13);
+    border-radius: 4px;
+    padding: 2px;
+    box-sizing: content-box;
+}
+
+/* Nav icon status indicator wrapper */
+.nav-icon-status-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+/* 우측 하단 상태 원 */
+.nav-status-dot-indicator {
+    position: absolute;
+    bottom: -2px;
+    right: -4px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 1.5px solid var(--mud-palette-surface);
+    z-index: 2;
+}
+
+/* 다크 테마: 상태 원 테두리를 더 밝게 + 글로우로 가시성 향상 */
+.mud-theme-dark .nav-status-dot-indicator {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+/* 라인 아이콘용 더 큰 상태 원 */
+.nav-icon-status-wrap--line .nav-status-dot-indicator {
+    width: 13px;
+    height: 13px;
+    bottom: -3px;
+    right: -5px;
+    border-width: 2px;
+}
+
+/* 오프라인 시 원 뒤에 보이는 어두운 네모 */
+.nav-status-offline-bg {
+    position: absolute;
+    bottom: -4px;
+    right: -6px;
+    width: 15px;
+    height: 15px;
+    border-radius: 3px;
+    background: #3a3a3a;
+    z-index: 1;
+}
+
+/* 다크 테마: 오프라인 배경을 drawer와 구분되게 */
+.mud-theme-dark .nav-status-offline-bg {
+    background: #2a2e3a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+
+/* =========================================================
+   MudButton - Neumorphic Buttons
+   ========================================================= */
+
+/* Filled buttons */
+.mud-button-filled {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 4px 4px 8px var(--neu-shadow-dark),
+                -4px -4px 8px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-button) !important;
+    border: none !important;
+    transition: var(--neu-transition);
+}
+
+.mud-button-filled.mud-button-filled-primary {
+    color: var(--mud-palette-primary) !important;
+    background-color: var(--mud-palette-background) !important;
+    border-bottom: 2px solid var(--mud-palette-primary) !important;
+}
+.mud-button-filled.mud-button-filled-success {
+    color: var(--mud-palette-success) !important;
+    background-color: var(--mud-palette-background) !important;
+    border-bottom: 2px solid var(--mud-palette-success) !important;
+}
+.mud-button-filled.mud-button-filled-error {
+    color: var(--mud-palette-error) !important;
+    background-color: var(--mud-palette-background) !important;
+    border-bottom: 2px solid var(--mud-palette-error) !important;
+}
+.mud-button-filled.mud-button-filled-warning {
+    color: var(--mud-palette-warning) !important;
+    background-color: var(--mud-palette-background) !important;
+    border-bottom: 2px solid var(--mud-palette-warning) !important;
+}
+.mud-button-filled.mud-button-filled-info {
+    color: var(--mud-palette-info) !important;
+    background-color: var(--mud-palette-background) !important;
+    border-bottom: 2px solid var(--mud-palette-info) !important;
+}
+
+.mud-button-filled.mud-button-filled-default {
+    color: var(--mud-palette-text-primary) !important;
+    background-color: var(--mud-palette-background) !important;
+}
+
+.mud-button-filled:active,
+.mud-button-filled:focus {
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light) !important;
+}
+
+/* Outlined buttons */
+.mud-button-outlined {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 2px 2px 5px var(--neu-shadow-dark),
+                -2px -2px 5px var(--neu-shadow-light) !important;
+    border: 1px solid var(--neu-border-subtle) !important;
+    border-radius: var(--neu-radius-button) !important;
+    transition: var(--neu-transition);
+}
+
+.mud-button-outlined.mud-button-outlined-primary {
+    color: var(--mud-palette-primary) !important;
+    border-color: var(--mud-palette-primary) !important;
+}
+.mud-button-outlined.mud-button-outlined-success {
+    color: var(--mud-palette-success) !important;
+    border-color: var(--mud-palette-success) !important;
+}
+.mud-button-outlined.mud-button-outlined-error {
+    color: var(--mud-palette-error) !important;
+    border-color: var(--mud-palette-error) !important;
+}
+.mud-button-outlined.mud-button-outlined-warning {
+    color: var(--mud-palette-warning) !important;
+    border-color: var(--mud-palette-warning) !important;
+}
+.mud-button-outlined.mud-button-outlined-info {
+    color: var(--mud-palette-info) !important;
+    border-color: var(--mud-palette-info) !important;
+}
+
+.mud-button-outlined:active {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light) !important;
+}
+
+/* Disabled buttons — flat, desaturated */
+.mud-button-filled[disabled],
+.mud-button-outlined[disabled],
+.mud-button-text[disabled],
+.mud-button-filled.mud-disabled,
+.mud-button-outlined.mud-disabled,
+.mud-button-text.mud-disabled {
+    opacity: 0.45 !important;
+    box-shadow: none !important;
+    border-color: var(--neu-border-faint) !important;
+    pointer-events: none;
+    color: var(--mud-palette-text-disabled) !important;
+}
+
+/* Text buttons */
+.mud-button-text {
+    border-radius: var(--neu-radius-button) !important;
+    transition: var(--neu-transition);
+}
+
+.mud-button-text:hover {
+    background-color: transparent !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+/* Icon buttons */
+.mud-icon-button {
+    border-radius: 50% !important;
+    transition: var(--neu-transition);
+}
+
+.mud-icon-button:hover {
+    box-shadow: 2px 2px 5px var(--neu-shadow-dark),
+                -2px -2px 5px var(--neu-shadow-light);
+}
+
+.mud-icon-button:active {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+/* Fab buttons */
+.mud-fab {
+    box-shadow: 4px 4px 8px var(--neu-shadow-dark),
+                -4px -4px 8px var(--neu-shadow-light) !important;
+    background-color: var(--mud-palette-background) !important;
+}
+
+
+/* =========================================================
+   MudTextField / MudInput - Inset Neumorphic
+   ========================================================= */
+
+.mud-input.mud-input-outlined .mud-input-outlined-border {
+    border: none !important;
+}
+
+.mud-input-control .mud-input.mud-input-outlined {
+    background-color: var(--mud-palette-background);
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    border-radius: var(--neu-radius-inner) !important;
+    padding: 8px 14px;
+}
+
+.mud-input-control .mud-input.mud-input-outlined.mud-input-focused {
+    box-shadow: inset 4px 4px 8px var(--neu-shadow-dark),
+                inset -4px -4px 8px var(--neu-shadow-light),
+                0 0 0 2px rgba(142, 140, 216, 0.3) !important;
+}
+
+.mud-input-outlined .mud-input-outlined-border {
+    border-color: transparent !important;
+}
+
+.mud-input.mud-input-filled {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    border-radius: var(--neu-radius-inner) var(--neu-radius-inner) 0 0 !important;
+}
+
+.mud-select .mud-input {
+    border-radius: var(--neu-radius-inner) !important;
+}
+
+
+/* =========================================================
+   MudChip - Soft Neumorphic Badges
+   ========================================================= */
+
+.mud-chip {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 2px 2px 4px var(--neu-shadow-dark),
+                -2px -2px 4px var(--neu-shadow-light);
+    border-radius: 8px !important;
+    border: none !important;
+    transition: var(--neu-transition);
+}
+
+.mud-chip.mud-chip-filled.mud-chip-color-success {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-success) !important;
+    border-left: 3px solid var(--mud-palette-success) !important;
+}
+.mud-chip.mud-chip-filled.mud-chip-color-error {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-error) !important;
+    border-left: 3px solid var(--mud-palette-error) !important;
+}
+.mud-chip.mud-chip-filled.mud-chip-color-warning {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-warning) !important;
+    border-left: 3px solid var(--mud-palette-warning) !important;
+}
+.mud-chip.mud-chip-filled.mud-chip-color-info {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-info) !important;
+    border-left: 3px solid var(--mud-palette-info) !important;
+}
+.mud-chip.mud-chip-filled.mud-chip-color-primary {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-primary) !important;
+    border-left: 3px solid var(--mud-palette-primary) !important;
+}
+.mud-chip.mud-chip-filled.mud-chip-color-default {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-text-secondary) !important;
+}
+
+
+/* =========================================================
+   MudDataGrid
+   ========================================================= */
+
+.mud-data-grid {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-outer) !important;
+    border: none !important;
+    overflow: hidden;
+}
+
+.mud-data-grid .mud-table-container {
+    background-color: transparent !important;
+}
+
+.mud-data-grid .mud-table-head .mud-table-row {
+    background-color: transparent !important;
+}
+
+.mud-data-grid .mud-table-head th {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-text-primary) !important;
+    font-weight: 700;
+    border-bottom: 1px solid var(--neu-border-subtle) !important;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.mud-data-grid .mud-table-body .mud-table-row {
+    background-color: transparent !important;
+    transition: var(--neu-transition);
+}
+
+.mud-data-grid .mud-table-body .mud-table-row:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.025) !important;
+}
+
+.mud-data-grid .mud-table-body .mud-table-row:hover {
+    background-color: transparent !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.mud-data-grid .mud-table-body td {
+    border-bottom: 1px solid var(--neu-border-faint) !important;
+    color: var(--mud-palette-text-primary) !important;
+    font-size: 0.875rem;
+}
+
+.mud-data-grid .mud-table-body td .mud-typography {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+.mud-data-grid .mud-table-pagination {
+    background-color: var(--mud-palette-background) !important;
+    border-top: 1px solid var(--neu-border-subtle) !important;
+}
+
+/* Pagination — icon buttons 양각 */
+.mud-data-grid .mud-table-pagination .mud-icon-button {
+    box-shadow: 2px 2px 5px var(--neu-shadow-dark),
+                -2px -2px 5px var(--neu-shadow-light);
+}
+.mud-data-grid .mud-table-pagination .mud-icon-button:active {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+/* Pagination — page size select 양각 */
+.mud-data-grid .mud-table-pagination .mud-select .mud-input {
+    box-shadow: 2px 2px 5px var(--neu-shadow-dark),
+                -2px -2px 5px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-button) !important;
+}
+
+
+
+/* =========================================================
+   MudSimpleTable / MudTable
+   ========================================================= */
+
+.mud-table {
+    background-color: transparent !important;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-inner) !important;
+    overflow: hidden;
+}
+
+.mud-table .mud-table-container {
+    background-color: transparent !important;
+}
+
+.mud-table thead th {
+    background-color: transparent !important;
+    color: var(--mud-palette-text-secondary) !important;
+    font-weight: 600;
+    border-bottom: 1px solid var(--neu-border-subtle) !important;
+}
+
+.mud-table tbody tr {
+    background-color: transparent !important;
+    transition: var(--neu-transition);
+}
+
+.mud-table tbody tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.025) !important;
+}
+
+.mud-table.mud-table-hover tbody tr:hover {
+    background-color: transparent !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.mud-table tbody td {
+    border-bottom: 1px solid var(--neu-border-faint) !important;
+}
+
+
+/* =========================================================
+   MudDialog
+   ========================================================= */
+
+.mud-dialog {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 8px 8px 16px var(--neu-shadow-dark),
+                -8px -8px 16px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-outer) !important;
+    border: none !important;
+}
+
+.mud-overlay,
+.mud-overlay-scrim {
+    background-color: transparent !important;
+    backdrop-filter: none;
+    pointer-events: none !important;
+}
+
+.mud-dialog .mud-dialog-title {
+    color: var(--mud-palette-text-primary);
+    font-weight: 600;
+}
+
+.mud-dialog .mud-dialog-actions {
+    border-top: 1px solid var(--neu-border-subtle);
+}
+
+
+/* =========================================================
+   MudCard
+   ========================================================= */
+
+.mud-card {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-outer) !important;
+    border: none !important;
+    transition: var(--neu-transition);
+}
+
+
+/* =========================================================
+   MudList / MudListItem
+   ========================================================= */
+
+.mud-list {
+    background-color: transparent !important;
+    overflow-x: hidden !important;
+}
+
+.mud-list-item {
+    border-radius: var(--neu-radius-button) !important;
+    margin: 2px 4px;
+    transition: var(--neu-transition);
+}
+
+.mud-list-item:hover {
+    background-color: transparent !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.mud-list-item.mud-selected-item {
+    background-color: transparent !important;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light) !important;
+    color: var(--mud-palette-primary);
+}
+
+
+/* =========================================================
+   MudAlert
+   ========================================================= */
+
+.mud-alert {
+    border-radius: var(--neu-radius-inner) !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+    border: none !important;
+}
+
+.mud-alert-filled-success,
+.mud-alert-standard-success {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-success) !important;
+    border-left: 3px solid var(--mud-palette-success) !important;
+}
+.mud-alert-filled-error,
+.mud-alert-standard-error {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-error) !important;
+    border-left: 3px solid var(--mud-palette-error) !important;
+}
+.mud-alert-filled-warning,
+.mud-alert-standard-warning {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-warning) !important;
+    border-left: 3px solid var(--mud-palette-warning) !important;
+}
+.mud-alert-filled-info,
+.mud-alert-standard-info {
+    background-color: var(--mud-palette-background) !important;
+    color: var(--mud-palette-info) !important;
+    border-left: 3px solid var(--mud-palette-info) !important;
+}
+
+
+/* =========================================================
+   MudProgressLinear
+   ========================================================= */
+
+.mud-progress-linear {
+    border-radius: 6px !important;
+    overflow: hidden;
+}
+
+.mud-progress-linear .mud-progress-linear-bar {
+    border-radius: 6px;
+}
+
+.mud-progress-linear .mud-progress-linear-bars {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+    border-radius: 6px;
+}
+
+
+/* =========================================================
+   MudDivider
+   ========================================================= */
+
+.mud-divider {
+    border-color: var(--neu-border-subtle) !important;
+}
+
+
+/* =========================================================
+   MudSelect / MudAutocomplete Popover
+   ========================================================= */
+
+.mud-popover .mud-paper,
+.mud-popover-open .mud-paper {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 6px 6px 12px var(--neu-shadow-dark),
+                -6px -6px 12px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-inner) !important;
+    border: none !important;
+}
+
+
+/* =========================================================
+   MudSnackbar
+   ========================================================= */
+
+.mud-snackbar {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light) !important;
+    border-radius: var(--neu-radius-inner) !important;
+    color: var(--mud-palette-text-primary) !important;
+}
+
+.mud-snackbar.mud-alert-filled-success {
+    border-left: 4px solid var(--mud-palette-success) !important;
+}
+.mud-snackbar.mud-alert-filled-error {
+    border-left: 4px solid var(--mud-palette-error) !important;
+}
+.mud-snackbar.mud-alert-filled-info {
+    border-left: 4px solid var(--mud-palette-info) !important;
+}
+.mud-snackbar.mud-alert-filled-warning {
+    border-left: 4px solid var(--mud-palette-warning) !important;
+}
+
+
+/* =========================================================
+   MudTooltip
+   ========================================================= */
+
+.mud-tooltip {
+    background-color: var(--mud-palette-background) !important;
+    box-shadow: 3px 3px 6px var(--neu-shadow-dark),
+                -3px -3px 6px var(--neu-shadow-light) !important;
+    border-radius: 8px !important;
+    color: var(--mud-palette-text-primary) !important;
+    font-size: 0.8rem;
+}
+
+
+/* =========================================================
+   MudTabs
+   ========================================================= */
+
+.mud-tabs {
+    background-color: transparent !important;
+}
+
+.mud-tab {
+    border-radius: var(--neu-radius-button) !important;
+    transition: var(--neu-transition);
+}
+
+.mud-tab:hover {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.mud-tab.mud-tab-active {
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light) !important;
+    color: var(--mud-palette-primary) !important;
+}
+
+
+/* =========================================================
+   MudMainContent
+   ========================================================= */
+
+.mud-main-content {
+    background-color: var(--mud-palette-background) !important;
+}
+
+
+/* =========================================================
+   MudGrid - transparent backgrounds
+   ========================================================= */
+
+.mud-grid {
+    background-color: transparent !important;
+}
+
+.mud-grid-item {
+    background-color: transparent !important;
+}
+
+
+/* =========================================================
+   Scrollbar Styling
+   ========================================================= */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--mud-palette-background);
+    border-radius: 4px;
+    box-shadow: inset 1px 1px 2px var(--neu-shadow-dark),
+                inset -1px -1px 2px var(--neu-shadow-light);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--mud-palette-action-default);
+    border-radius: 4px;
+    opacity: 0.5;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    opacity: 0.7;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--mud-palette-action-default) var(--mud-palette-background);
+}
+
+
+/* =========================================================
+   Utility / Blazor Overrides
+   ========================================================= */
+
+.content {
+    padding-top: 1.1rem;
+}
+
+h1:focus {
+    outline: none;
+}
+
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--mud-palette-success);
+}
+
+.invalid {
+    outline: 1px solid var(--mud-palette-error);
+}
+
+.validation-message {
+    color: var(--mud-palette-error);
+}
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+    border-radius: var(--neu-radius-inner);
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred."
+}
+
+.darker-border-checkbox.form-check-input {
+    border-color: #929292;
+}
+
+
+/* =========================================================
+   MudDateRangePicker / MudDatePicker - Popup Improvements
+   ========================================================= */
+
+/* Wider date range picker input */
+.date-range-picker-wide .mud-input.mud-input-outlined {
+    min-width: 320px;
+}
+
+/* Native date input styled for dark theme — neumorphic inset */
+.date-input {
+    background: var(--mud-palette-background);
+    color: var(--mud-palette-text-primary);
+    border: none;
+    border-radius: var(--neu-radius-inner);
+    padding: 8px 14px;
+    font-size: 0.875rem;
+    max-width: 150px;
+    cursor: pointer;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    transition: var(--neu-transition);
+}
+.date-input::-webkit-calendar-picker-indicator {
+    filter: var(--date-picker-icon-filter, none);
+    cursor: pointer;
+}
+.date-input:focus {
+    outline: none;
+    box-shadow: inset 4px 4px 8px var(--neu-shadow-dark),
+                inset -4px -4px 8px var(--neu-shadow-light),
+                0 0 0 2px rgba(142, 140, 216, 0.3);
+}
+
+/* =========================================================
+   자산 상태 카드 — border-left 유틸리티
+   ========================================================= */
+.border-left-success {
+    border-left: 3px solid var(--mud-palette-success) !important;
+}
+.border-left-error {
+    border-left: 3px solid var(--mud-palette-error) !important;
+}
+.border-left-info {
+    border-left: 3px solid var(--mud-palette-info) !important;
+}
+.border-left-warning {
+    border-left: 3px solid var(--mud-palette-warning) !important;
+}
+
+/* 오프라인(비활성) 상태: 투명도 65% */
+.status-offline {
+    opacity: 0.65;
+}
+
+/* Picker container - neumorphic */
+.mud-picker {
+    background-color: var(--mud-palette-background) !important;
+    border-radius: var(--neu-radius-outer) !important;
+    box-shadow: 6px 6px 12px var(--neu-shadow-dark),
+                -6px -6px 12px var(--neu-shadow-light) !important;
+    border: none !important;
+    overflow: hidden;
+}
+
+/* Picker inline - remove default paper shadow */
+.mud-picker-inline-paper.mud-paper {
+    background-color: var(--mud-palette-background) !important;
+    border-radius: var(--neu-radius-outer) !important;
+    box-shadow: 6px 6px 12px var(--neu-shadow-dark),
+                -6px -6px 12px var(--neu-shadow-light) !important;
+}
+
+/* Picker header - accent color with rounded top */
+.mud-picker .mud-picker-datepicker-toolbar,
+.mud-picker .mud-picker-toolbar {
+    background-color: var(--mud-palette-primary) !important;
+    border-radius: var(--neu-radius-outer) var(--neu-radius-outer) 0 0 !important;
+    padding: 16px 24px !important;
+    min-height: 80px;
+}
+
+.mud-picker .mud-picker-datepicker-toolbar .mud-typography,
+.mud-picker .mud-picker-toolbar .mud-typography {
+    color: #fff !important;
+}
+
+/* Sub-header label (year) */
+.mud-picker .mud-picker-toolbar-subheader {
+    color: rgba(255, 255, 255, 0.7) !important;
+    font-size: 0.9rem;
+}
+
+/* Calendar container */
+.mud-picker .mud-picker-calendar-container {
+    padding: 8px 12px 12px 12px;
+}
+
+/* Calendar header (month/year nav) */
+.mud-picker .mud-picker-calendar-header {
+    padding: 8px 4px;
+}
+
+.mud-picker .mud-picker-calendar-header .mud-button-month,
+.mud-picker .mud-picker-calendar-header-transition {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+/* Navigation arrows */
+.mud-picker .mud-picker-nav-button-prev,
+.mud-picker .mud-picker-nav-button-next {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+/* Day of week labels */
+.mud-picker .mud-picker-calendar-header-day {
+    color: var(--mud-palette-text-secondary) !important;
+    font-weight: 600;
+    font-size: 0.8rem;
+    width: 40px;
+    height: 32px;
+}
+
+/* Day buttons - larger touch target */
+.mud-picker .mud-picker-calendar-day {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50% !important;
+    margin: 1px;
+    font-size: 0.875rem;
+    transition: all 0.15s ease;
+}
+
+.mud-picker .mud-picker-calendar-day:hover {
+    background-color: transparent !important;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+/* Selected day */
+.mud-picker .mud-picker-calendar-day.mud-selected {
+    background-color: var(--mud-palette-primary) !important;
+    color: #fff !important;
+    box-shadow: 2px 2px 5px var(--neu-shadow-dark),
+                -2px -2px 5px var(--neu-shadow-light) !important;
+    font-weight: 600;
+}
+
+/* Date range highlight between start/end */
+.mud-picker .mud-range.mud-range-between {
+    background-color: rgba(142, 140, 216, 0.12) !important;
+}
+
+/* Range start/end markers */
+.mud-picker .mud-range.mud-range-start-selected,
+.mud-picker .mud-range.mud-range-end-selected {
+    background-color: rgba(142, 140, 216, 0.12) !important;
+}
+
+/* Today indicator */
+.mud-picker .mud-picker-calendar-day.mud-current {
+    border: 2px solid var(--mud-palette-primary) !important;
+    font-weight: 600;
+}
+
+/* Picker actions area */
+.mud-picker .mud-picker-actions {
+    border-top: 1px solid var(--neu-border-subtle);
+    padding: 8px 16px;
+}
+
+.mud-picker .mud-picker-actions .mud-button-text {
+    font-weight: 600;
+}
+
+/* =========================================================
+   Dashboard — Header
+   ========================================================= */
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.dashboard-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+
+/* =========================================================
+   Dashboard — KPI Cards
+   ========================================================= */
+
+/* .kpi-grid layout removed — gridstack handles layout */
+
+/* ---- Card container ---- */
+.kpi-card {
+    background: var(--mud-palette-surface);
+    border-radius: var(--neu-radius-outer);
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light);
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    overflow: hidden;
+    transition: var(--neu-transition);
+}
+
+/* ---- Icon block: 배경 들어간 효과 + 아이콘 튀어나온 효과 ---- */
+.kpi-icon {
+    width: 80px;
+    min-width: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--neu-radius-outer) 16px 16px var(--neu-radius-outer);
+}
+
+.kpi-icon .mud-icon-root {
+    font-size: 2.2rem !important;
+    width: 2.2rem !important;
+    height: 2.2rem !important;
+    color: white !important;
+    filter: drop-shadow(2px 3px 3px rgba(0,0,0,0.4)) drop-shadow(-1px -1px 2px rgba(255,255,255,0.15));
+}
+
+/* 배경: inset shadow (들어간 효과) */
+.kpi-icon-primary { background: var(--mud-palette-primary); box-shadow: inset 4px 4px 10px rgba(0,0,0,0.35), inset -3px -3px 8px rgba(255,255,255,0.1); }
+.kpi-icon-success { background: var(--mud-palette-success); box-shadow: inset 4px 4px 10px rgba(0,0,0,0.35), inset -3px -3px 8px rgba(255,255,255,0.1); }
+.kpi-icon-info    { background: var(--mud-palette-info);    box-shadow: inset 4px 4px 10px rgba(0,0,0,0.35), inset -3px -3px 8px rgba(255,255,255,0.1); }
+.kpi-icon-error   { background: var(--mud-palette-error);   box-shadow: inset 4px 4px 10px rgba(0,0,0,0.35), inset -3px -3px 8px rgba(255,255,255,0.1); }
+
+/* ---- Body: right side ---- */
+.kpi-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 12px 20px;
+    min-width: 0;
+    flex: 1;
+}
+
+/* ---- Label (title) ---- */
+.kpi-label {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--mud-palette-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Value row ---- */
+.kpi-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+/* ---- Hero number ---- */
+.kpi-value {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1.2;
+    color: var(--mud-palette-text-primary);
+    letter-spacing: -0.02em;
+}
+
+/* ---- Unit label ---- */
+.kpi-unit {
+    font-size: 0.8rem;
+    color: var(--mud-palette-text-secondary);
+    font-weight: 500;
+}
+
+/* ---- Percentage ---- */
+.kpi-pct {
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+.kpi-pct-success { color: var(--mud-palette-success); }
+.kpi-pct-info    { color: var(--mud-palette-info); }
+.kpi-pct-error   { color: var(--mud-palette-error); }
+
+
+/* .heatmap-row layout removed — gridstack handles layout */
+
+/* =========================================================
+   Dashboard — Type Stats (in heatmap-row right column)
+   ========================================================= */
+
+.type-stat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.type-stat-item {
+    padding: 8px 10px;
+    border-radius: var(--neu-radius-inner);
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.type-stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.type-stat-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.type-stat-count {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--mud-palette-text-secondary);
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+/* ── 공통 막대그래프 (Neumorphic Bar) ── */
+
+.neu-bar-track {
+    position: relative;
+    height: 18px;
+    background: var(--neu-border-faint, rgba(0,0,0,0.05));
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -1px -1px 3px var(--neu-shadow-light);
+}
+
+.neu-bar-track::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 5px;
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.neu-bar-fill {
+    height: 100%;
+    position: relative;
+    isolation: isolate;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ── 타입/라인별 현황 막대 (고유) ── */
+
+.type-stat-bar {
+    display: flex;
+}
+
+.type-bar-seg {
+    min-width: 3px;
+    transition: width 0.3s ease;
+    border-right: 1.5px solid var(--mud-palette-background);
+    font-size: 0.65rem;
+    line-height: 18px;
+    text-align: center;
+    overflow: hidden;
+}
+
+.type-bar-seg:last-child {
+    border-right: none;
+}
+
+/* =========================================================
+   Dashboard — Stat Panel Header (bar/donut toggle)
+   ========================================================= */
+
+.stat-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.stat-donut-container {
+    position: relative;
+    flex: 1;
+    min-height: 180px;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--neu-radius-inner);
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -1px -1px 3px var(--neu-shadow-light);
+    padding: 4px;
+}
+
+/* 인셋 비네팅 — 가장자리가 어두워지며 움푹 들어간 느낌 */
+.stat-donut-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+        ellipse at center,
+        transparent 60%,
+        rgba(0, 0, 0, 0.06) 100%
+    );
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* 유리 반사 — 좌상단에서 우하단으로 은은한 빛 반사 */
+.stat-donut-container::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+        145deg,
+        rgba(255, 255, 255, 0.04) 0%,
+        rgba(255, 255, 255, 0.01) 35%,
+        transparent 55%
+    );
+    pointer-events: none;
+    z-index: 10;
+}
+
+
+/* =========================================================
+   Dashboard — Panel Header & Legend
+   ========================================================= */
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.legend-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+}
+
+.legend-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    border-right: 2px solid var(--neu-border-subtle, rgba(0,0,0,0.08));
+    padding-right: 16px;
+}
+
+.legend-group:last-child {
+    border-right: none;
+    padding-right: 0;
+}
+
+.legend-label {
+    font-size: 0.7rem;
+    color: var(--mud-palette-text-disabled);
+}
+
+
+/* =========================================================
+   Dashboard — Heatmap Grid
+   ========================================================= */
+
+.heatmap-container {
+    background: var(--mud-palette-background);
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    border-radius: var(--neu-radius-inner);
+    padding: 16px;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(24px, 1fr));
+    gap: 3px;
+    align-content: flex-start;
+}
+
+.heatmap-tile {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 0;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4),
+                -1px -1px 3px rgba(255, 255, 255, 0.08);
+}
+
+.heatmap-tile:hover {
+    transform: scale(1.4);
+    z-index: 2;
+}
+
+.heatmap-tile-success    { background-color: var(--mud-palette-success); animation: glow-success 2.5s ease-in-out infinite; }
+.heatmap-tile-info       { background-color: var(--mud-palette-info); }
+.heatmap-tile-error      { background-color: var(--mud-palette-error); }
+.heatmap-tile-inprogress { background-color: var(--mud-palette-warning); }
+.heatmap-tile-warning    { background-color: var(--mud-palette-text-disabled); }
+
+@keyframes glow-success {
+    0%, 100% { box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4), -1px -1px 3px rgba(255, 255, 255, 0.08), 0 0 2px rgba(101, 185, 145, 0.3); }
+    50%       { box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4), -1px -1px 3px rgba(255, 255, 255, 0.08), 0 0 5px rgba(101, 185, 145, 0.65); }
+}
+
+/* 히트맵 상태 마크 (메인 + 미니 공통) */
+.heatmap-tile-error::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        135deg,
+        transparent calc(50% - 1px),
+        var(--mud-palette-background) calc(50% - 1px),
+        var(--mud-palette-background) calc(50% + 1px),
+        transparent calc(50% + 1px)
+    );
+    pointer-events: none;
+}
+
+.heatmap-tile-warning::before {
+    content: '?';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    pointer-events: none;
+    line-height: 1;
+}
+
+.heatmap-tile-inprogress::before {
+    content: '\2699';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.85);
+    pointer-events: none;
+    line-height: 1;
+    animation: spin-gear 2s linear infinite;
+}
+
+.nav-mini-heatmap-grid .heatmap-tile-inprogress::before {
+    font-size: 9px;
+}
+
+.nav-mini-heatmap-grid .heatmap-tile {
+    overflow: visible;
+}
+
+@keyframes spin-gear {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* 오프라인: 뉴모피즘 inset (움푹 들어간 느낌 + 살짝 어둡게) */
+.heatmap-tile-offline {
+    box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.45),
+                inset -1px -1px 2px rgba(255, 255, 255, 0.06) !important;
+    animation: none !important;
+    filter: brightness(0.55) saturate(0.5);
+}
+
+.heatmap-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.heatmap-legend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+    position: relative;
+}
+
+.heatmap-legend-glow {
+    box-shadow: 0 0 5px rgba(101, 185, 145, 0.7);
+}
+
+.heatmap-legend-slash::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        135deg,
+        transparent calc(50% - 1px),
+        var(--mud-palette-background) calc(50% - 1px),
+        var(--mud-palette-background) calc(50% + 1px),
+        transparent calc(50% + 1px)
+    );
+}
+
+.heatmap-legend-question::before {
+    content: '?';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1;
+}
+
+.heatmap-legend-inprogress {
+    background: var(--mud-palette-warning);
+}
+
+.heatmap-legend-inprogress::before {
+    content: '\2699';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1;
+    animation: spin-gear 2s linear infinite;
+}
+
+.heatmap-legend-offline {
+    background: var(--mud-palette-info);
+    position: relative;
+    box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.45),
+                inset -1px -1px 2px rgba(255, 255, 255, 0.06);
+    filter: brightness(0.55) saturate(0.5);
+}
+
+
+/* =========================================================
+   Dashboard — Bottom Grid & Activity List
+   ========================================================= */
+
+/* .bottom-grid layout removed — gridstack handles layout */
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px;
+    border-radius: var(--neu-radius-inner);
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.activity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+}
+
+.activity-icon .mud-icon-root {
+    filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.35)) drop-shadow(-1px -1px 1px rgba(255,255,255,0.12));
+}
+
+.activity-icon-success    { background: var(--mud-palette-success); color: #fff; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.35), inset -2px -2px 6px rgba(255,255,255,0.1); }
+.activity-icon-error      { background: var(--mud-palette-error); color: #fff; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.35), inset -2px -2px 6px rgba(255,255,255,0.1); }
+.activity-icon-inprogress { background: var(--mud-palette-warning); color: #fff; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.35), inset -2px -2px 6px rgba(255,255,255,0.1); }
+.activity-icon-default    { background: var(--mud-palette-text-secondary); color: #fff; box-shadow: inset 3px 3px 8px rgba(0,0,0,0.35), inset -2px -2px 6px rgba(255,255,255,0.1); }
+
+.activity-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+    margin: 0;
+}
+
+.activity-time {
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+    margin: 2px 0 0 0;
+}
+
+/* 반응형 media queries for old grid layouts removed — gridstack handles responsive layout */
+
+
+/* =========================================================
+   Dashboard — Schedule Timeline
+   ========================================================= */
+
+.schedule-timeline {
+    width: 100%;
+    overflow: hidden;
+    padding-bottom: 4px;
+}
+
+.schedule-ruler-row {
+    display: flex;
+    align-items: flex-end;
+    margin-bottom: 6px;
+}
+
+.schedule-label-col {
+    width: 150px;
+    min-width: 150px;
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 8px;
+    box-sizing: border-box;
+}
+
+.schedule-ruler-track {
+    flex: 1;
+    position: relative;
+    height: 18px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.schedule-hour-tick {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+    bottom: 2px;
+    white-space: nowrap;
+}
+
+.schedule-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 3px;
+}
+
+.schedule-track {
+    flex: 1;
+    position: relative;
+    height: 20px;
+    background: var(--mud-palette-background-grey, rgba(128,128,128,0.08));
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -1px -1px 3px var(--neu-shadow-light);
+}
+
+.schedule-now-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.5px;
+    background: rgba(220, 60, 60, 0.65);
+    z-index: 3;
+    pointer-events: none;
+}
+
+.schedule-track::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 5px;
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    z-index: 4;
+}
+
+.schedule-bar {
+    position: absolute;
+    top: 3px;
+    height: 14px;
+    border-radius: 3px;
+    min-width: 3px;
+    cursor: default;
+    transition: filter 0.15s;
+    z-index: 1;
+    opacity: 0.78;
+}
+
+.schedule-bar:hover { filter: brightness(1.15); opacity: 1; }
+
+.schedule-bar-success    { background: var(--mud-palette-success); }
+.schedule-bar-failed     { background: var(--mud-palette-error); }
+.schedule-bar-inprogress {
+    background: repeating-linear-gradient(
+        45deg,
+        #d4a64e, #d4a64e 4px,
+        #f0c470 4px, #f0c470 8px
+    );
+}
+
+/* Legend */
+.schedule-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.schedule-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.schedule-legend-inprogress {
+    background: repeating-linear-gradient(
+        45deg,
+        #d4a64e, #d4a64e 3px,
+        #f0c470 3px, #f0c470 6px
+    );
+}
+
+
+/* =========================================================
+   Dashboard — Drive Usage
+   ========================================================= */
+
+.drive-stat-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.drive-stat-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    min-width: 56px;
+    color: var(--mud-palette-text-primary);
+    white-space: nowrap;
+}
+
+.drive-stat-bars {
+    flex: 1;
+}
+
+.drive-bar-track {
+    margin-bottom: 6px;
+}
+
+.drive-bar-used {
+    border-radius: 5px;
+    transition: width 0.4s ease;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    font-size: 0.7rem;
+}
+
+.drive-bar-ok      { background: #65B991; }
+.drive-bar-warning { background: #cca84e; }
+.drive-bar-danger  { background: #E67E7E; }
+
+.drive-stat-numbers {
+    display: flex;
+    gap: 20px;
+    font-size: 0.8rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.topology-legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   Layout Page — Blueprint View (도면 레이아웃)
+   ========================================================= */
+
+/* 레이아웃 페이지 — 뷰포트 높이에 맞추기 (스크롤 방지) */
+.layout-page-root {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 80px);
+    overflow: hidden;
+}
+
+.blueprint-container {
+    position: relative;
+    border-radius: var(--neu-radius-outer);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.blueprint-viewport {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    background-color: #1a1a2e;
+    background-image:
+        linear-gradient(rgba(204, 204, 204, 0.15) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(204, 204, 204, 0.15) 1px, transparent 1px),
+        linear-gradient(rgba(224, 224, 224, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(224, 224, 224, 0.08) 1px, transparent 1px);
+    background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
+
+.blueprint-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+}
+
+.blueprint-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.blueprint-rect-group {
+    pointer-events: all;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.blueprint-rect-group:hover rect {
+    stroke-width: 0.5;
+    filter: brightness(1.15);
+}
+
+.blueprint-rect-group.active rect {
+    stroke-width: 0.6;
+    stroke-dasharray: none;
+    filter: brightness(1.2);
+}
+
+.blueprint-rect-label {
+    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    pointer-events: none;
+    user-select: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.blueprint-rect-count {
+    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 1.6px;
+    font-weight: 400;
+    fill: var(--mud-palette-text-secondary);
+    pointer-events: none;
+    user-select: none;
+}
+
+/* ── Blueprint Popover ── */
+
+.blueprint-dialog {
+    position: absolute;
+    z-index: 10000;
+    width: 740px;
+    min-width: 480px;
+    max-width: 92%;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    resize: both;
+    overflow: hidden;
+}
+
+.blueprint-popover-inner {
+    background: var(--mud-palette-surface);
+    border-radius: var(--neu-radius-inner);
+    padding: 16px 20px;
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light);
+    height: 100%;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.blueprint-popover-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.blueprint-popover-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+
+.blueprint-popover-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.blueprint-asset-link {
+    cursor: pointer;
+    color: var(--mud-palette-primary);
+    text-decoration: none;
+}
+
+.blueprint-asset-link:hover {
+    text-decoration: underline;
+}
+
+.blueprint-popover-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.blueprint-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* =========================================================
+   Layout Page — Asset/Group Placement (배치도)
+   ========================================================= */
+
+.layout-group-container {
+    background: var(--mud-palette-surface);
+    border-radius: var(--neu-radius-inner);
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    padding: 16px;
+    transition: var(--neu-transition);
+}
+
+.layout-group-title {
+    color: var(--mud-palette-text-secondary);
+    font-weight: 600;
+}
+
+.layout-asset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.layout-asset-card {
+    background: var(--mud-palette-surface);
+    border-radius: var(--neu-radius-inner);
+    box-shadow: 4px 4px 8px var(--neu-shadow-dark),
+                -4px -4px 8px var(--neu-shadow-light);
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.layout-asset-card:hover {
+    box-shadow: 2px 2px 4px var(--neu-shadow-dark),
+                -2px -2px 4px var(--neu-shadow-light);
+    transform: translateY(1px);
+}
+
+.layout-asset-card:active {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+    transform: translateY(2px);
+}
+
+.layout-asset-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.layout-ping-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+
+/* =========================================================
+   Blueprint Editor (관리 > 도면 편집)
+   ========================================================= */
+
+.bp-editor-container {
+    position: relative;
+    border-radius: var(--neu-radius-inner);
+    overflow: hidden;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    background: var(--mud-palette-background);
+}
+
+.bp-editor-container .blueprint-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.bp-editor-container .blueprint-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* 사각형 채움 */
+.bp-rect-fill {
+    fill: var(--mud-palette-primary);
+    fill-opacity: 0.15;
+    cursor: grab;
+    transition: fill-opacity 0.15s ease;
+}
+
+.bp-edit-rect:hover .bp-rect-fill {
+    fill-opacity: 0.25;
+}
+
+.bp-edit-rect.dragging .bp-rect-fill {
+    fill-opacity: 0.3;
+    cursor: grabbing;
+}
+
+/* 사각형 테두리 */
+.bp-rect-border {
+    fill: none;
+    stroke: var(--mud-palette-primary);
+    stroke-width: 0.3;
+    stroke-dasharray: 1 0.5;
+    pointer-events: none;
+    transition: stroke-width 0.15s ease;
+}
+
+.bp-edit-rect:hover .bp-rect-border {
+    stroke-width: 0.5;
+    stroke-dasharray: none;
+}
+
+.bp-edit-rect.dragging .bp-rect-border {
+    stroke-width: 0.6;
+    stroke-dasharray: none;
+}
+
+/* 라벨 */
+.bp-rect-label {
+    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 2.2px;
+    font-weight: 700;
+    fill: var(--mud-palette-text-primary);
+    pointer-events: all;
+    user-select: none;
+    cursor: grab;
+}
+
+/* 리사이즈 핸들 */
+.bp-resize-handle {
+    fill: var(--mud-palette-primary);
+    fill-opacity: 0.5;
+    cursor: nwse-resize;
+    rx: 0.3;
+    transition: fill-opacity 0.15s ease;
+}
+
+.bp-resize-handle:hover {
+    fill-opacity: 0.9;
+}
+
+/* 삭제 버튼 */
+.bp-delete-btn {
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.bp-edit-rect:hover .bp-delete-btn {
+    opacity: 1;
+}
+
+.bp-delete-btn circle {
+    fill: var(--mud-palette-error);
+    fill-opacity: 0.8;
+}
+
+.bp-delete-btn:hover circle {
+    fill-opacity: 1;
+}
+
+.bp-delete-text {
+    font-family: sans-serif;
+    font-size: 2px;
+    font-weight: 700;
+    fill: white;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* 1000x600 viewBox 대응 — 라벨/핸들/삭제 크기 조정 */
+.bp-rect-label {
+    font-size: 16px;
+    stroke: rgba(0, 0, 0, 0.7);
+    stroke-width: 3px;
+    paint-order: stroke fill;
+    fill: #ffffff;
+}
+
+.bp-rect-border {
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+}
+
+.bp-edit-rect:hover .bp-rect-border {
+    stroke-width: 3;
+}
+
+.bp-edit-rect.dragging .bp-rect-border {
+    stroke-width: 4;
+}
+
+.bp-resize-handle {
+    rx: 3;
+}
+
+.bp-delete-text {
+    font-size: 16px;
+}
+
+/* =========================================================
+   Drawing Editor (도면 그리기 에디터)
+   ========================================================= */
+
+.drawing-editor-container {
+    position: relative;
+    border-radius: var(--neu-radius-inner);
+    overflow: hidden;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    background: var(--mud-palette-background);
+}
+
+.drawing-editor-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    user-select: none;
+}
+
+.drawing-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 도형 스타일 */
+.drawing-shape {
+    cursor: pointer;
+}
+
+.drawing-shape:hover {
+    filter: brightness(1.1);
+}
+
+.drawing-text-shape {
+    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 500;
+    user-select: none;
+    pointer-events: all;
+    cursor: pointer;
+}
+
+/* 그리기 중 임시 도형 */
+.drawing-temp {
+    stroke-dasharray: 8 4;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* 선택 박스 */
+.drawing-select-box {
+    fill: none;
+    stroke: var(--mud-palette-primary);
+    stroke-width: 2;
+    stroke-dasharray: 6 3;
+    pointer-events: none;
+    animation: drawing-select-dash 0.5s linear infinite;
+}
+
+@keyframes drawing-select-dash {
+    0% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: 9; }
+}
+
+/* =========================================================
+   Asset Placement (자산 배치)
+   ========================================================= */
+
+.ap-asset-icon {
+    cursor: grab;
+    transition: filter 0.15s ease;
+}
+
+.ap-asset-icon:hover {
+    filter: brightness(1.08) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.ap-asset-icon.dragging {
+    cursor: grabbing;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+}
+
+.ap-icon-label {
+    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 500;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* ── 다중 선택 ── */
+.ap-asset-icon.ap-selected rect:first-of-type {
+    stroke: #2196F3;
+    stroke-width: 2;
+    stroke-dasharray: 4 2;
+}
+
+.ap-asset-icon.ap-multi-dragging {
+    opacity: 0.85;
+    filter: drop-shadow(0 4px 12px rgba(33, 150, 243, 0.3));
+}
+
+/* ── 올가미 선택 ── */
+.ap-lasso-rect {
+    fill: rgba(33, 150, 243, 0.08);
+    stroke: #2196F3;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 3;
+    pointer-events: none;
+}
+
+/* ── 배치 그룹 컨테이너 ── */
+.ap-group-container {
+    cursor: grab;
+}
+
+.ap-group-container:hover rect:first-of-type {
+    stroke-opacity: 0.9;
+    fill-opacity: 0.15;
+}
+
+.ap-group-container.dragging {
+    cursor: grabbing;
+}
+
+.ap-group-label {
+    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 600;
+    pointer-events: none;
+    user-select: none;
+}
+
+.ap-group-resize {
+    cursor: nwse-resize;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.ap-group-container:hover .ap-group-resize {
+    opacity: 1;
+}
+
+/* 레이아웃 뷰 자산 아이콘 호버 효과 */
+.blueprint-asset-icon,
+.apv-asset-icon {
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.blueprint-asset-icon:hover,
+.apv-asset-icon:hover {
+    filter: drop-shadow(0 0 6px rgba(0,0,0,0.25));
+}
+
+/* PLC 클릭 가능 아이콘 */
+.blueprint-plc-clickable {
+    cursor: pointer;
+}
+
+.blueprint-plc-clickable:hover {
+    filter: drop-shadow(0 0 8px rgba(85,85,85,0.4));
+}
+
+/* 전체화면 */
+.blueprint-container:fullscreen {
+    background: var(--mud-palette-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.blueprint-container:fullscreen .blueprint-viewport {
+    width: 100%;
+    height: 100%;
+}
+
+.blueprint-container:fullscreen .drawing-editor-svg {
+    height: 100%;
+}
+
+/* 줌 컨트롤 */
+.blueprint-zoom-controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 10;
+    background: var(--mud-palette-surface);
+    border-radius: var(--neu-radius-button);
+    padding: 4px;
+    box-shadow: 3px 3px 6px var(--neu-shadow-dark),
+                -3px -3px 6px var(--neu-shadow-light);
+}
+
+.blueprint-zoom-controls .mud-icon-button {
+    width: 32px;
+    height: 32px;
+}
+
+/* =========================================================
+   Header – Status Chips (DEXA / Agent)
+   ========================================================= */
+
+.header-status-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 16px;
+}
+
+.header-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: default;
+    color: inherit;
+    background: var(--mud-palette-appbar-background);
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+    transition: box-shadow 0.2s ease;
+}
+
+.header-status-chip .mud-icon-root {
+    font-size: 1.15rem !important;
+    color: inherit !important;
+    opacity: 0.85;
+}
+
+.header-status-chip:hover {
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+}
+
+.header-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.header-status-text {
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* =========================================================
+   NavMenu – Status Bar (legacy, kept for dot/pulse reuse)
+   ========================================================= */
+
+.nav-status-bar {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 12px 14px;
+    border-top: 1px solid var(--neu-border-subtle);
+}
+
+.nav-status-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 10px;
+    border-radius: 12px;
+    background: var(--mud-palette-background);
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+}
+
+.nav-status-dot {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.nav-status-online {
+    background: var(--mud-palette-success);
+    box-shadow: 0 0 5px var(--mud-palette-success);
+    animation: nav-dot-pulse 2s ease-in-out infinite;
+}
+
+.nav-status-offline {
+    background: var(--mud-palette-error);
+    box-shadow: 0 0 4px var(--mud-palette-error);
+}
+
+.nav-status-idle {
+    background: var(--mud-palette-text-disabled);
+}
+
+@keyframes nav-dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.nav-status-icon {
+    color: var(--mud-palette-text-secondary) !important;
+    flex-shrink: 0;
+}
+
+.nav-status-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+}
+
+.nav-status-label {
+    font-size: 0.63rem;
+    color: var(--mud-palette-text-secondary);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.nav-status-value {
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--mud-palette-text-primary);
+}
+
+.nav-sv-success { color: var(--mud-palette-success) !important; }
+.nav-sv-error   { color: var(--mud-palette-error)   !important; }
+
+
+/* =========================================================
+   NavMenu – Mini Dashboard Widget
+   ========================================================= */
+
+/* ── 로고 영역 ── */
+.nav-logo-area {
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: 10px 16px;
+    border-bottom: none;
+    height: 64px;
+    box-sizing: border-box;
+    background-color: var(--mud-palette-appbar-background);
+    z-index: 1;
+}
+
+/* 패딩에 따라 로고 크기가 조절되도록 유연 크기 */
+.nav-logo {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    filter: var(--logo-filter);
+}
+
+/* Settings 로고 미리보기 */
+.logo-preview-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 220px;
+    height: 64px;
+    background: var(--mud-palette-background);
+    border-radius: var(--neu-radius-inner);
+    box-shadow: inset 2px 2px 5px var(--neu-shadow-dark),
+                inset -2px -2px 5px var(--neu-shadow-light);
+    margin-bottom: 16px;
+}
+
+.logo-preview-img {
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    display: block;
+}
+
+.nav-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.nav-top-section {
+    flex: 1 1 auto;
+    overflow-x: hidden;
+}
+
+.nav-mini-dashboard {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--neu-border-subtle);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* KPI 2×2 그리드 */
+.nav-mini-kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.nav-mini-kpi-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.nav-mini-kpi-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.nav-mini-kpi-value {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.nav-mini-kpi-label {
+    font-size: 0.7rem;
+    color: var(--mud-palette-text-secondary);
+    line-height: 1;
+}
+
+/* 미니 히트맵 섹션 (inset 컨테이너) */
+.nav-mini-heatmap-section {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--neu-radius-button);
+    padding: 8px 10px;
+    box-shadow: inset 2px 2px 5px var(--neu-shadow-dark),
+                inset -2px -2px 5px var(--neu-shadow-light);
+}
+
+.nav-mini-heatmap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+}
+
+.nav-mini-heatmap-toggle-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.3px;
+}
+
+.nav-mini-heatmap-toggle-btn {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: var(--neu-radius-button);
+    background: var(--neu-bg);
+    box-shadow: 2px 2px 4px var(--neu-shadow-dark),
+                -2px -2px 4px var(--neu-shadow-light);
+    transition: box-shadow 0.2s ease;
+}
+
+.nav-mini-heatmap-toggle-btn:hover {
+    box-shadow: 3px 3px 6px var(--neu-shadow-dark),
+                -3px -3px 6px var(--neu-shadow-light);
+}
+
+.nav-mini-heatmap-toggle-btn:active {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+/* 미니 히트맵 */
+.nav-mini-heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16px, 1fr));
+    gap: 4px;
+    align-content: flex-start;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-top: 8px;
+}
+
+.nav-mini-heatmap-grid .heatmap-tile {
+    border-radius: 2px;
+}
+
+.nav-mini-heatmap-grid .heatmap-tile:hover {
+    transform: scale(1.6);
+}
+
+/* =========================================================
+   Dashboard — gridstack layout overrides
+   ========================================================= */
+
+/*
+ * JS 초기화 전에는 .gs-initialized 클래스가 없음.
+ * 이 경우 items를 일반 블록 흐름으로 표시하여 빈 화면 방지.
+ * gridstack init 후 container에 .gs-initialized 추가 →
+ * inline style(top/left/width/height)이 아래 규칙보다 우선함.
+ */
+.grid-stack:not(.gs-initialized) {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.grid-stack:not(.gs-initialized) > .grid-stack-item {
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 160px;
+    transform: none !important;
+}
+
+.grid-stack:not(.gs-initialized) > .grid-stack-item > .grid-stack-item-content {
+    position: relative !important;
+    height: auto !important;
+    min-height: 160px;
+}
+
+/* gridstack 패널 내부 내용이 패널 높이를 채우도록 */
+.grid-stack-item-content {
+    border-radius: 4px;
+}
+
+/* 뉴모피즘 box-shadow가 클리핑되지 않도록 overflow를 visible로 재정의
+   (gridstack.min.css의 overflow-x:hidden; overflow-y:auto 오버라이드) */
+.grid-stack.gs-initialized > .grid-stack-item {
+    overflow: visible !important;
+}
+
+.grid-stack.gs-initialized > .grid-stack-item > .grid-stack-item-content {
+    overflow: visible !important;
+}
+
+/* 패널 내부: 축소 시 스크롤 허용 */
+.grid-stack.gs-initialized .grid-stack-item-content > .mud-paper {
+    height: 100%;
+    box-sizing: border-box;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* KPI 카드가 gridstack 셀 전체를 채우도록 */
+.grid-stack.gs-initialized .grid-stack-item-content > .kpi-card,
+.grid-stack.gs-initialized .grid-stack-item-content > a.dash-link > .kpi-card {
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* activity-list max-height 제거 (패널 자체가 스크롤 담당) */
+.grid-stack.gs-initialized .grid-stack-item-content .activity-list {
+    max-height: none;
+}
+
+/* 편집 모드: 패널 테두리 + 드래그 커서 */
+.grid-stack.edit-mode .grid-stack-item > .grid-stack-item-content {
+    outline: 2px dashed var(--mud-palette-primary);
+    outline-offset: -2px;
+    cursor: grab;
+}
+
+/* 편집 모드: ::after로 우하단 삼각형 표시 */
+.grid-stack.edit-mode .grid-stack-item > .grid-stack-item-content::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 0 20px 20px;
+    border-color: transparent transparent var(--mud-palette-primary) transparent;
+    border-radius: 0 0 var(--neu-radius-outer) 0;
+    opacity: 0.75;
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* 실제 리사이즈 핸들은 숨김 (기능은 동작) */
+.grid-stack.edit-mode .grid-stack-item > .ui-resizable-se {
+    opacity: 0 !important;
+}
+
+/* 드래그 중 커서 */
+.grid-stack.edit-mode .grid-stack-item.ui-draggable-dragging > .grid-stack-item-content {
+    cursor: grabbing;
+    opacity: 0.88;
+}
+
+/* ── 대시보드 클릭 네비게이션 링크 ── */
+a.dash-link {
+    color: inherit;
+    text-decoration: none;
+    display: contents;
+}
+a.dash-link:focus-visible { outline: 2px solid var(--mud-palette-primary); outline-offset: 2px; }
+
+/* 편집 모드에서 모든 대시보드 링크 클릭 차단 */
+.grid-stack.edit-mode a.dash-link { pointer-events: none; }
+
+/* 히트맵/타임라인은 display:block 필요 (position/aspect-ratio 유지) */
+a.heatmap-tile.dash-link { display: block; }
+a.schedule-bar.dash-link { display: block; }
+
+/* KPI 카드 hover */
+a.dash-link:hover > .kpi-card { filter: brightness(1.06); transform: translateY(-1px); }
+
+/* 타입/라인 통계 헤더(텍스트) 링크 — display:contents 오버라이드 */
+a.dash-link.type-stat-header { display: flex; }
+a.dash-link.type-stat-header:hover { background: rgba(var(--mud-palette-primary-rgb), 0.06); border-radius: 4px; }
+
+/* 막대 세그먼트 링크 — display:contents 오버라이드 */
+a.type-bar-seg.dash-link { display: block; }
+
+/* 활동 아이템 hover */
+a.dash-link.activity-item:hover { background: rgba(var(--mud-palette-primary-rgb), 0.06); border-radius: 8px; }
+
+/* 주의 테이블 자산명 링크 */
+a.dash-link-row { color: inherit; text-decoration: none; }
+a.dash-link-row:hover { text-decoration: underline; }
+
+/* 도넛 차트 클릭 커서 */
+.stat-donut-container { cursor: pointer; }
+.grid-stack.edit-mode .stat-donut-container { cursor: inherit; }
+
+/* 대시보드 하단 푸터 */
+.dashboard-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    margin: 16px 10px 0 10px;
+    background-color: var(--mud-palette-surface);
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark), -5px -5px 10px var(--neu-shadow-light);
+    border-radius: var(--neu-radius-outer);
+}
+
+.dashboard-footer-title {
+    font-size: 0.78rem;
+    color: var(--mud-palette-text-secondary);
+    display: flex;
+    align-items: center;
+    letter-spacing: 0.02em;
+}
+
+.dashboard-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── 관리 페이지 타일 그리드 ── */
+.admin-tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 24px;
+    padding: 8px 4px;
+}
+
+.admin-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px 20px;
+    border-radius: var(--neu-radius-outer);
+    background: var(--mud-palette-surface);
+    box-shadow: 5px 5px 10px var(--neu-shadow-dark),
+                -5px -5px 10px var(--neu-shadow-light);
+    cursor: pointer;
+    transition: var(--neu-transition);
+    user-select: none;
+    text-align: center;
+}
+
+.admin-tile:hover {
+    box-shadow: 6px 6px 14px var(--neu-shadow-dark),
+                -6px -6px 14px var(--neu-shadow-light);
+    transform: translateY(-2px);
+}
+
+.admin-tile:active {
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+    transform: translateY(0);
+}
+
+.admin-tile-icon {
+    font-size: 40px !important;
+    color: var(--mud-palette-primary);
+    opacity: 0.85;
+}
+
+.admin-tile-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.admin-tile-desc {
+    font-size: 0.8rem;
+    color: var(--mud-palette-text-secondary);
+    line-height: 1.3;
+}
+
+/* ── 모바일 반응형 (768px 미만: 1-컬럼 GridStack 모드) ── */
+@media (max-width: 767px) {
+    /* 레이아웃 편집은 데스크톱 전용 */
+    .dashboard-footer {
+        display: none;
+    }
+
+    /* GridStack 셀 높이 축소 — 모바일에서 너무 크지 않도록 */
+    .grid-stack {
+        --gs-cell-height: 60px !important;
+    }
+
+    .admin-tile-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 16px;
+    }
+
+    .admin-tile {
+        padding: 24px 16px;
+    }
+}

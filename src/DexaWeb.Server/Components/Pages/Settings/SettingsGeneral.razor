@@ -1,0 +1,327 @@
+@inject ISnackbar Snackbar
+@inject IWebHostEnvironment WebHostEnv
+@inject IConfiguration Config
+@inject AppSettingsEditor SettingsEditor
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<MudGrid>
+    @* ── 헤더 이름 ── *@
+    <MudItem xs="12" md="8" lg="6">
+        <MudPaper Class="pa-6 neu-card">
+            <MudText Typo="Typo.h6" Class="mb-4" Style="font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.Title" Class="mr-2" Style="vertical-align: middle;" />
+                헤더 이름
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                상단 앱바에 표시되는 시스템 이름입니다. 저장 후 페이지가 새로고침됩니다.
+            </MudText>
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudTextField @bind-Value="_appTitle"
+                              Label="시스템 이름"
+                              Placeholder="TWM"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Edit"
+                              MaxLength="50"
+                              Style="flex: 1;" />
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="SaveTitleAsync"
+                           Disabled="_savingTitle"
+                           StartIcon="@Icons.Material.Filled.Save">
+                    @(_savingTitle ? "저장 중..." : "저장")
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           OnClick="ResetTitle"
+                           Disabled="_savingTitle">
+                    초기화
+                </MudButton>
+            </MudStack>
+            <MudCheckBox @bind-Value="_showDate"
+                         Label="날짜 포함 (시스템 이름 옆에 오늘 날짜 표시)"
+                         Color="Color.Primary"
+                         Class="mt-2" />
+        </MudPaper>
+    </MudItem>
+
+    @* ── 사이드바 로고 ── *@
+    <MudItem xs="12" md="8" lg="6">
+        <MudPaper Class="pa-6 neu-card">
+            <MudText Typo="Typo.h6" Class="mb-4" Style="font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.Image" Class="mr-2" Style="vertical-align: middle;" />
+                사이드바 로고
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                사이드바 상단에 표시될 로고 이미지입니다. PNG, JPG, SVG 지원 · 최대 2MB · 권장 크기 210 × 44 px
+            </MudText>
+
+            @if (!string.IsNullOrEmpty(_logoUrl))
+            {
+                <div class="logo-preview-box mb-4">
+                    <img src="@_logoUrl" alt="현재 로고" class="logo-preview-img" />
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4"
+                         Style="font-style: italic;">설정된 로고 없음</MudText>
+            }
+
+            <InputFile id="logo-file-input" OnChange="OnLogoFileSelected"
+                       accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                       style="display:none;" />
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.FolderOpen"
+                           OnClick="ClickLogoInput"
+                           Disabled="_uploadingLogo">
+                    파일 선택
+                </MudButton>
+
+                @if (!string.IsNullOrEmpty(_selectedLogoName))
+                {
+                    <MudText Typo="Typo.body2" Style="opacity: 0.8;">@_selectedLogoName</MudText>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Upload"
+                               OnClick="UploadLogoAsync"
+                               Disabled="_uploadingLogo">
+                        @(_uploadingLogo ? "저장 중..." : "저장")
+                    </MudButton>
+                }
+
+                @if (!string.IsNullOrEmpty(_logoUrl))
+                {
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Delete"
+                               OnClick="DeleteLogoAsync"
+                               Disabled="_uploadingLogo">
+                        삭제
+                    </MudButton>
+                }
+            </MudStack>
+
+            @* ── 로고 여유(크기) 조절 ── *@
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.AspectRatio" Size="Size.Small"
+                         Style="vertical-align: middle; margin-right: 4px;" />
+                로고 여유 조절
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                사이드바 로고 영역의 안쪽 여백(패딩)을 조절합니다. 값이 클수록 로고가 작아지고 여백이 넓어집니다.
+            </MudText>
+
+            @if (!string.IsNullOrEmpty(_logoUrl))
+            {
+                <div class="logo-preview-box mb-3" style="padding: @(_logoPadding)px;">
+                    <img src="@_logoUrl" alt="미리보기" class="logo-preview-img" />
+                </div>
+            }
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudSlider @bind-Value="_logoPadding"
+                           Min="0" Max="30" Step="1"
+                           Color="Color.Primary"
+                           Style="flex: 1;">
+                    여백: @(_logoPadding)px
+                </MudSlider>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="SaveLogoPaddingAsync"
+                           Disabled="_savingPadding"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           Size="Size.Small">
+                    @(_savingPadding ? "저장 중..." : "적용")
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    // ── 헤더 이름 ──
+    private string _appTitle = "TWM";
+    private bool _showDate;
+    private bool _savingTitle;
+
+    // ── 로고 ──
+    private string? _logoUrl;
+    private IBrowserFile? _selectedLogoFile;
+    private string? _selectedLogoName;
+    private bool _uploadingLogo;
+    private int _logoPadding = 10;
+    private bool _savingPadding;
+
+    protected override void OnInitialized()
+    {
+        _appTitle = Config["App:Title"] ?? "TWM";
+        _showDate = Config.GetValue<bool>("App:ShowDate");
+        _logoPadding = Config.GetValue("App:LogoPadding", 10);
+        _logoUrl = ScanLogoUrl();
+    }
+
+    // ── 헤더 이름 저장 ──────────────────────────────────────
+
+    private async Task SaveTitleAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_appTitle))
+        {
+            Snackbar.Add("이름을 입력해주세요.", Severity.Warning);
+            return;
+        }
+
+        _savingTitle = true;
+        try
+        {
+            await SettingsEditor.SaveAppSectionAsync(_appTitle.Trim(), _showDate);
+            Snackbar.Add("저장되었습니다.", Severity.Success);
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"저장 중 오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingTitle = false;
+        }
+    }
+
+    private void ResetTitle()
+    {
+        _appTitle = "TWM";
+        _showDate = false;
+    }
+
+    // ── 로고 여유 저장 ─────────────────────────────────────
+
+    private async Task SaveLogoPaddingAsync()
+    {
+        _savingPadding = true;
+        try
+        {
+            await SettingsEditor.SaveLogoPaddingAsync(_logoPadding);
+            Snackbar.Add("로고 여유 설정이 저장되었습니다.", Severity.Success);
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"저장 중 오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingPadding = false;
+        }
+    }
+
+    // ── 로고 ────────────────────────────────────────────────
+
+    private string? ScanLogoUrl()
+    {
+        try
+        {
+            var uploadsPath = Path.Combine(WebHostEnv.WebRootPath, "uploads");
+            if (!Directory.Exists(uploadsPath)) return null;
+            var files = Directory.GetFiles(uploadsPath, "app-logo.*");
+            return files.Length > 0 ? "/uploads/" + Path.GetFileName(files[0]) : null;
+        }
+        catch { return null; }
+    }
+
+    private void OnLogoFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedLogoFile = e.File;
+        _selectedLogoName = e.File.Name;
+    }
+
+    private async Task ClickLogoInput() =>
+        await JS.InvokeVoidAsync("eval", "document.getElementById('logo-file-input').click()");
+
+    private async Task UploadLogoAsync()
+    {
+        if (_selectedLogoFile == null) return;
+
+        var ext = Path.GetExtension(_selectedLogoFile.Name).ToLowerInvariant();
+        if (ext is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".svg" or ".webp"))
+        {
+            Snackbar.Add("PNG, JPG, SVG, GIF, WEBP 파일만 지원합니다.", Severity.Warning);
+            return;
+        }
+
+        _uploadingLogo = true;
+        try
+        {
+            var uploadsDir = Path.Combine(WebHostEnv.WebRootPath, "uploads");
+            Directory.CreateDirectory(uploadsDir);
+
+            foreach (var f in Directory.GetFiles(uploadsDir, "app-logo.*"))
+                File.Delete(f);
+
+            string savedExt;
+            string filePath;
+
+            if (ext is ".png" or ".jpg" or ".jpeg")
+            {
+                using var ms = new MemoryStream();
+                await _selectedLogoFile.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024).CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                var mimeType = ext == ".png" ? "image/png" : "image/jpeg";
+                var svgContent = await JS.InvokeAsync<string>("logoConverter.convertToSvg", base64, mimeType);
+                savedExt = ".svg";
+                filePath = Path.Combine(uploadsDir, $"app-logo{savedExt}");
+                await File.WriteAllTextAsync(filePath, svgContent, new System.Text.UTF8Encoding(false));
+            }
+            else
+            {
+                savedExt = ext;
+                filePath = Path.Combine(uploadsDir, $"app-logo{savedExt}");
+                await using var stream = File.Create(filePath);
+                await _selectedLogoFile.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024).CopyToAsync(stream);
+            }
+
+            var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            _logoUrl = $"/uploads/app-logo{savedExt}?t={ts}";
+            _selectedLogoFile = null;
+            _selectedLogoName = null;
+            Snackbar.Add("로고가 저장되었습니다.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"업로드 중 오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _uploadingLogo = false;
+        }
+    }
+
+    private async Task DeleteLogoAsync()
+    {
+        try
+        {
+            var uploadsDir = Path.Combine(WebHostEnv.WebRootPath, "uploads");
+            if (Directory.Exists(uploadsDir))
+            {
+                foreach (var f in Directory.GetFiles(uploadsDir, "app-logo.*"))
+                    File.Delete(f);
+            }
+
+            _logoUrl = null;
+            _selectedLogoFile = null;
+            _selectedLogoName = null;
+            Snackbar.Add("로고가 삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"삭제 중 오류: {ex.Message}", Severity.Error);
+        }
+        await Task.CompletedTask;
+    }
+}

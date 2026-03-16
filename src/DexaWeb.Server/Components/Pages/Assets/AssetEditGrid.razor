@@ -1,0 +1,295 @@
+@using DexaWeb.Server.Models.Dexa
+
+@* 자산 유형별 편집 그리드 (페이징 + 인라인 편집 + 정렬/필터) *@
+<MudDataGrid Items="@Rows" T="AssetEditRow"
+             Dense="true" Hover="true" Bordered="true"
+             RowsPerPage="25"
+             RowStyleFunc="RowStyle"
+             SortMode="SortMode.Multiple"
+             Filterable="true" FilterMode="DataGridFilterMode.ColumnFilterRow"
+             FilterCaseSensitivity="DataGridFilterCaseSensitivity.CaseInsensitive"
+             ColumnResizeMode="ResizeMode.Column"
+             FixedHeader="true"
+             Height="calc(100vh - 340px)">
+    <Columns>
+        <PropertyColumn Property="x => x.AssetId" Title="ID"
+                        Filterable="false" Sortable="true"
+                        HeaderStyle="width:46px;"
+                        CellStyle="width:46px; background:rgba(0,0,0,0.06);" />
+
+        @if (ShowAllTypes)
+        {
+            <PropertyColumn Property="x => x.TypeName" Title="유형"
+                            HeaderStyle="width:90px;"
+                            CellStyle="width:90px; background:rgba(0,0,0,0.06);" />
+        }
+
+        <PropertyColumn Property="x => x.Name" Title="이름">
+            <CellTemplate>
+                <MudTextField @bind-Value="context.Item.Name" @bind-Value:after="NotifyChanged"
+                              Variant="Variant.Text" Margin="Margin.Dense" />
+            </CellTemplate>
+        </PropertyColumn>
+
+        <PropertyColumn Property="x => x.LineName" Title="라인">
+            <CellTemplate>
+                @if (LineMap.Count > 0)
+                {
+                    <MudSelect Value="context.Item.LineId" T="int?"
+                               ValueChanged="@(v => OnLineChanged(context.Item, v))"
+                               Variant="Variant.Text" Margin="Margin.Dense"
+                               Clearable="true" Dense="true">
+                        @foreach (var (id, name) in LineMap)
+                        {
+                            <MudSelectItem Value="@((int?)id)">@name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else
+                {
+                    <div @onwheel:preventDefault="true">
+                        <MudNumericField @bind-Value="context.Item.LineId" T="int?"
+                                         @bind-Value:after="NotifyChanged"
+                                         Variant="Variant.Text" Margin="Margin.Dense"
+                                         Placeholder="-" />
+                    </div>
+                }
+            </CellTemplate>
+        </PropertyColumn>
+
+        <PropertyColumn Property="x => x.Vendor" Title="벤더">
+            <CellTemplate>
+                <MudTextField @bind-Value="context.Item.Vendor" @bind-Value:after="NotifyChanged"
+                              Variant="Variant.Text" Margin="Margin.Dense"
+                              Placeholder="-" />
+            </CellTemplate>
+        </PropertyColumn>
+
+        <PropertyColumn Property="x => x.Spec" Title="사양">
+            <CellTemplate>
+                <MudTextField @bind-Value="context.Item.Spec" @bind-Value:after="NotifyChanged"
+                              Variant="Variant.Text" Margin="Margin.Dense"
+                              Placeholder="-" />
+            </CellTemplate>
+        </PropertyColumn>
+
+        @if (ShowConn && !ShowAllTypes)
+        {
+            <PropertyColumn Property="x => x.ConnIp" Title="연결 IP">
+                <CellTemplate>
+                    <MudTextField @bind-Value="context.Item.ConnIp" @bind-Value:after="NotifyChanged"
+                                  Variant="Variant.Text" Margin="Margin.Dense"
+                                  Placeholder="-" />
+                </CellTemplate>
+            </PropertyColumn>
+        }
+
+        @if (ShowVia || ShowAllTypes)
+        {
+            <PropertyColumn Property="x => x.ConnIpVia" Title="경유 IP">
+                <CellTemplate>
+                    @if (ShowAllTypes && !HasVia(context.Item.AssetTypeId))
+                    {
+                        <span class="cell-na">—</span>
+                    }
+                    else
+                    {
+                        <MudTextField @bind-Value="context.Item.ConnIpVia" @bind-Value:after="NotifyChanged"
+                                      Variant="Variant.Text" Margin="Margin.Dense"
+                                      Placeholder="-" />
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            @if (ShowAllTypes)
+            {
+                <PropertyColumn Property="x => x.DisplayIp" Title="IP">
+                    <CellTemplate>
+                        <MudTextField @bind-Value="context.Item.DisplayIp" @bind-Value:after="NotifyChanged"
+                                      Variant="Variant.Text" Margin="Margin.Dense"
+                                      Placeholder="-" />
+                    </CellTemplate>
+                </PropertyColumn>
+            }
+            else if (ShowIp)
+            {
+                <PropertyColumn Property="x => x.Ip" Title="IP">
+                    <CellTemplate>
+                        <MudTextField @bind-Value="context.Item.Ip" @bind-Value:after="NotifyChanged"
+                                      Variant="Variant.Text" Margin="Margin.Dense"
+                                      Placeholder="-" />
+                    </CellTemplate>
+                </PropertyColumn>
+            }
+
+            <PropertyColumn Property="x => x.ConnBase" Title="Base" Filterable="false" Sortable="true"
+                            HeaderStyle="width:72px;" CellStyle="width:72px;">
+                <CellTemplate>
+                    @if (ShowAllTypes && !HasVia(context.Item.AssetTypeId))
+                    {
+                        <span class="cell-na">—</span>
+                    }
+                    else
+                    {
+                        <div @onwheel:preventDefault="true">
+                            <MudNumericField @bind-Value="context.Item.ConnBase" T="int"
+                                             @bind-Value:after="NotifyChanged"
+                                             Variant="Variant.Text" Margin="Margin.Dense"
+                                             />
+                        </div>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.ConnSlot" Title="Slot" Filterable="false" Sortable="true"
+                            HeaderStyle="width:72px;" CellStyle="width:72px;">
+                <CellTemplate>
+                    @if (ShowAllTypes && !HasVia(context.Item.AssetTypeId))
+                    {
+                        <span class="cell-na">—</span>
+                    }
+                    else
+                    {
+                        <div @onwheel:preventDefault="true">
+                            <MudNumericField @bind-Value="context.Item.ConnSlot" T="int?"
+                                             @bind-Value:after="NotifyChanged"
+                                             Variant="Variant.Text" Margin="Margin.Dense"
+                                             Placeholder="-" />
+                        </div>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+        }
+
+        @if (!ShowVia && !ShowAllTypes && ShowIp)
+        {
+            <PropertyColumn Property="x => x.Ip" Title="IP">
+                <CellTemplate>
+                    <MudTextField @bind-Value="context.Item.Ip" @bind-Value:after="NotifyChanged"
+                                  Variant="Variant.Text" Margin="Margin.Dense"
+                                  Placeholder="-" />
+                </CellTemplate>
+            </PropertyColumn>
+        }
+
+        <PropertyColumn Property="x => x.StationNumber" Title="Station"
+                        Filterable="false" Sortable="true"
+                        HeaderStyle="width:72px;" CellStyle="width:72px;">
+            <CellTemplate>
+                <div @onwheel:preventDefault="true">
+                    <MudNumericField @bind-Value="context.Item.StationNumber" T="int?"
+                                     @bind-Value:after="NotifyChanged"
+                                     Variant="Variant.Text" Margin="Margin.Dense"
+                                     Placeholder="-" />
+                </div>
+            </CellTemplate>
+        </PropertyColumn>
+
+        @if (ShowVersion || ShowAllTypes)
+        {
+            <PropertyColumn Property="x => x.ModelName" Title="모델명">
+                <CellTemplate>
+                    @if (ShowAllTypes && !HasVersion(context.Item.AssetTypeId))
+                    {
+                        <span class="cell-na">—</span>
+                    }
+                    else
+                    {
+                        <MudTextField @bind-Value="context.Item.ModelName" @bind-Value:after="NotifyChanged"
+                                      Variant="Variant.Text" Margin="Margin.Dense"
+                                      Placeholder="-" />
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.ModelVersion" Title="버전">
+                <CellTemplate>
+                    @if (ShowAllTypes && !HasVersion(context.Item.AssetTypeId))
+                    {
+                        <span class="cell-na">—</span>
+                    }
+                    else
+                    {
+                        <MudTextField @bind-Value="context.Item.ModelVersion" @bind-Value:after="NotifyChanged"
+                                      Variant="Variant.Text" Margin="Margin.Dense"
+                                      Placeholder="-" />
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+        }
+
+        @if (ShowRobot || ShowAllTypes)
+        {
+            <TemplateColumn Title="로봇" SortBy="@((AssetEditRow x) => x.ConnIsRobot ?? 0)"
+                            Filterable="false">
+                <CellTemplate>
+                    @if (ShowAllTypes && !HasRobot(context.Item.AssetTypeId))
+                    {
+                        <span class="cell-na">—</span>
+                    }
+                    else
+                    {
+                        var isRobot = context.Item.ConnIsRobot == 1;
+                        <MudCheckBox Value="@isRobot"
+                                     ValueChanged="@(async (bool v) => { context.Item.ConnIsRobot = v ? 1 : null; await NotifyChanged(); })"
+                                     T="bool" Dense="true" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        }
+    </Columns>
+    <PagerContent>
+        <MudDataGridPager T="AssetEditRow" PageSizeOptions="@(new[] { 25, 50, 100 })" />
+    </PagerContent>
+</MudDataGrid>
+
+<style>
+    .cell-na {
+        display: block;
+        text-align: center;
+        opacity: 0.3;
+        font-size: 0.85rem;
+        user-select: none;
+    }
+
+    /* 편집 불가 셀 배경 */
+    td:has(.cell-na) {
+        background: rgba(0, 0, 0, 0.06) !important;
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<AssetEditRow> Rows { get; set; } = [];
+    [Parameter] public bool ShowIp       { get; set; } = true;
+    [Parameter] public bool ShowConn     { get; set; }
+    [Parameter] public bool ShowVia      { get; set; }
+    [Parameter] public bool ShowVersion  { get; set; }
+    [Parameter] public bool ShowRobot    { get; set; }
+    [Parameter] public bool ShowAllTypes { get; set; }
+    [Parameter] public Dictionary<int, string> LineMap { get; set; } = [];
+    [Parameter] public EventCallback OnFieldChanged { get; set; }
+
+    // 자산 유형별 컬럼 적용 여부
+    private static bool HasIp(int t)      => t is 3 or 4 or 5;
+    private static bool HasConn(int t)    => t is 6 or 7;
+    private static bool HasVia(int t)     => t is 4 or 6 or 7;
+    private static bool HasVersion(int t) => t is 4;
+    private static bool HasRobot(int t)   => t is 6;
+
+    private async Task OnLineChanged(AssetEditRow row, int? newLineId)
+    {
+        row.LineId = newLineId;
+        row.LineName = newLineId.HasValue && LineMap.TryGetValue(newLineId.Value, out var name) ? name : "";
+        await NotifyChanged();
+    }
+
+    private string RowStyle(AssetEditRow row, int _) =>
+        row.IsModified ? "background-color: #FFF8E1;" : "";
+
+    private async Task NotifyChanged()
+    {
+        StateHasChanged();
+        await OnFieldChanged.InvokeAsync();
+    }
+}

@@ -1,0 +1,1048 @@
+@page "/"
+@implements IAsyncDisposable
+@inject DashboardService DashboardService
+@inject AssetStatusService AssetStatusService
+@inject DexaNotificationService NotificationService
+@inject IConfiguration Config
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>@(_pageTitle)</PageTitle>
+
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+
+@* ── gridstack 대시보드 ── *@
+<div class="grid-stack">
+
+@* ── KPI 카드 (4열) ── *@
+<div class="grid-stack-item" gs-id="kpi-total" gs-x="0" gs-y="0" gs-w="3" gs-h="2" gs-min-w="3" gs-min-h="2" @key='"kpi-total"'>
+<div class="grid-stack-item-content">
+    <a href="/history?tab=1" class="dash-link">
+    <div class="kpi-card kpi-primary">
+        <div class="kpi-icon kpi-icon-primary">
+            <MudIcon Icon="@Icons.Material.Filled.Dns" />
+        </div>
+        <div class="kpi-body">
+            <span class="kpi-label">전체</span>
+            <div class="kpi-value-row">
+                <span class="kpi-value">@_assetStatuses.Count</span>
+                <span class="kpi-unit">EA</span>
+            </div>
+        </div>
+    </div>
+    </a>
+</div>
+</div>
+
+<div class="grid-stack-item" gs-id="kpi-backed" gs-x="3" gs-y="0" gs-w="3" gs-h="2" gs-min-w="3" gs-min-h="2" @key='"kpi-backed"'>
+<div class="grid-stack-item-content">
+    <a href="/history?tab=1&health=backedup" class="dash-link">
+    <div class="kpi-card kpi-success">
+        <div class="kpi-icon kpi-icon-success">
+            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" />
+        </div>
+        <div class="kpi-body">
+            <span class="kpi-label">백업 갱신</span>
+            <div class="kpi-value-row">
+                <span class="kpi-value">@_statBackedUp</span>
+            </div>
+            <span class="kpi-pct kpi-pct-success">@(_statBackedUpPct)%</span>
+        </div>
+    </div>
+    </a>
+</div>
+</div>
+
+<div class="grid-stack-item" gs-id="kpi-unchanged" gs-x="6" gs-y="0" gs-w="3" gs-h="2" gs-min-w="3" gs-min-h="2" @key='"kpi-unchanged"'>
+<div class="grid-stack-item-content">
+    <a href="/history?tab=1&health=unchanged" class="dash-link">
+    <div class="kpi-card kpi-info">
+        <div class="kpi-icon kpi-icon-info">
+            <MudIcon Icon="@Icons.Material.Filled.RemoveCircleOutline" />
+        </div>
+        <div class="kpi-body">
+            <span class="kpi-label">변경 없음</span>
+            <div class="kpi-value-row">
+                <span class="kpi-value">@_statUnchanged</span>
+            </div>
+            <span class="kpi-pct kpi-pct-info">@(_statUnchangedPct)%</span>
+        </div>
+    </div>
+    </a>
+</div>
+</div>
+
+<div class="grid-stack-item" gs-id="kpi-failed" gs-x="9" gs-y="0" gs-w="3" gs-h="2" gs-min-w="3" gs-min-h="2" @key='"kpi-failed"'>
+<div class="grid-stack-item-content">
+    <a href="/history?tab=1&health=failed" class="dash-link">
+    <div class="kpi-card kpi-error">
+        <div class="kpi-icon kpi-icon-error">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" />
+        </div>
+        <div class="kpi-body">
+            <span class="kpi-label">주의 필요</span>
+            <div class="kpi-value-row">
+                <span class="kpi-value" style="color: var(--mud-palette-error);">@_statFailed</span>
+            </div>
+            <span class="kpi-pct kpi-pct-error">@(_statFailedPct)%</span>
+        </div>
+    </div>
+    </a>
+</div>
+</div>
+
+@* ── 전체 자산 분포도 히트맵 ── *@
+<div class="grid-stack-item" gs-id="heatmap" gs-x="0" gs-y="2" gs-w="9" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"heatmap"'>
+<div class="grid-stack-item-content">
+<MudPaper Class="pa-5" Elevation="2">
+    <div class="panel-header">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem;">
+            전체 자산 분포도
+        </MudText>
+        <div class="legend-area">
+            <div class="legend-group">
+                <span class="legend-label">[백업 기준]</span>
+                <span class="heatmap-legend-item"><span class="heatmap-legend-dot heatmap-legend-glow"     style="background: var(--mud-palette-success);"></span> 백업 갱신</span>
+                <span class="heatmap-legend-item"><span class="heatmap-legend-dot heatmap-legend-slash"    style="background: var(--mud-palette-error);"></span> 작업 실패</span>
+                <span class="heatmap-legend-item"><span class="heatmap-legend-dot"                         style="background: var(--mud-palette-info);"></span> 변경 없음</span>
+                <span class="heatmap-legend-item"><span class="heatmap-legend-dot heatmap-legend-inprogress"></span> 작업중</span>
+            </div>
+            <div class="legend-group">
+                <span class="legend-label">[네트워크]</span>
+                <span class="heatmap-legend-item"><span class="heatmap-legend-dot heatmap-legend-offline"></span> 오프라인</span>
+            </div>
+        </div>
+    </div>
+
+    @if (_heatmapAssets.Count == 0 && !_loading)
+    {
+        <MudText Color="Color.Secondary" Class="pa-4">등록된 자산이 없습니다.</MudText>
+    }
+    else
+    {
+        <div class="heatmap-container">
+            <div class="heatmap-grid">
+                @foreach (var asset in _heatmapAssets)
+                {
+                    var bgClass = GetHeatmapTileClass(asset.Health);
+                    var offlineClass = asset.LatestPing is { Reachable: false } ? "heatmap-tile-offline" : "";
+                    var backupText = GetHealthLabel(asset.Health);
+                    var netText = asset.LatestPing == null ? "핑 미확인" : asset.LatestPing.Reachable ? "온라인" : "오프라인";
+                    <a href="/assets/@asset.AssetId" class="heatmap-tile @bgClass @offlineClass dash-link"
+                       title="@($"[{asset.Name}]\n백업 상태: {backupText}\n네트워크: {netText}")"></a>
+                }
+            </div>
+        </div>
+    }
+</MudPaper>
+</div>
+</div>
+
+@* ── 타입별 현황 ── *@
+<div class="grid-stack-item" gs-id="type-stat" gs-x="9" gs-y="2" gs-w="3" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"type-stat"'>
+<div class="grid-stack-item-content">
+<MudPaper Class="pa-4" Elevation="2">
+    <div class="stat-panel-header" style="flex-shrink:0;">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem; margin-bottom: 12px;">
+            타입별 현황
+        </MudText>
+        @if (_editMode)
+        {
+            <MudToggleIconButton Toggled="@(_typeStatChartType == "donut")"
+                                 ToggledChanged="@(v => OnChartTypeToggle("type-stat", v))"
+                                 Icon="@Icons.Material.Filled.DonutSmall"
+                                 ToggledIcon="@Icons.Material.Filled.BarChart"
+                                 Size="Size.Small"
+                                 ToggledColor="Color.Primary"
+                                 Title="차트 전환" />
+        }
+    </div>
+    @if (_typeStatChartType == "bar")
+    {
+        <div class="type-stat-list">
+            @foreach (var ts in _typeStats)
+            {
+                var total = ts.BackedUp + ts.Unchanged + ts.Failed + ts.InProgress + ts.Unknown;
+                var pctBackedUp = total > 0 ? 100.0 * ts.BackedUp / total : 0;
+                var pctUnchanged = total > 0 ? 100.0 * ts.Unchanged / total : 0;
+                var pctFailed = total > 0 ? 100.0 * ts.Failed / total : 0;
+                var pctInProgress = total > 0 ? 100.0 * ts.InProgress / total : 0;
+                var pctUnknown = total > 0 ? 100.0 * ts.Unknown / total : 0;
+                <div class="type-stat-item">
+                    <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))" class="dash-link type-stat-header">
+                        <span class="type-stat-name">
+                            @{ var tsIcon = GetTypeStatIcon(ts.TypeName); }
+                            @if (!string.IsNullOrEmpty(tsIcon))
+                            {
+                                <img src="@tsIcon" class="asset-type-icon-sm" style="vertical-align:middle; margin-right:4px;" />
+                            }
+                            @ts.TypeName
+                        </span>
+                        <span class="type-stat-count">@total</span>
+                    </a>
+                    <div class="neu-bar-track type-stat-bar">
+                        @if (pctBackedUp > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=backedup" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctBackedUp.ToString("F1"))%;background:var(--mud-palette-success);" data-name="@ts.TypeName" data-status="백업갱신" data-value="@ts.BackedUp" data-total="@total">@(pctBackedUp >= 15 ? $"{pctBackedUp:F0}%" : "")</a> }
+                        @if (pctUnchanged > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=unchanged" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnchanged.ToString("F1"))%;background:var(--mud-palette-info);" data-name="@ts.TypeName" data-status="변경없음" data-value="@ts.Unchanged" data-total="@total">@(pctUnchanged >= 15 ? $"{pctUnchanged:F0}%" : "")</a> }
+                        @if (pctFailed > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=failed" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctFailed.ToString("F1"))%;background:var(--mud-palette-error);" data-name="@ts.TypeName" data-status="실패" data-value="@ts.Failed" data-total="@total">@(pctFailed >= 15 ? $"{pctFailed:F0}%" : "")</a> }
+                        @if (pctInProgress > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=inprogress" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctInProgress.ToString("F1"))%;background:var(--mud-palette-warning);" data-name="@ts.TypeName" data-status="작업중" data-value="@ts.InProgress" data-total="@total">@(pctInProgress >= 15 ? $"{pctInProgress:F0}%" : "")</a> }
+                        @if (pctUnknown > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=unknown" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnknown.ToString("F1"))%;background:var(--mud-palette-text-disabled);" data-name="@ts.TypeName" data-status="내역없음" data-value="@ts.Unknown" data-total="@total">@(pctUnknown >= 15 ? $"{pctUnknown:F0}%" : "")</a> }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div id="type-stat-donut" class="stat-donut-container"></div>
+    }
+</MudPaper>
+</div>
+</div>
+
+@* ── 주의 필요 및 오프라인 자산 ── *@
+<div class="grid-stack-item" gs-id="attention" gs-x="0" gs-y="8" gs-w="6" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"attention"'>
+<div class="grid-stack-item-content">
+    <MudPaper Class="pa-5" Elevation="2">
+        <div class="panel-header" style="flex-shrink:0;">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem;">
+                주의 필요 및 오프라인 자산
+            </MudText>
+        </div>
+        @{
+            var attentionAssets = _assetStatuses
+                .Where(a => a.ConsecutiveFailureCount >= 3 || a.LatestPing is { Reachable: false })
+                .OrderByDescending(a => a.Health == AssetHealthStatus.Failed ? 1 : 0)
+                .ThenByDescending(a => a.ConsecutiveFailureCount)
+                .ThenBy(a => a.LatestPing?.Reachable == true ? 1 : 0)
+                .Take(10)
+                .ToList();
+        }
+        @if (attentionAssets.Count == 0)
+        {
+            <MudAlert Severity="Severity.Success" Dense="true">모든 자산이 정상입니다.</MudAlert>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Style="flex:1;min-height:0;overflow-y:auto;">
+                <thead>
+                    <tr>
+                        <th>자산명</th>
+                        <th>타입</th>
+                        <th>백업 상태</th>
+                        <th>네트워크</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var asset in attentionAssets)
+                    {
+                        <tr>
+                            <td><a href="/assets/@asset.AssetId" class="dash-link-row"><strong>@asset.Name</strong></a></td>
+                            <td>@(asset.AssetTypeName ?? "-")</td>
+                            <td>
+                                @switch (asset.Health)
+                                {
+                                    case AssetHealthStatus.Failed:
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">작업 실패</MudChip>
+                                        break;
+                                    case AssetHealthStatus.BackedUp:
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">백업 갱신</MudChip>
+                                        break;
+                                    case AssetHealthStatus.Unchanged:
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">변경 없음</MudChip>
+                                        break;
+                                    case AssetHealthStatus.InProgress:
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">작업중</MudChip>
+                                        break;
+                                    default:
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">내역 없음</MudChip>
+                                        break;
+                                }
+                            </td>
+                            <td>
+                                @if (asset.LatestPing is { Reachable: true })
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">온라인</MudChip>
+                                }
+                                else if (asset.LatestPing is { Reachable: false })
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">오프라인</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">-</MudChip>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+</div>
+</div>
+
+@* ── 최근 백업 갱신 활동 ── *@
+<div class="grid-stack-item" gs-id="activities" gs-x="6" gs-y="8" gs-w="3" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"activities"'>
+<div class="grid-stack-item-content">
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem; margin-bottom: 8px; flex-shrink: 0;">
+            최근 백업 갱신 활동
+        </MudText>
+        @if (_recentActivities.Count == 0)
+        {
+            <MudText Color="Color.Secondary">활동 이력이 없습니다.</MudText>
+        }
+        else
+        {
+            <div class="activity-list">
+                @foreach (var activity in _recentActivities.Take(5))
+                {
+                    <a href="@(activity.AssetId.HasValue ? $"/assets/{activity.AssetId.Value}" : null)" class="dash-link activity-item">
+                        <div class="activity-icon @(activity.Success == true ? "activity-icon-success" : activity.Success == false ? "activity-icon-error" : "activity-icon-inprogress")">
+                            @if (activity.Success == true)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                            }
+                            else if (activity.Success == false)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Size="Size.Small" />
+                            }
+                        </div>
+                        <div class="activity-content">
+                            <div class="activity-title">@(activity.AssetName ?? "-") @activity.Action</div>
+                            <div class="activity-time">@activity.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                        </div>
+                    </a>
+                }
+            </div>
+        }
+    </MudPaper>
+</div>
+</div>
+
+@* ── 라인별 현황 ── *@
+<div class="grid-stack-item" gs-id="line-stat" gs-x="9" gs-y="8" gs-w="3" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"line-stat"'>
+<div class="grid-stack-item-content">
+    <MudPaper Class="pa-4" Elevation="2">
+        <div class="stat-panel-header" style="flex-shrink:0;">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem; margin-bottom: 12px;">
+                라인별 현황
+            </MudText>
+            @if (_editMode)
+            {
+                <MudToggleIconButton Toggled="@(_lineStatChartType == "donut")"
+                                     ToggledChanged="@(v => OnChartTypeToggle("line-stat", v))"
+                                     Icon="@Icons.Material.Filled.DonutSmall"
+                                     ToggledIcon="@Icons.Material.Filled.BarChart"
+                                     Size="Size.Small"
+                                     ToggledColor="Color.Primary"
+                                     Title="차트 전환" />
+            }
+        </div>
+        @if (_lineStatChartType == "bar")
+        {
+            <div class="type-stat-list">
+                @foreach (var ls in _lineStats)
+                {
+                    var total = ls.BackedUp + ls.Unchanged + ls.Failed + ls.InProgress + ls.Unknown;
+                    var pctBackedUp = total > 0 ? 100.0 * ls.BackedUp / total : 0;
+                    var pctUnchanged = total > 0 ? 100.0 * ls.Unchanged / total : 0;
+                    var pctFailed = total > 0 ? 100.0 * ls.Failed / total : 0;
+                    var pctInProgress = total > 0 ? 100.0 * ls.InProgress / total : 0;
+                    var pctUnknown = total > 0 ? 100.0 * ls.Unknown / total : 0;
+                    <div class="type-stat-item">
+                        <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))" class="dash-link type-stat-header">
+                            <span class="type-stat-name">@ls.TypeName</span>
+                            <span class="type-stat-count">@total</span>
+                        </a>
+                        <div class="neu-bar-track type-stat-bar">
+                            @if (pctBackedUp > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=backedup" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctBackedUp.ToString("F1"))%;background:var(--mud-palette-success);" data-name="@ls.TypeName" data-status="백업갱신" data-value="@ls.BackedUp" data-total="@total">@(pctBackedUp >= 15 ? $"{pctBackedUp:F0}%" : "")</a> }
+                            @if (pctUnchanged > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=unchanged" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnchanged.ToString("F1"))%;background:var(--mud-palette-info);" data-name="@ls.TypeName" data-status="변경없음" data-value="@ls.Unchanged" data-total="@total">@(pctUnchanged >= 15 ? $"{pctUnchanged:F0}%" : "")</a> }
+                            @if (pctFailed > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=failed" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctFailed.ToString("F1"))%;background:var(--mud-palette-error);" data-name="@ls.TypeName" data-status="실패" data-value="@ls.Failed" data-total="@total">@(pctFailed >= 15 ? $"{pctFailed:F0}%" : "")</a> }
+                            @if (pctInProgress > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=inprogress" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctInProgress.ToString("F1"))%;background:var(--mud-palette-warning);" data-name="@ls.TypeName" data-status="작업중" data-value="@ls.InProgress" data-total="@total">@(pctInProgress >= 15 ? $"{pctInProgress:F0}%" : "")</a> }
+                            @if (pctUnknown > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=unknown" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnknown.ToString("F1"))%;background:var(--mud-palette-text-disabled);" data-name="@ls.TypeName" data-status="내역없음" data-value="@ls.Unknown" data-total="@total">@(pctUnknown >= 15 ? $"{pctUnknown:F0}%" : "")</a> }
+                        </div>
+                    </div>
+                }
+                @if (_lineStats.Count == 0)
+                {
+                    <MudText Color="Color.Secondary" Typo="Typo.body2">라인 데이터가 없습니다.</MudText>
+                }
+            </div>
+        }
+        else
+        {
+            <div id="line-stat-donut" class="stat-donut-container"></div>
+        }
+    </MudPaper>
+</div>
+</div>
+
+@* ── 작업 현황 타임라인 ── *@
+<div class="grid-stack-item" gs-id="timeline" gs-x="0" gs-y="14" gs-w="12" gs-h="2" gs-min-w="3" gs-min-h="2" @key='"timeline"'>
+<div class="grid-stack-item-content">
+<MudPaper Class="pa-3" Elevation="2">
+    <div class="panel-header" style="margin-bottom: 4px;">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem;">
+            작업 현황
+        </MudText>
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:var(--mud-palette-success);"></span> 성공</span>
+            <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:var(--mud-palette-error);"></span> 실패</span>
+            <span class="schedule-legend-item"><span class="schedule-legend-dot schedule-legend-inprogress"></span> 진행중</span>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@DateTime.Today.ToString("yyyy-MM-dd")</MudText>
+        </div>
+    </div>
+
+    @if (_todaySchedule.Count == 0 && !_loading)
+    {
+        <MudText Color="Color.Secondary" Class="pa-2">오늘 백업 이력이 없습니다.</MudText>
+    }
+    else
+    {
+        <div class="schedule-timeline">
+            @* 시간 눈금 (동적 범위: 최초 백업 -1h ~ 마지막 작업 +1h) *@
+            <div class="schedule-ruler-track" style="width:100%;margin-bottom:2px;">
+                @for (var m = _axisStartMinutes; m <= _axisEndMinutes; m += TickMin)
+                {
+                    var mm = m;
+                    var label = mm % 60 == 0 ? $"{mm / 60:D2}" : $"{mm / 60:D2}:30";
+                    <span class="schedule-hour-tick" style="left:@(Pct((double)(mm - _axisStartMinutes) / AxisRange * 100))%">@label</span>
+                }
+            </div>
+
+            @* 통합 트랙 — 레인 배정으로 겹침 방지 *@
+            <div class="schedule-track" style="height:@(TrackHeight)px;">
+                <div class="schedule-now-line" style="left:@(Pct(_nowPct))%"></div>
+                @foreach (var bar in _bars)
+                {
+                    var zIdx = bar.CssClass.Contains("failed") ? 3 : bar.CssClass.Contains("inprogress") ? 2 : 1;
+                    var topPx = 2 + bar.Lane * BarStride;
+                    <a href="/assets/@bar.AssetId" class="schedule-bar @bar.CssClass dash-link"
+                       style="left:@(Pct(bar.LeftPct))%;width:@(Pct(bar.WidthPct))%;z-index:@zIdx;top:@(topPx)px;height:@(BarHeight)px;"
+                       title="@bar.Tooltip"></a>
+                }
+            </div>
+        </div>
+    }
+</MudPaper>
+</div>
+</div>
+
+@* ── DEXA DB 드라이브 용량 ── *@
+<div class="grid-stack-item" gs-id="drive" gs-x="0" gs-y="16" gs-w="12" gs-h="2" gs-min-w="3" gs-min-h="2" @key='"drive"'>
+<div class="grid-stack-item-content">
+<MudPaper Class="pa-4" Elevation="2">
+    <div class="panel-header" style="margin-bottom: 12px; flex-shrink: 0;">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem;">
+            DEXA DB 드라이브 용량
+        </MudText>
+    </div>
+
+    @if (_driveStat == null && !_loading)
+    {
+        <MudText Color="Color.Secondary">드라이브 정보를 가져올 수 없습니다.</MudText>
+    }
+    else if (_driveStat != null)
+    {
+        var usedClass = _driveStat.UsedPct >= 90 ? "drive-bar-danger"
+                      : _driveStat.UsedPct >= 75 ? "drive-bar-warning"
+                      : "drive-bar-ok";
+        <div class="drive-stat-bars">
+            <div class="neu-bar-track drive-bar-track">
+                <div class="neu-bar-fill drive-bar-used @usedClass"
+                     style="width:@(Pct(_driveStat.UsedPct))%"
+                     title="사용: @FmtGB(_driveStat.UsedBytes) / 전체: @FmtGB(_driveStat.TotalBytes)">@(_driveStat.UsedPct >= 8 ? $"{_driveStat.UsedPct:F1}%" : "")</div>
+            </div>
+            <div class="drive-stat-numbers">
+                <span>사용 <strong>@FmtGB(_driveStat.UsedBytes)</strong></span>
+                <span>여유 <strong>@FmtGB(_driveStat.FreeBytes)</strong></span>
+                <span>전체 <strong>@FmtGB(_driveStat.TotalBytes)</strong></span>
+            </div>
+        </div>
+    }
+</MudPaper>
+</div>
+</div>
+
+</div>@* /grid-stack *@
+
+@* ── 대시보드 하단 푸터 ── *@
+<div class="dashboard-footer">
+    <span class="dashboard-footer-title">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Size="Size.Small" Class="mr-1"
+                 Style="vertical-align: middle; opacity: 0.5;" />
+        대시보드 레이아웃
+    </span>
+    <div class="dashboard-footer-actions">
+        @if (_layoutSaving)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Style="width:20px;height:20px;" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">저장 중...</MudText>
+        }
+        else if (_editMode)
+        {
+            <MudButton StartIcon="@Icons.Material.Filled.RestartAlt"
+                       Color="Color.Warning"
+                       Variant="Variant.Outlined"
+                       Size="Size.Small"
+                       OnClick="ResetToDefault">초기화</MudButton>
+            <MudButton StartIcon="@Icons.Material.Filled.Undo"
+                       Color="Color.Default"
+                       Variant="Variant.Outlined"
+                       Size="Size.Small"
+                       Class="ml-2"
+                       OnClick="UndoLayout">되돌리기</MudButton>
+            <MudButton StartIcon="@Icons.Material.Filled.Done"
+                       Color="Color.Success"
+                       Variant="Variant.Filled"
+                       Size="Size.Small"
+                       Class="ml-2"
+                       OnClick="ApplyLayout">적용</MudButton>
+        }
+        else
+        {
+            <MudButton StartIcon="@Icons.Material.Filled.Edit"
+                       Color="Color.Primary"
+                       Variant="Variant.Outlined"
+                       Size="Size.Small"
+                       OnClick="ToggleEditMode">레이아웃 편집</MudButton>
+        }
+    </div>
+</div>
+
+@code {
+    private bool _loading;
+    private string _pageTitle => $"{Config["App:Title"] ?? "TWM"} - 대시보드";
+    private List<AssetStatusInfo> _assetStatuses = [];
+    private List<AssetStatusInfo> _heatmapAssets = [];
+    private List<RecentActivity> _recentActivities = [];
+    private List<TypeStat> _typeStats = [];
+    private List<TypeStat> _lineStats = [];
+
+    // 타임라인
+    private List<ScheduleEntry> _todaySchedule = [];
+    private int _axisStartMinutes;
+    private int _axisEndMinutes = 1440;
+    private int AxisRange => _axisEndMinutes - _axisStartMinutes;
+    private double _nowPct;
+    private List<BarInfo> _bars = [];
+    private int _laneCount = 1;
+
+    // 드라이브 용량
+    private DriveStat? _driveStat;
+
+    // 날짜 변경 감지 + 타이머
+    private PeriodicTimer? _periodicTimer;
+    private DateOnly _lastRefreshDate;
+
+    // 레이아웃 커스터마이징
+    private bool _editMode;
+    private bool _layoutSaving;
+    private string _layoutKey = "twm.layout.guest";
+
+    // 차트 타입 (bar / donut)
+    private string _typeStatChartType = "bar";
+    private string _lineStatChartType = "donut";
+    private bool _chartReady;
+
+    [CascadingParameter(Name = "IsDarkMode")]
+    private bool IsDarkMode { get; set; }
+    private bool _prevDarkMode;
+
+    // 통계
+    private int _statBackedUp;
+    private int _statUnchanged;
+    private int _statFailed;
+    private int _statUnknown;
+    private double _statBackedUpPct;
+    private double _statUnchangedPct;
+    private double _statFailedPct;
+    private double _statUnknownPct;
+
+    protected override async Task OnInitializedAsync()
+    {
+        NotificationService.OnDatabaseChanged += HandleDatabaseChanged;
+        await RefreshAll();
+        _ = StartPeriodicTimerAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = auth.User.Identity?.Name ?? "guest";
+            _layoutKey = $"twm.layout.{user}";
+            _prevDarkMode = IsDarkMode;
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("dashboardLayout.ensure", _layoutKey, _editMode);
+        }
+        catch { }
+
+        // Fit heatmap tiles dynamically (every render — tile count may change)
+        try { await JS.InvokeVoidAsync("heatmapFit.init"); } catch { }
+
+        if (firstRender)
+        {
+            _chartReady = true;
+            try
+            {
+                await JS.InvokeVoidAsync("barTooltip.init", IsDarkMode);
+            }
+            catch { }
+            try
+            {
+                var prefs = await JS.InvokeAsync<Dictionary<string, string>>("dashboardLayout.getPrefs");
+                if (prefs != null)
+                {
+                    _typeStatChartType = prefs.GetValueOrDefault("type-stat", "bar");
+                    _lineStatChartType = prefs.GetValueOrDefault("line-stat", "donut");
+                    StateHasChanged();
+                    await Task.Delay(50);
+                    await RenderDonutChartsIfNeeded();
+                }
+            }
+            catch { }
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_chartReady && IsDarkMode != _prevDarkMode)
+        {
+            _prevDarkMode = IsDarkMode;
+            try { await JS.InvokeVoidAsync("barTooltip.updateTheme", IsDarkMode); } catch { }
+            await RenderDonutChartsIfNeeded();
+        }
+    }
+
+    private async Task ToggleEditMode()
+    {
+        _editMode = !_editMode;
+        await JS.InvokeVoidAsync("dashboardLayout.setEditMode", _editMode);
+    }
+
+    private async Task ApplyLayout()
+    {
+        _layoutSaving = true;
+        StateHasChanged();
+        await Task.Delay(50); // UI 갱신 대기
+        await JS.InvokeVoidAsync("dashboardLayout.setEditMode", false);
+        _editMode = false;
+        _layoutSaving = false;
+    }
+
+    private async Task UndoLayout()
+    {
+        await JS.InvokeVoidAsync("dashboardLayout.undoChanges");
+        try
+        {
+            var prefs = await JS.InvokeAsync<Dictionary<string, string>>("dashboardLayout.getPrefs");
+            if (prefs != null)
+            {
+                _typeStatChartType = prefs.GetValueOrDefault("type-stat", "bar");
+                _lineStatChartType = prefs.GetValueOrDefault("line-stat", "donut");
+                StateHasChanged();
+                await Task.Delay(50);
+                await RenderDonutChartsIfNeeded();
+            }
+        }
+        catch { }
+    }
+
+    private async Task ResetToDefault()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("statDonutChart.dispose", "type-stat-donut");
+            await JS.InvokeVoidAsync("statDonutChart.dispose", "line-stat-donut");
+        }
+        catch { }
+
+        await JS.InvokeVoidAsync("dashboardLayout.resetToDefault");
+        _typeStatChartType = "bar";
+        _lineStatChartType = "donut";
+        StateHasChanged();
+        await Task.Delay(50);
+        await RenderDonutChartsIfNeeded();
+    }
+
+    private async Task StartPeriodicTimerAsync()
+    {
+        _periodicTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        while (await _periodicTimer.WaitForNextTickAsync())
+        {
+            await InvokeAsync(async () =>
+            {
+                if (DateOnly.FromDateTime(DateTime.Today) != _lastRefreshDate)
+                    await RefreshAll();
+                else
+                {
+                    var nowMin = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
+                    _nowPct = AxisRange > 0 ? Math.Clamp(((double)nowMin - _axisStartMinutes) / AxisRange * 100, 0, 100) : 0;
+                    RebuildBars();
+                    StateHasChanged();
+                }
+            });
+        }
+    }
+
+    private async void HandleDatabaseChanged(string tableName)
+    {
+        if (tableName is "action" or "actionlog" or "asset" or "agent" or "*")
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshAll();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        NotificationService.OnDatabaseChanged -= HandleDatabaseChanged;
+        _periodicTimer?.Dispose();
+        try
+        {
+            await JS.InvokeVoidAsync("heatmapFit.dispose");
+            await JS.InvokeVoidAsync("barTooltip.dispose");
+            await JS.InvokeVoidAsync("statDonutChart.dispose", "type-stat-donut");
+            await JS.InvokeVoidAsync("statDonutChart.dispose", "line-stat-donut");
+            await JS.InvokeVoidAsync("dashboardLayout.destroy");
+        }
+        catch { }
+    }
+
+    private async Task RefreshAll()
+    {
+        _loading = true;
+        try
+        {
+            var coreTask = DashboardService.GetDashboardCoreAsync();
+            var statusTask = AssetStatusService.GetAssetStatusesAsync();
+            await Task.WhenAll(coreTask, statusTask);
+
+            _recentActivities = coreTask.Result.RecentActivities;
+            _assetStatuses = statusTask.Result;
+
+            // 타임라인 (축 범위: 최초 백업 -1h ~ 마지막 작업 +1h)
+            _todaySchedule = coreTask.Result.TodaySchedule;
+            if (_todaySchedule.Count > 0)
+            {
+                var earliestMin = _todaySchedule.Min(e => e.Started.Hour * 60 + e.Started.Minute);
+                _axisStartMinutes = Math.Max(0, (earliestMin / 60 - 1) * 60);
+                var lastMin = _todaySchedule.Max(e =>
+                {
+                    var ed = e.Finished ?? (e.InProgress ? DateTime.Now : e.Started.AddMinutes(5));
+                    return ed.Hour * 60 + ed.Minute;
+                });
+                var nowMin = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
+                _axisEndMinutes = Math.Min(Math.Max(Math.Max(lastMin, nowMin) + 60, _axisStartMinutes + 120), 1440);
+            }
+            else
+            {
+                _axisStartMinutes = 0;
+                _axisEndMinutes = 1440;
+            }
+            {
+                var nowMin = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
+                _nowPct = AxisRange > 0 ? Math.Clamp(((double)nowMin - _axisStartMinutes) / AxisRange * 100, 0, 100) : 0;
+            }
+            RebuildBars();
+            _driveStat = coreTask.Result.Drive;
+
+            // 통계 계산
+            var total = _assetStatuses.Count;
+            var backupSuccessCount = _assetStatuses.Count(s => s.LastBackupSucceeded);
+            var changedCount = _assetStatuses.Count(s => s.LastBackupChanged == true);
+            var noBackup = _assetStatuses.Count(s => s.LastBackupTime == null);
+            var failed = total - backupSuccessCount - noBackup;
+            var unchanged = backupSuccessCount - changedCount;
+
+            _statBackedUp = changedCount;
+            _statUnchanged = unchanged;
+            _statFailed = failed;
+            _statUnknown = noBackup;
+            _statBackedUpPct = total > 0 ? Math.Round(100.0 * _statBackedUp / total, 1) : 0;
+            _statUnchangedPct = total > 0 ? Math.Round(100.0 * _statUnchanged / total, 1) : 0;
+            _statFailedPct = total > 0 ? Math.Round(100.0 * _statFailed / total, 1) : 0;
+            _statUnknownPct = total > 0 ? Math.Round(100.0 * _statUnknown / total, 1) : 0;
+
+            // 히트맵: 백업상태별 → 온/오프라인별 → 이름순
+            _heatmapAssets = _assetStatuses
+                .OrderBy(a => a.Health switch
+                {
+                    AssetHealthStatus.BackedUp => 0,
+                    AssetHealthStatus.InProgress => 1,
+                    AssetHealthStatus.Failed => 2,
+                    AssetHealthStatus.Unknown => 3,
+                    AssetHealthStatus.Unchanged => 4,
+                    _ => 5,
+                })
+                .ThenBy(a => a.LatestPing is { Reachable: false } ? 1 : 0)
+                .ThenBy(a => a.Name)
+                .ToList();
+
+            // 타입별 통계 (LS XGT PLC 중 AugIsRobotPLC=1 → "Robot PLC" 분리)
+            _typeStats = _assetStatuses
+                .GroupBy(a => a.AugIsRobotPLC == 1 ? "Robot PLC" : a.AssetTypeName ?? "기타")
+                .Select(g => new TypeStat
+                {
+                    TypeName = g.Key,
+                    BackedUp = g.Count(a => a.Health == AssetHealthStatus.BackedUp),
+                    Unchanged = g.Count(a => a.Health == AssetHealthStatus.Unchanged),
+                    Failed = g.Count(a => a.Health == AssetHealthStatus.Failed),
+                    InProgress = g.Count(a => a.Health == AssetHealthStatus.InProgress),
+                    Unknown = g.Count(a => a.Health == AssetHealthStatus.Unknown),
+                })
+                .OrderByDescending(t => t.BackedUp + t.Unchanged + t.Failed + t.InProgress + t.Unknown)
+                .ToList();
+
+            // 라인별 통계
+            _lineStats = _assetStatuses
+                .GroupBy(a => a.LayoutLineName ?? "라인없음")
+                .Select(g => new TypeStat
+                {
+                    TypeName = g.Key,
+                    BackedUp = g.Count(a => a.Health == AssetHealthStatus.BackedUp),
+                    Unchanged = g.Count(a => a.Health == AssetHealthStatus.Unchanged),
+                    Failed = g.Count(a => a.Health == AssetHealthStatus.Failed),
+                    InProgress = g.Count(a => a.Health == AssetHealthStatus.InProgress),
+                    Unknown = g.Count(a => a.Health == AssetHealthStatus.Unknown),
+                })
+                .OrderByDescending(t => t.TypeName == "라인없음" ? -1 : t.BackedUp + t.Unchanged + t.Failed + t.InProgress + t.Unknown)
+                .ToList();
+
+            _lastRefreshDate = DateOnly.FromDateTime(DateTime.Today);
+
+            if (_chartReady)
+                await RenderDonutChartsIfNeeded();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnChartTypeToggle(string panelId, bool toDonut)
+    {
+        var newType = toDonut ? "donut" : "bar";
+        if (panelId == "type-stat") _typeStatChartType = newType;
+        else if (panelId == "line-stat") _lineStatChartType = newType;
+
+        await JS.InvokeVoidAsync("dashboardLayout.setChartPref", panelId, newType);
+        StateHasChanged();
+        await Task.Delay(50);
+        await RenderDonutChartsIfNeeded();
+    }
+
+    private async Task RenderDonutChartsIfNeeded()
+    {
+        if (!_chartReady) return;
+        try
+        {
+            if (_typeStatChartType == "donut" && _typeStats.Count > 0)
+            {
+                var data = _typeStats.Select(ts => new
+                {
+                    name = ts.TypeName,
+                    backedUp = ts.BackedUp,
+                    unchanged = ts.Unchanged,
+                    failed = ts.Failed,
+                    inProgress = ts.InProgress,
+                    unknown = ts.Unknown
+                }).ToArray();
+                await JS.InvokeVoidAsync("statDonutChart.update", "type-stat-donut", data, IsDarkMode, "type");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("statDonutChart.dispose", "type-stat-donut");
+            }
+
+            if (_lineStatChartType == "donut" && _lineStats.Count > 0)
+            {
+                var data = _lineStats.Select(ls => new
+                {
+                    name = ls.TypeName,
+                    backedUp = ls.BackedUp,
+                    unchanged = ls.Unchanged,
+                    failed = ls.Failed,
+                    inProgress = ls.InProgress,
+                    unknown = ls.Unknown
+                }).ToArray();
+                await JS.InvokeVoidAsync("statDonutChart.update", "line-stat-donut", data, IsDarkMode, "line");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("statDonutChart.dispose", "line-stat-donut");
+            }
+        }
+        catch { }
+    }
+
+    // 타임라인 눈금 간격 (axisMinutes에 따라 자동 결정)
+    private int TickMin => AxisRange <= 180 ? 30 : AxisRange <= 480 ? 60 : 120;
+
+    private static string Pct(double v) =>
+        v.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string FmtGB(long bytes)
+    {
+        var gb = bytes / 1_000_000_000.0;
+        return gb >= 1 ? $"{gb:F1} GB" : $"{bytes / 1_000_000.0:F0} MB";
+    }
+
+    private static string GetTypeStatIcon(string typeName) =>
+        typeName switch
+        {
+            var n when n.Contains("Robot", StringComparison.OrdinalIgnoreCase)
+                => "images/icons/robot.png",
+            var n when n.Contains("Servo", StringComparison.OrdinalIgnoreCase)
+                => "images/icons/servo.png",
+            var n when n.Contains("PLC", StringComparison.OrdinalIgnoreCase)
+                => "images/icons/plc.png",
+            var n when n.Contains("Drive", StringComparison.OrdinalIgnoreCase)
+                => "images/icons/drive.png",
+            var n when n.Contains("XP", StringComparison.OrdinalIgnoreCase)
+                || n.Contains("HMI", StringComparison.OrdinalIgnoreCase)
+                => "images/icons/hmi.png",
+            var n when n.Contains("FTP", StringComparison.OrdinalIgnoreCase)
+                => "images/icons/ftp.png",
+            _ => "",
+        };
+
+    private static string GetHeatmapTileClass(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp => "heatmap-tile-success",
+        AssetHealthStatus.Unchanged => "heatmap-tile-info",
+        AssetHealthStatus.Failed => "heatmap-tile-error",
+        AssetHealthStatus.InProgress => "heatmap-tile-inprogress",
+        _ => "heatmap-tile-warning",
+    };
+
+    private static string GetHealthLabel(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp => "백업 갱신",
+        AssetHealthStatus.Unchanged => "변경 없음",
+        AssetHealthStatus.Failed => "작업 실패",
+        AssetHealthStatus.InProgress => "작업중",
+        _ => "내역 없음",
+    };
+
+    private sealed class TypeStat
+    {
+        public string TypeName { get; init; } = "";
+        public int BackedUp { get; init; }
+        public int Unchanged { get; init; }
+        public int Failed { get; init; }
+        public int InProgress { get; init; }
+        public int Unknown { get; init; }
+    }
+
+    // ── 타임라인 바 레인 레이아웃 ──
+    private int BarStride => _laneCount switch { <= 1 => 20, 2 => 12, 3 => 8, _ => 7 };
+    private int BarHeight => _laneCount switch { <= 1 => 18, 2 => 10, 3 => 6, _ => 5 };
+    private int TrackHeight => Math.Max(24, _laneCount * BarStride + 4);
+
+    private void RebuildBars()
+    {
+        _bars = BuildBars();
+        _laneCount = _bars.Count > 0 ? _bars.Max(b => b.Lane) + 1 : 1;
+    }
+
+    private List<BarInfo> BuildBars()
+    {
+        if (_todaySchedule.Count == 0 || AxisRange <= 0) return [];
+
+        var bars = new List<BarInfo>();
+        foreach (var entry in _todaySchedule)
+        {
+            var startMin = entry.Started.Hour * 60 + entry.Started.Minute;
+            DateTime endDt;
+            string endStr, prefix, cssClass;
+
+            if (entry.InProgress)
+            {
+                endDt = DateTime.Now;
+                endStr = "진행중";
+                prefix = "진행중";
+                cssClass = "schedule-bar-inprogress";
+            }
+            else if (entry.Success == true)
+            {
+                endDt = entry.Finished!.Value;
+                endStr = endDt.ToString("HH:mm");
+                prefix = "성공";
+                cssClass = "schedule-bar-success";
+            }
+            else
+            {
+                endDt = entry.Finished ?? entry.Started.AddMinutes(5);
+                endStr = entry.Finished?.ToString("HH:mm") ?? "미완료";
+                prefix = "실패";
+                cssClass = "schedule-bar-failed";
+            }
+
+            var endMin = endDt.Hour * 60 + endDt.Minute;
+            var leftPct = Math.Max(0, ((double)startMin - _axisStartMinutes) / AxisRange * 100);
+            var rightPct = Math.Min(100, ((double)endMin - _axisStartMinutes) / AxisRange * 100);
+            var widthPct = Math.Max(rightPct - leftPct, 0.3);
+
+            bars.Add(new BarInfo
+            {
+                AssetId = entry.AssetId,
+                LeftPct = leftPct,
+                WidthPct = widthPct,
+                CssClass = cssClass,
+                Tooltip = $"[{prefix}] {entry.AssetName}: {entry.Started:HH:mm}~{endStr}",
+            });
+        }
+
+        // 시작 위치순 정렬 후 레인 배정 (겹침 방지)
+        bars.Sort((a, b) => a.LeftPct.CompareTo(b.LeftPct));
+        var laneEnds = new List<double>();
+        foreach (var bar in bars)
+        {
+            var assigned = false;
+            for (int i = 0; i < laneEnds.Count; i++)
+            {
+                if (bar.LeftPct >= laneEnds[i])
+                {
+                    bar.Lane = i;
+                    laneEnds[i] = bar.LeftPct + bar.WidthPct;
+                    assigned = true;
+                    break;
+                }
+            }
+            if (!assigned)
+            {
+                bar.Lane = laneEnds.Count;
+                laneEnds.Add(bar.LeftPct + bar.WidthPct);
+            }
+        }
+
+        return bars;
+    }
+
+    private sealed class BarInfo
+    {
+        public int AssetId { get; set; }
+        public double LeftPct { get; set; }
+        public double WidthPct { get; set; }
+        public int Lane { get; set; }
+        public string CssClass { get; init; } = "";
+        public string Tooltip { get; init; } = "";
+    }
+}

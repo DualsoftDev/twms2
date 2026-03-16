@@ -1,0 +1,60 @@
+@page "/admin/users"
+@inject UserService UserService
+@inject ISnackbar Snackbar
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>TWM - 사용자 관리</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">사용자 관리</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h6">사용자 목록</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="LoadUsers" Disabled="_loading">
+            새로고침
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudDataGrid Items="_users" Dense="true" Hover="true" Bordered="true">
+            <Columns>
+                <PropertyColumn Property="x => x.Id" Title="ID" />
+                <PropertyColumn Property="x => x.Name" Title="이름" />
+                <TemplateColumn Title="관리자">
+                    <CellTemplate>
+                        @if (context.Item.Admin)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Primary" />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="x => x.AugRoles" Title="역할" />
+            </Columns>
+        </MudDataGrid>
+    }
+</MudPaper>
+
+@code {
+    private List<User> _users = [];
+    private bool _loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        _loading = true;
+        _users = await UserService.GetUsersAsync();
+        _loading = false;
+    }
+}

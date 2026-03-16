@@ -1,0 +1,15 @@
+@page "/settings"
+
+<PageTitle>설정</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-6" Style="font-weight: 700;">종합설비관리 설정</MudText>
+
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true"
+         PanelClass="pt-6" Border="true">
+    <MudTabPanel Text="일반" Icon="@Icons.Material.Filled.Settings">
+        <SettingsGeneral />
+    </MudTabPanel>
+    <MudTabPanel Text="라인 관리" Icon="@Icons.Material.Filled.LinearScale">
+        <SettingsLines />
+    </MudTabPanel>
+</MudTabs>

@@ -1,0 +1,230 @@
+@page "/admin/database"
+@using DexaWeb.Server.Models.Twm
+@using DexaWeb.Server.Services
+@inject TwmDbService TwmDb
+@inject DexaFileImportService ImportService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject IWebHostEnvironment WebHostEnv
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>TWM - DB 관리</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">TWM 데이터베이스 관리</MudText>
+
+@* DB 통계 카드 *@
+<MudGrid Class="mb-4">
+    <MudItem xs="6" sm="4">
+        <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="1">
+            <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.h5" Class="mt-2">V@(_stats?.SchemaVersion)</MudText>
+            <MudText Typo="Typo.caption">스키마 버전</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="4">
+        <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="1">
+            <MudIcon Icon="@Icons.Material.Filled.Extension" Color="Color.Info" Size="Size.Large" />
+            <MudText Typo="Typo.h5" Class="mt-2">@(_stats?.AssetAugCount ?? 0)</MudText>
+            <MudText Typo="Typo.caption">자산 확장정보</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="4">
+        <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="1">
+            <MudIcon Icon="@Icons.Material.Filled.Cable" Color="Color.Success" Size="Size.Large" />
+            <MudText Typo="Typo.h5" Class="mt-2">@(_stats?.AssetConnCount ?? 0)</MudText>
+            <MudText Typo="Typo.caption">연결정보 (PLC/Servo)</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* DEXA 파일 가져오기 *@
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudText Typo="Typo.h6" Class="mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.FileUpload" Class="mr-1" Style="vertical-align: middle;" />
+        DEXA 데이터 가져오기
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 가져옵니다.
+    </MudText>
+
+    <InputFile id="dexa-import-input" OnChange="OnImportFileSelected"
+               accept=".sqlite3,.sqlite,.db"
+               style="display:none;" />
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="ClickImportInput"
+                   Disabled="_importing">
+            파일 선택
+        </MudButton>
+
+        @if (_selectedFileName != null)
+        {
+            <MudText Typo="Typo.body2" Style="opacity: 0.8;">@_selectedFileName</MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="RunImportAsync"
+                       Disabled="_importing">
+                @(_importing ? "가져오는 중..." : "가져오기")
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_importResult != null)
+    {
+        <MudDivider Class="my-3" />
+
+        @if (_importResult.HasFatalError)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">
+                파일 읽기 오류: @_importResult.FatalError
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="2">
+                <MudItem xs="6" sm="2">
+                    <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0"
+                              Style="background: var(--mud-palette-background-gray); border-radius: 8px;">
+                        <MudText Typo="Typo.h6">@_importResult.TotalRead</MudText>
+                        <MudText Typo="Typo.caption">전체 자산</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0"
+                              Style="background: var(--mud-palette-background-gray); border-radius: 8px;">
+                        <MudText Typo="Typo.h6" Color="Color.Success">@_importResult.AugImported</MudText>
+                        <MudText Typo="Typo.caption">확장정보 저장</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0"
+                              Style="background: var(--mud-palette-background-gray); border-radius: 8px;">
+                        <MudText Typo="Typo.h6" Color="Color.Info">@_importResult.ConnImported</MudText>
+                        <MudText Typo="Typo.caption">연결정보 저장</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0"
+                              Style="background: var(--mud-palette-background-gray); border-radius: 8px;">
+                        <MudText Typo="Typo.h6" Color="Color.Primary">@_importResult.LineImported</MudText>
+                        <MudText Typo="Typo.caption">라인 저장</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0"
+                              Style="background: var(--mud-palette-background-gray); border-radius: 8px;">
+                        <MudText Typo="Typo.h6" Color="Color.Secondary">@_importResult.GroupImported</MudText>
+                        <MudText Typo="Typo.caption">그룹 저장</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudPaper Class="pa-3 d-flex flex-column align-center" Elevation="0"
+                              Style="background: var(--mud-palette-background-gray); border-radius: 8px;">
+                        <MudText Typo="Typo.h6" Color="@(_importResult.ErrorCount > 0 ? Color.Error : Color.Default)">
+                            @(_importResult.ConnSkipped + _importResult.ErrorCount)
+                        </MudText>
+                        <MudText Typo="Typo.caption">건너뜀/오류</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        }
+    }
+</MudPaper>
+
+@* 마이그레이션 이력 *@
+<MudPaper Class="pa-4" Elevation="1">
+    <MudText Typo="Typo.h6" Class="mb-2">마이그레이션 이력</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Bordered="true">
+        <thead>
+            <tr>
+                <th>버전</th>
+                <th>설명</th>
+                <th>적용일</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var m in _migrations)
+            {
+                <tr>
+                    <td>V@(m.Version)</td>
+                    <td>@m.Description</td>
+                    <td>@m.AppliedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</MudPaper>
+
+@code {
+    private TwmDbStats? _stats;
+    private List<TwmMigration> _migrations = [];
+
+    private IBrowserFile? _selectedFile;
+    private string? _selectedFileName;
+    private bool _importing;
+    private DexaImportResult? _importResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _stats = await TwmDb.GetStatsAsync();
+        _migrations = await TwmDb.GetMigrationsAsync();
+    }
+
+    private void OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        _selectedFileName = e.File.Name;
+        _importResult = null;
+    }
+
+    private async Task ClickImportInput() =>
+        await JS.InvokeVoidAsync("eval", "document.getElementById('dexa-import-input').click()");
+
+    private async Task RunImportAsync()
+    {
+        if (_selectedFile == null) return;
+
+        _importing = true;
+        _importResult = null;
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"dexa_import_{Guid.NewGuid():N}.sqlite3");
+        try
+        {
+            // 임시 파일에 저장 (최대 500MB)
+            await using var fs = File.Create(tempPath);
+            await _selectedFile.OpenReadStream(maxAllowedSize: 500 * 1024 * 1024).CopyToAsync(fs);
+            fs.Close();
+
+            _importResult = await ImportService.ImportFromFileAsync(tempPath);
+
+            if (_importResult.HasFatalError)
+            {
+                Snackbar.Add($"가져오기 실패: {_importResult.FatalError}", Severity.Error);
+            }
+            else
+            {
+                Snackbar.Add(
+                    $"완료 — 확장정보 {_importResult.AugImported}건, 연결정보 {_importResult.ConnImported}건 저장",
+                    Severity.Success);
+                _stats = await TwmDb.GetStatsAsync();
+            }
+
+            _selectedFile = null;
+            _selectedFileName = null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _importing = false;
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+    }
+}

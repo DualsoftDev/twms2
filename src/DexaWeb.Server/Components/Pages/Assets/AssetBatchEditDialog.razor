@@ -1,0 +1,209 @@
+@inject AssetService AssetService
+
+<MudDialog>
+    <DialogContent>
+        @if (_running)
+        {
+            <MudStack Spacing="3" Class="pa-2">
+                <MudText>처리 중... (@_completed / @_total)</MudText>
+                <MudProgressLinear Value="@_progressPercent" Color="Color.Primary" Rounded="true" Size="Size.Large">
+                    <b>@((int)_progressPercent)%</b>
+                </MudProgressLinear>
+            </MudStack>
+        }
+        else if (_results != null)
+        {
+            <MudStack Spacing="2">
+                <MudAlert Severity="@(ResultFailCount == 0 ? Severity.Success : Severity.Warning)" Dense="true">
+                    성공 @(ResultSuccessCount)건, 실패 @(ResultFailCount)건
+                </MudAlert>
+                <MudDataGrid Items="_results" Dense="true" Hover="true" Bordered="true"
+                             Style="max-height: 400px; overflow-y: auto;">
+                    <Columns>
+                        <PropertyColumn Property="x => x.AssetId" Title="ID" />
+                        <PropertyColumn Property="x => x.AssetName" Title="자산명" />
+                        <TemplateColumn Title="결과">
+                            <CellTemplate>
+                                @if (context.Item.Success)
+                                {
+                                    <MudChip T="string" Color="Color.Success" Size="Size.Small">성공</MudChip>
+                                }
+                                else
+                                {
+                                    <MudTooltip Text="@context.Item.ErrorMessage">
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">실패</MudChip>
+                                    </MudTooltip>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    선택된 자산 @(SelectedAssets.Count)건에 변경을 적용합니다.
+                    체크된 항목만 변경되며, 체크하지 않은 항목은 기존 값이 유지됩니다.
+                </MudAlert>
+
+                @* 에이전트 선호도 *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox @bind-Value="_applyAgent" Color="Color.Primary" />
+                    <MudTextField @bind-Value="_agentPreferences"
+                                  Label="에이전트 선호도"
+                                  Disabled="@(!_applyAgent)"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="Agent1;Agent2"
+                                  Margin="Margin.Dense"
+                                  Style="flex: 1;" />
+                </MudStack>
+
+                @* 자산명 *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox @bind-Value="_applyName" Color="Color.Primary" />
+                    <MudTextField @bind-Value="_name"
+                                  Label="자산명"
+                                  Disabled="@(!_applyName)"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Style="flex: 1;" />
+                </MudStack>
+
+                @* IP 주소 *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox @bind-Value="_applyIp" Color="Color.Primary" />
+                    <MudTextField @bind-Value="_ip"
+                                  Label="IP 주소"
+                                  Disabled="@(!_applyIp)"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Style="flex: 1;" />
+                </MudStack>
+
+                @* 설명 *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox @bind-Value="_applyDescription" Color="Color.Primary" />
+                    <MudTextField @bind-Value="_description"
+                                  Label="설명"
+                                  Disabled="@(!_applyDescription)"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Style="flex: 1;" />
+                </MudStack>
+
+                <MudDivider Class="my-1" />
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">PLC/서보 핑 테스트 설정</MudText>
+
+                @* 경유 IP (ViaIP) *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox @bind-Value="_applyViaIp" Color="Color.Primary" />
+                    <MudTextField @bind-Value="_viaIp"
+                                  Label="경유 IP (ViaIP)"
+                                  Disabled="@(!_applyViaIp)"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="PLC 게이트웨이 IP (비우면 클리어)"
+                                  Margin="Margin.Dense"
+                                  Style="flex: 1;" />
+                </MudStack>
+
+                @* Base 번호 *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox @bind-Value="_applyBase" Color="Color.Primary" />
+                    <MudNumericField @bind-Value="_baseNumber"
+                                     Label="Base 번호"
+                                     Disabled="@(!_applyBase)"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     Min="0"
+                                     Style="flex: 1;" />
+                </MudStack>
+
+                @* Slot 번호 *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox @bind-Value="_applySlot" Color="Color.Primary" />
+                    <MudNumericField @bind-Value="_slotNumber"
+                                     Label="Slot 번호"
+                                     Disabled="@(!_applySlot)"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     Min="0"
+                                     Style="flex: 1;" />
+                </MudStack>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_results != null)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">닫기</MudButton>
+        }
+        else if (!_running)
+        {
+            <MudButton OnClick="Cancel">취소</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                       OnClick="Execute" Disabled="@(!HasAnyChange)">
+                적용 (@(SelectedAssets.Count)건)
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public List<ViewAsset> SelectedAssets { get; set; } = [];
+
+    private bool _applyAgent, _applyName, _applyIp, _applyDescription;
+    private string _agentPreferences = "", _name = "", _ip = "", _description = "";
+
+    private bool _applyViaIp, _applyBase, _applySlot;
+    private string _viaIp = "";
+    private int _baseNumber;
+    private int? _slotNumber;
+
+    private bool _running;
+    private int _completed, _total;
+    private double _progressPercent;
+    private List<BatchUpdateResult>? _results;
+
+    private bool HasAnyChange => _applyAgent || _applyName || _applyIp || _applyDescription
+                                 || _applyViaIp || _applyBase || _applySlot;
+    private int ResultSuccessCount => _results?.Count(r => r.Success) ?? 0;
+    private int ResultFailCount => _results?.Count(r => !r.Success) ?? 0;
+
+    private async Task Execute()
+    {
+        var spec = new BatchEditSpec
+        {
+            AgentPreferences = _applyAgent ? _agentPreferences : null,
+            Name = _applyName ? _name : null,
+            Ip = _applyIp ? _ip : null,
+            Description = _applyDescription ? _description : null,
+            ViaIp = _applyViaIp ? _viaIp : null,
+            BaseNumber = _applyBase ? _baseNumber : null,
+            SlotNumber = _applySlot ? _slotNumber : null,
+        };
+
+        _running = true;
+        _total = SelectedAssets.Count;
+        _completed = 0;
+        StateHasChanged();
+
+        var progress = new Progress<(int completed, int total)>(p =>
+        {
+            _completed = p.completed;
+            _total = p.total;
+            _progressPercent = _total > 0 ? (double)_completed / _total * 100 : 0;
+            InvokeAsync(StateHasChanged);
+        });
+
+        var assetIds = SelectedAssets.Select(a => a.AssetId).ToArray();
+        _results = await AssetService.BatchUpdateAssetsAsync(assetIds, spec, progress);
+        _running = false;
+        StateHasChanged();
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(_results));
+    private void Cancel() => MudDialog.Cancel();
+}

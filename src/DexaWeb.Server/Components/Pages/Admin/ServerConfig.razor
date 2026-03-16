@@ -1,0 +1,208 @@
+@page "/admin/config"
+@using DEX.Core.Actor
+@using DEX.Common
+@using DexaWeb.Server.Models.Dexa
+@using Akka.Actor
+@inject DexaServerClient DexaServer
+@inject DexaReadService DexaRead
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>TWM - 서버 설정</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">서버 설정</MudText>
+
+<MudGrid>
+    @* 에이전트 목록 *@
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">에이전트 목록</MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadAgents">새로고침</MudButton>
+            </MudStack>
+            @if (_agentsLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_agents.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">등록된 에이전트가 없습니다.</MudAlert>
+            }
+            else
+            {
+                <MudDataGrid Items="_agents" Dense="true" Hover="true" Bordered="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Name" Title="이름" />
+                        <PropertyColumn Property="x => x.Ip" Title="IP" />
+                        <PropertyColumn Property="x => x.SwVersion" Title="버전" />
+                        <TemplateColumn Title="상태">
+                            <CellTemplate>
+                                <MudChip T="string"
+                                         Color="@(context.Item.Online ? Color.Success : Color.Default)"
+                                         Size="Size.Small">
+                                    @(context.Item.Online ? "온라인" : "오프라인")
+                                </MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="접속 시간">
+                            <CellTemplate>
+                                <MudText Typo="Typo.body2">@context.Item.Connected.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="작업">
+                            <CellTemplate>
+                                @{ var peer = FindConnectedPeer(context.Item); }
+                                @if (peer != null)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Warning" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.RestartAlt"
+                                               OnClick="() => RestartAgent(context.Item, peer)">
+                                        재시작
+                                    </MudButton>
+                                }
+                                else if (context.Item.Online)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Warning">피어 정보 없음</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Default">오프라인</MudText>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            }
+        </MudPaper>
+    </MudItem>
+
+    @* 서버 설정 *@
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">서버 설정 조회</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Settings"
+                       OnClick="LoadConfig">
+                설정 불러오기
+            </MudButton>
+            @if (_configJson != null)
+            {
+                <MudTextField Value="@_configJson" Lines="10" ReadOnly="true"
+                              Variant="Variant.Outlined" Class="mt-2" />
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string? _configJson;
+    private List<Agent> _agents = [];
+    private List<ActorInfo> _connectedPeers = [];
+    private bool _agentsLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAgents();
+    }
+
+    private async Task LoadAgents()
+    {
+        _agentsLoading = true;
+        try
+        {
+            // DEXA SQLite에서 에이전트 목록 조회
+            _agents = await DexaRead.GetAgentsAsync();
+
+            // Akka 연결된 피어 조회 (재시작용 ActorRef 획득)
+            try
+            {
+                var reply = await DexaServer.AskAsync<AmS2CReplyConnectedPeers>(
+                    new AmC2SRequestConnectedPeers());
+                _connectedPeers = reply?.Peers?
+                    .Where(p => p.ActorType == ActorType.Agent)
+                    .ToList() ?? [];
+            }
+            catch
+            {
+                _connectedPeers = [];
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"에이전트 목록 조회 실패: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _agentsLoading = false;
+        }
+    }
+
+    private ActorInfo? FindConnectedPeer(Agent agent)
+    {
+        return _connectedPeers.FirstOrDefault(p =>
+            string.Equals(p.Name, agent.Name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task RestartAgent(Agent agent, ActorInfo peer)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"에이전트 '{agent.Name}' ({agent.Ip})을(를) 재시작하시겠습니까?" },
+            { x => x.ButtonText, "재시작" },
+            { x => x.ButtonColor, Color.Warning }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("에이전트 재시작", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                // DEXA 서버를 통해 에이전트 재시작 요청
+                var request = new AmC2SRequestAgentRestart();
+                request.Agent = peer.ActorRef;
+                var reply = await DexaServer.AskAsync<AmS2CAgentShutdown>(request);
+
+                if (reply != null)
+                {
+                    Snackbar.Add($"에이전트 '{agent.Name}' 재시작 완료", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add($"에이전트 '{agent.Name}' 재시작 요청을 보냈습니다.", Severity.Warning);
+                }
+
+                await Task.Delay(2000);
+                await LoadAgents();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"재시작 요청 실패: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task LoadConfig()
+    {
+        var reply = await DexaServer.AskAsync<AmS2CReplyServerAppConfig>(
+            new AmC2SRequestServerAppConfig());
+        if (reply?.AppConfigContents is { Length: > 4 } gzBuffer)
+        {
+            // EmZip 형식: 첫 4바이트 = 원본 크기(int32), 나머지 = GZip 압축 데이터
+            var originalLength = BitConverter.ToInt32(gzBuffer, 0);
+            using var ms = new System.IO.MemoryStream(gzBuffer, 4, gzBuffer.Length - 4);
+            using var gz = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Decompress);
+            var buffer = new byte[originalLength];
+            gz.ReadExactly(buffer, 0, originalLength);
+            _configJson = System.Text.Encoding.UTF8.GetString(buffer);
+        }
+        else
+        {
+            _configJson = "설정 정보를 가져올 수 없습니다.";
+        }
+    }
+}
