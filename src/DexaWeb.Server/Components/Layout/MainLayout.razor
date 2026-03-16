@@ -41,11 +41,11 @@
                     <span class="header-status-text">DEXA</span>
                 </div>
             </MudTooltip>
-            <MudTooltip Text="@($"에이전트 {_agents.OnlineCount} / {_agents.TotalCount}")">
+            <MudTooltip Text="@($"활성화 에이전트 {_agents.OnlineCount}")">
                 <div class="header-status-chip">
                     <span class="header-status-dot @(_agents.OnlineCount > 0 ? "nav-status-online" : "nav-status-idle")"></span>
                     <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Small" />
-                    <span class="header-status-text">@_agents.OnlineCount / @_agents.TotalCount</span>
+                    <span class="header-status-text">@_agents.OnlineCount</span>
                 </div>
             </MudTooltip>
         </div>
