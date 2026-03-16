@@ -96,30 +96,45 @@ Twms2.0/
 
 ## 아키텍처
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  브라우저 (Blazor)                     │
-│   MudBlazor UI  ·  ECharts  ·  D3  ·  GridStack     │
-└────────────────────────┬────────────────────────────┘
-                         │ SignalR
-┌────────────────────────▼────────────────────────────┐
-│              DexaWeb.Server (C# Blazor Server)       │
-│                                                      │
-│  Services          Data            Background        │
-│  ├─ AssetService   ├─ DexaDb       ├─ PingBgSvc     │
-│  ├─ DexaReadSvc    │  (SQLite RO)  ├─ MdnsHosted    │
-│  ├─ DashboardSvc   ├─ TwmDb        └─ CacheWarming  │
-│  ├─ PingService    │  (SQLite RW)                    │
-│  ├─ ScheduleSvc    └─ Dapper ORM                     │
-│  └─ NotifySvc                                        │
-└────────────┬─────────────────────────────────────────┘
-             │ Akka.Remote TCP
-┌────────────▼─────────────────────────────────────────┐
-│           DexaWeb.Dexa (F# 클라이언트 라이브러리)        │
-│                                                       │
-│  DexaClient  →  GuardianActor  →  DEXA Server        │
-│  (IDexaClient)   (Ask/Tell)       (원격 액터 시스템)    │
-└───────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Browser["🌐 브라우저"]
+        UI["MudBlazor UI · ECharts · D3 · GridStack"]
+    end
+
+    subgraph Server["⚙️ DexaWeb.Server — C# Blazor Server"]
+        direction LR
+        subgraph Services["Services"]
+            S1["AssetService"]
+            S2["DexaReadSvc"]
+            S3["DashboardSvc"]
+            S4["PingService"]
+            S5["ScheduleSvc"]
+            S6["NotifySvc"]
+        end
+        subgraph Data["Data"]
+            D1["DexaDb\n(SQLite RO)"]
+            D2["TwmDb\n(SQLite RW)"]
+            D3["Dapper ORM"]
+        end
+        subgraph Background["Background"]
+            B1["PingBgSvc"]
+            B2["MdnsHosted"]
+            B3["CacheWarming"]
+        end
+    end
+
+    subgraph Dexa["📡 DexaWeb.Dexa — F# 클라이언트 라이브러리"]
+        DC["DexaClient\n(IDexaClient)"]
+        GA["GuardianActor\n(Ask/Tell)"]
+        DC --> GA
+    end
+
+    DS["🖥️ DEXA Server\n(원격 액터 시스템)"]
+
+    Browser -- "SignalR" --> Server
+    Server -- "Akka.Remote TCP" --> Dexa
+    GA --> DS
 ```
 
 ---
