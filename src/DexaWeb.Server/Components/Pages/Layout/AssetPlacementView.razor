@@ -31,8 +31,70 @@
                        preserveAspectRatio="xMidYMid meet" opacity="0.85" />
             }
 
-            @* ── 배치된 자산 아이콘 ── *@
-            @foreach (var pos in VisiblePositions)
+            @* ── 그룹 clipPath 정의 ── *@
+            <defs>
+                @foreach (var grp in PlacementGroups)
+                {
+                    <clipPath id="grp-clip-@grp.Id">
+                        <rect x="@F(grp.X)" y="@F(grp.Y)"
+                              width="@F(grp.Width)" height="@F(grp.Height)" rx="6" />
+                    </clipPath>
+                }
+            </defs>
+
+            @* ── 그룹 컨테이너 + 내부 자산 아이콘 (동적 배치) ── *@
+            @foreach (var grp in PlacementGroups)
+            {
+                var memberAssets = GetGroupMemberAssets(grp.Id);
+                var grpColor = grp.Color ?? "#4a90d9";
+                <g>
+                    @* 그룹 배경 *@
+                    <rect x="@F(grp.X)" y="@F(grp.Y)"
+                          width="@F(grp.Width)" height="@F(grp.Height)"
+                          rx="6"
+                          fill="@(grpColor)10"
+                          stroke="@grpColor"
+                          stroke-width="1.5" stroke-dasharray="6 3" />
+                    @* 그룹 라벨 (영역 밖 상단) *@
+                    <text x="@F(grp.X + 4)" y="@F(grp.Y - 4)"
+                          font-size="10"
+                          fill="@grpColor"
+                          class="ap-group-label">@(string.IsNullOrEmpty(grp.Name) ? $"그룹 #{grp.Id}" : grp.Name) (@memberAssets.Count)</text>
+
+                    @* 그룹 내 멤버 자산 아이콘 - clipPath로 영역 안에 가둠 *@
+                    <g clip-path="url(#grp-clip-@grp.Id)">
+                        @{
+                            var items = LayoutGroupAssets(grp, memberAssets);
+                        }
+                        @foreach (var item in items)
+                        {
+                            var healthColor = GetHealthColor(item.Asset.Health);
+                            var isOffline = item.Asset.LatestPing is { Reachable: false };
+                            var dr = Math.Max(1.5, item.Size * 0.12);
+                            <g transform="translate(@F(item.X), @F(item.Y))" class="apv-asset-icon"
+                               @onclick="() => OnAssetClicked.InvokeAsync(item.Asset.AssetId)"
+                               @onclick:stopPropagation="true" style="cursor:pointer">
+                                @(RenderSvgTitle(item.Asset))
+                                <rect width="@F(item.Size)" height="@F(item.Size)" rx="3"
+                                      fill="white" stroke="@healthColor" stroke-width="1" opacity="0.9" />
+                                <image href="@GetAssetIcon(item.Asset.AssetTypeName, item.Asset.AugIsRobotPLC)"
+                                       width="@F(item.Size - 2)" height="@F(item.Size - 2)" x="1" y="1" />
+                                @if (isOffline)
+                                {
+                                    <rect x="@F(item.Size - dr * 3)" y="@F(item.Size - dr * 3)"
+                                          width="@F(dr * 4)" height="@F(dr * 4)"
+                                          rx="1" fill="#333" opacity="0.7" />
+                                }
+                                <circle cx="@F(item.Size - dr)" cy="@F(item.Size - dr)"
+                                        r="@F(dr)" fill="@healthColor" stroke="white" stroke-width="0.5" />
+                            </g>
+                        }
+                    </g>
+                </g>
+            }
+
+            @* ── 배치된 자산 아이콘 (그룹에 속하지 않은 것) ── *@
+            @foreach (var pos in UngroupedVisiblePositions)
             {
                 var asset = AssetStatuses.FirstOrDefault(a => a.AssetId == pos.AssetId);
                 if (asset == null) continue;
@@ -43,22 +105,19 @@
                 var sz = 36 * s;
                 var imgSz = 28 * s;
                 var imgOff = 4 * s;
-                <g transform="translate(@F(pos.X), @F(pos.Y))" class="apv-asset-icon">
+                <g transform="translate(@F(pos.X), @F(pos.Y))" class="apv-asset-icon"
+                   @onclick="() => OnAssetClicked.InvokeAsync(asset.AssetId)"
+                   @onclick:stopPropagation="true" style="cursor:pointer">
                     @(RenderSvgTitle(asset))
                     <rect width="@F(sz)" height="@F(sz)" rx="4"
                           fill="white" stroke="@healthColor" stroke-width="1.5" opacity="0.9" />
                     <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
                            width="@F(imgSz)" height="@F(imgSz)" x="@F(imgOff)" y="@F(imgOff)" />
-                    @* 오프라인 배경 *@
                     @if (isOffline)
                     {
                         <rect x="@F(sz - 11)" y="-3" width="14" height="14" rx="3" fill="#333" opacity="0.7" />
                     }
-                    @* 건강상태 인디케이터 *@
                     <circle cx="@F(sz - 4)" cy="4" r="4" fill="@healthColor" stroke="white" stroke-width="1" />
-                    @* 자산 이름 *@
-                    <text x="@F(sz / 2)" y="@F(sz + 14)" text-anchor="middle" font-size="9"
-                          fill="#333" class="ap-icon-label">@TruncName(asset.Name)</text>
                 </g>
             }
         </svg>
@@ -77,7 +136,7 @@
     </div>
 </MudPaper>
 
-@if (VisiblePositions.Count == 0)
+@if (VisiblePositions.Count == 0 && PlacementGroups.Count == 0)
 {
     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
         배치된 자산이 없습니다. 관리 > 레이아웃 관리에서 자산을 배치해 주세요.
@@ -88,12 +147,21 @@
     [Parameter] public TwmsBlueprintConfig? BlueprintConfig { get; set; }
     [Parameter] public List<TwmsAssetPosition> AssetPositions { get; set; } = [];
     [Parameter] public List<AssetStatusInfo> AssetStatuses { get; set; } = [];
+    [Parameter] public List<TwmsPlacementGroup> PlacementGroups { get; set; } = [];
+    [Parameter] public List<TwmsPlacementGroupMember> PlacementGroupMembers { get; set; } = [];
+    [Parameter] public EventCallback<int> OnAssetClicked { get; set; }
 
     private bool _jsInitialized;
     private bool _isFullscreen;
 
     private List<TwmsAssetPosition> VisiblePositions =>
         AssetPositions.Where(p => p.Visible).ToList();
+
+    private HashSet<int> GroupedAssetIds =>
+        PlacementGroupMembers.Select(m => m.AssetId).ToHashSet();
+
+    private List<TwmsAssetPosition> UngroupedVisiblePositions =>
+        VisiblePositions.Where(p => !GroupedAssetIds.Contains(p.AssetId)).ToList();
 
     private static readonly (string Label, string Color)[] _legendItems =
     [
@@ -102,6 +170,68 @@
         ("실패", "#E67E7E"),
         ("내역없음", "#999"),
     ];
+
+    // ──────────── 그룹 멤버 자산 조회 ────────────
+
+    private List<AssetStatusInfo> GetGroupMemberAssets(int groupId)
+    {
+        var memberIds = PlacementGroupMembers
+            .Where(m => m.GroupId == groupId)
+            .Select(m => m.AssetId)
+            .ToHashSet();
+        return AssetStatuses.Where(a => memberIds.Contains(a.AssetId)).ToList();
+    }
+
+    // ──────────── 그룹 내 동적 그리드 배치 ────────────
+
+    private record struct GroupAssetItem(double X, double Y, double Size, AssetStatusInfo Asset);
+
+    private static List<GroupAssetItem> LayoutGroupAssets(TwmsPlacementGroup grp, List<AssetStatusInfo> members)
+    {
+        var result = new List<GroupAssetItem>();
+        if (members.Count == 0) return result;
+
+        var pad = 2.0;
+        var availW = grp.Width - pad * 2;
+        var availH = grp.Height - pad * 2;
+        if (availW < 4 || availH < 4) return result;
+
+        var count = members.Count;
+        var aspectRatio = availW / availH;
+
+        // 최적 열/행 수: 영역 비율에 맞게
+        var bestCols = Math.Max(1, (int)Math.Round(Math.Sqrt(count * aspectRatio)));
+        var cols = Math.Min(bestCols, count);
+        var rows = (int)Math.Ceiling((double)count / cols);
+
+        // gap은 아이콘 크기에 비례 (최소 1px)
+        var rawSz = Math.Min(availW / cols, availH / rows);
+        var gap = Math.Max(1.0, Math.Min(rawSz * 0.1, 2.0));
+
+        // 아이콘 크기: 영역에 꽉 차게
+        var cellW = (availW - gap * (cols - 1)) / cols;
+        var cellH = (availH - gap * (rows - 1)) / rows;
+        var sz = Math.Max(4, Math.Min(cellW, cellH));
+
+        // 중앙 정렬
+        var totalW = cols * sz + (cols - 1) * gap;
+        var totalH = rows * sz + (rows - 1) * gap;
+        var startX = grp.X + pad + (availW - totalW) / 2;
+        var startY = grp.Y + pad + (availH - totalH) / 2;
+
+        for (var i = 0; i < count; i++)
+        {
+            var col = i % cols;
+            var row = i / cols;
+            var x = startX + col * (sz + gap);
+            var y = startY + row * (sz + gap);
+            result.Add(new(Math.Round(x, 2), Math.Round(y, 2), Math.Round(sz, 1), members[i]));
+        }
+
+        return result;
+    }
+
+    // ──────────── JS 줌 ────────────
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

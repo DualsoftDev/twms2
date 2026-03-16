@@ -31,6 +31,13 @@ else
 
                 @* ── 툴바 ── *@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3" Spacing="1">
+                    <MudToggleIconButton Toggled="_snapEnabled"
+                                         Icon="@Icons.Material.Filled.GridOff"
+                                         ToggledIcon="@Icons.Material.Filled.Grid4x4"
+                                         Title="스냅" ToggledTitle="스냅 해제"
+                                         Size="Size.Small"
+                                         Color="Color.Default" ToggledColor="Color.Info"
+                                         ToggledChanged="OnSnapToggled" />
                     <MudToggleIconButton Toggled="_multiSelectMode"
                                          Icon="@Icons.Material.Filled.SelectAll"
                                          ToggledIcon="@Icons.Material.Filled.SelectAll"
@@ -259,6 +266,7 @@ else
     private string? _searchText;
     private int _prevLayoutId;
     private bool _multiSelectMode;
+    private bool _snapEnabled = true;
 
     private List<AssetStatusInfo> _statuses = [];
     private TwmsBlueprintConfig? _config;
@@ -436,6 +444,17 @@ else
     }
 
     // ──────────────── 선택/그룹 UI ────────────────
+
+    private async Task OnSnapToggled(bool toggled)
+    {
+        _snapEnabled = toggled;
+        try
+        {
+            await JS.InvokeVoidAsync("assetPlacementEditor.setSnapEnabled",
+                "ap-editor-container", toggled);
+        }
+        catch (JSDisconnectedException) { }
+    }
 
     private async Task OnMultiSelectToggled(bool toggled)
     {

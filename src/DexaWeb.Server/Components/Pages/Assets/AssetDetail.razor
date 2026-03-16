@@ -9,7 +9,7 @@
 @using DexaWeb.Server.Models.Dexa
 @using DexaWeb.Server.Models.Twm
 
-<MudPaper Class="pa-4" Elevation="2" Style="height: calc(100vh - 180px); overflow-y: auto;">
+<MudPaper Class="pa-4" Elevation="2" Style="@($"height: {HeightOverride ?? "calc(100vh - 180px)"}; overflow-y: auto;")">
     @* ── 헤더 1행: 아이콘 + 이름 + 상태 ── *@
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
         @{ var detailIcon = GetTypeIcon(); }
@@ -409,6 +409,7 @@
 @code {
     [Parameter] public ViewAsset Asset { get; set; } = null!;
     [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public string? HeightOverride { get; set; }
 
     private AssetEditRow? _editRow;
     private Dictionary<int, string> _lineMap = [];

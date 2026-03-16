@@ -295,6 +295,7 @@
     [Parameter] public List<TwmsBlueprintRect> BlueprintRects { get; set; } = [];
     [Parameter] public TwmsBlueprintConfig? BlueprintConfig { get; set; }
     [Parameter] public List<AssetStatusInfo> AssetStatuses { get; set; } = [];
+    [Parameter] public EventCallback<int> OnAssetEditRequested { get; set; }
 
     private enum DialogKind { None, Line, Asset, ChildGroup }
     private DialogKind _dialogKind;
@@ -446,6 +447,10 @@
                     @(a.LatestPing.Reachable ? "온라인" : "오프라인")
                 </MudChip>
             }
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                           Color="Color.Primary" Title="편집"
+                           OnClick="() => OnAssetEditRequested.InvokeAsync(a.AssetId)"
+                           Style="padding:2px;" />
         </div>
     };
 
@@ -462,6 +467,7 @@
                     <th>Slot</th>
                     <th>상태</th>
                     <th>연결</th>
+                    <th style="width:32px;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -486,6 +492,12 @@
                                 </MudChip>
                             }
                         </td>
+                        <td>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           Color="Color.Primary" Title="편집"
+                                           OnClick="() => OnAssetEditRequested.InvokeAsync(c.AssetId)"
+                                           Style="padding:2px;" />
+                        </td>
                     </tr>
                 }
             </tbody>
@@ -508,30 +520,29 @@
     {
         var standalones = new List<StandaloneInfo>();
         var plcCards = new List<PlcCardInfo>();
-        var pad = 6.0;
-        var headerH = 22.0;
+        var pad = 4.0;
+        var headerH = 20.0;
         var maxX = rect.X + rect.Width - pad;
         var maxY = rect.Y + rect.Height - 2;
         var availW = rect.Width - pad * 2;
         var availH = rect.Height - headerH - 2;
 
-        // 높이가 너무 낮으면 아이콘을 렌더링하지 않음
         if (availH < 14) return (standalones, plcCards);
 
-        // 유효 슬롯 수: standalone=1, PLC 카드=1+종류수
-        int totalSlots = 0;
-        foreach (var a in topLevel)
-        {
-            totalSlots++;
-            if (_plcChildren.TryGetValue(a.AssetId, out var ch))
-                totalSlots += ch.GroupBy(c => GetAssetIcon(c.AssetTypeName, c.AugIsRobotPLC)).Count();
-        }
+        // PLC 카드 단위 슬롯 수: standalone=1, PLC카드=1(카드 전체가 1슬롯)
+        int totalSlots = topLevel.Count;
 
-        var sz = ComputeIconSize(rect.Width, rect.Height, totalSlots);
+        // 영역 비율에 맞는 최적 아이콘 크기
+        var aspectRatio = availW / availH;
+        var bestCols = Math.Max(1, (int)Math.Round(Math.Sqrt(totalSlots * aspectRatio)));
+        var cols = Math.Min(bestCols, totalSlots);
+        var rows = (int)Math.Ceiling((double)totalSlots / cols);
+        var gap = 3.0;
+        var cellH = (availH - gap * Math.Max(0, rows - 1)) / Math.Max(1, rows);
+        var sz = Math.Max(16, Math.Min(cellH, 36));
         var childSz = Math.Round(Math.Min(sz * 0.45, sz * 0.5), 1);
         var ipFontSz = 7.0;
         var innerGap = 4.0;
-        var gap = 3.0;
 
         var x = rect.X + pad;
         var y = rect.Y + headerH;
@@ -547,7 +558,7 @@
 
                 // rightW = IP텍스트 폭과 자식아이콘 폭 중 큰 값
                 var ipLen = !string.IsNullOrEmpty(asset.Ip) ? asset.Ip.Length : 0;
-                var ipTextW = ipLen * ipFontSz * 0.62 + 8; // monospace 추정
+                var ipTextW = ipLen * ipFontSz * 0.62 + 8;
                 var childrenW = groups.Count * (childSz + gap) + gap + 8;
                 var rightW = Math.Max(Math.Max(childrenW, ipTextW), 40);
                 var cardW = sz + innerGap + rightW;
@@ -555,12 +566,8 @@
 
                 // 줄바꿈 체크
                 if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
-
-                // 카드 폭이 영역보다 넓으면 클램핑
                 if (cardW > availW) cardW = availW;
-
-                // 높이 초과 시 건너뛰기 (break 대신 continue로 standalone은 계속 시도)
-                if (y + cardH > maxY) { x = rect.X + pad; y += rowH; continue; }
+                if (y + cardH > maxY) continue;
 
                 var card = new PlcCardInfo
                 {
@@ -574,7 +581,7 @@
                 var childMaxX = x + cardW - 3;
                 foreach (var grp in groups)
                 {
-                    if (childX + childSz > childMaxX) break; // 카드 밖으로 나가지 않도록
+                    if (childX + childSz > childMaxX) break;
                     var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
                     card.Groups.Add(new(childX, childY, childSz,
                         grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
@@ -594,18 +601,6 @@
         }
 
         return (standalones, plcCards);
-    }
-
-    private static double ComputeIconSize(double rectW, double rectH, int count)
-    {
-        if (count == 0) return 24;
-        var availW = rectW - 12;
-        var availH = rectH - 28;
-        if (availH < 14) return 16;
-        var area = availW * availH;
-        var perItem = area / Math.Max(1, count);
-        var size = Math.Sqrt(perItem) * 0.8;
-        return Math.Max(16, Math.Min(36, size));
     }
 
     private static string AggregateHealthColor(List<AssetStatusInfo> assets)

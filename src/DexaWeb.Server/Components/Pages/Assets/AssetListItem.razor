@@ -1,0 +1,31 @@
+@using static DexaWeb.Server.Helpers.LayoutHelpers
+
+<div class="asset-list-item @(IsSelected ? "asset-list-item--selected" : "")" @onclick="OnClick">
+    <img src="@GetTypeIcon()" class="asset-type-icon-nav" alt="" />
+    <div class="asset-list-item-info">
+        <span class="asset-list-item-name">@Asset.DisplayName</span>
+        <span class="asset-list-item-meta">@Asset.AssetTypeUserFriendlyName · @(Asset.Ip ?? "-")</span>
+    </div>
+    @if (Status != null)
+    {
+        <span class="nav-status-dot-indicator" style="background:@GetHealthColor(Status.Health);"></span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ViewAsset Asset { get; set; } = null!;
+    [Parameter] public AssetStatusInfo? Status { get; set; }
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private string GetTypeIcon() => Asset.AssetTypeUserFriendlyName switch
+    {
+        var n when n != null && n.Contains("PLC") && Asset.AugIsRobotPLC is > 0 => "images/icons/robot.png",
+        var n when n != null && n.Contains("PLC") => "images/icons/plc.png",
+        var n when n != null && n.Contains("Servo") => "images/icons/servo.png",
+        var n when n != null && (n.Contains("HMI") || n.Contains("XP")) => "images/icons/hmi.png",
+        var n when n != null && n.Contains("Drive") => "images/icons/drive.png",
+        var n when n != null && n.Contains("FTP") => "images/icons/ftp.png",
+        _ => "images/icons/plc.png"
+    };
+}

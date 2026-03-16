@@ -2936,3 +2936,86 @@ a.dash-link-row:hover { text-decoration: underline; }
         padding: 24px 16px;
     }
 }
+
+/* =========================================================
+   Asset Explorer - Split View & List
+   ========================================================= */
+
+.asset-list-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.asset-list-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+    margin-top: 8px;
+}
+
+.asset-list-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.asset-list-scroll::-webkit-scrollbar-thumb {
+    border-radius: 3px;
+    background: var(--neu-shadow-dark);
+}
+
+.asset-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-bottom: 4px;
+    border-radius: var(--neu-radius-inner);
+    cursor: pointer;
+    transition: var(--neu-transition);
+}
+
+.asset-list-item:hover {
+    box-shadow: inset 2px 2px 4px var(--neu-shadow-dark),
+                inset -2px -2px 4px var(--neu-shadow-light);
+}
+
+.asset-list-item--selected {
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark),
+                inset -3px -3px 6px var(--neu-shadow-light);
+}
+
+.asset-list-item--selected .asset-list-item-name {
+    font-weight: 700;
+    color: var(--mud-palette-primary);
+}
+
+.asset-list-item-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.asset-list-item-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+}
+
+.asset-list-item-meta {
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Snap Guide Lines ── */
+.ap-snap-guide {
+    stroke: #2196F3;
+    stroke-width: 0.5;
+    stroke-dasharray: 4 2;
+    opacity: 0.7;
+    pointer-events: none;
+}

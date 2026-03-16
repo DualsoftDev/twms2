@@ -35,6 +35,8 @@ window.assetPlacementEditor = (() => {
             container, svg, dotNetRef, handlers: [],
             selectedIds: new Set(),
             mode: 'single', // 'single' | 'multi'
+            snap: { enabled: true, gridSize: 20, neighborThreshold: 8 },
+            guideLines: [], // 현재 표시 중인 가이드 라인 SVG 요소
         };
         _inst[containerId] = inst;
 
@@ -98,13 +100,21 @@ window.assetPlacementEditor = (() => {
             const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
 
             if (bulkStarts) {
-                // 일괄 이동
+                // 일괄 이동 — 기준 자산(드래그 대상)만 스냅 적용, 나머지는 동일 delta
+                const refSz = getIconSize(group);
+                const rawX = clampX(startPos.x + d.dx, refSz);
+                const rawY = clampY(startPos.y + d.dy, refSz);
+                const snapped = applySnap(inst, rawX, rawY, refSz, inst.selectedIds);
+                renderGuideLines(inst, snapped.guides);
+                const snapDx = snapped.x - (startPos.x + d.dx);
+                const snapDy = snapped.y - (startPos.y + d.dy);
+
                 for (const [aid, sp] of bulkStarts) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (!el) continue;
                     const sz = getIconSize(el);
-                    const nx = clampX(sp.x + d.dx, sz);
-                    const ny = clampY(sp.y + d.dy, sz);
+                    const nx = clampX(sp.x + d.dx + snapDx, sz);
+                    const ny = clampY(sp.y + d.dy + snapDy, sz);
                     el.setAttribute('transform', `translate(${nx}, ${ny})`);
                     el.dataset.x = nx;
                     el.dataset.y = ny;
@@ -112,8 +122,12 @@ window.assetPlacementEditor = (() => {
             } else {
                 // 단일 이동
                 const sz = getIconSize(group);
-                const nx = clampX(startPos.x + d.dx, sz);
-                const ny = clampY(startPos.y + d.dy, sz);
+                const rawX = clampX(startPos.x + d.dx, sz);
+                const rawY = clampY(startPos.y + d.dy, sz);
+                const snapped = applySnap(inst, rawX, rawY, sz, new Set([assetId]));
+                renderGuideLines(inst, snapped.guides);
+                const nx = clampX(snapped.x, sz);
+                const ny = clampY(snapped.y, sz);
                 group.setAttribute('transform', `translate(${nx}, ${ny})`);
                 group.dataset.x = nx;
                 group.dataset.y = ny;
@@ -123,6 +137,7 @@ window.assetPlacementEditor = (() => {
         const onUp = (e) => {
             document.removeEventListener('pointermove', onMove);
             document.removeEventListener('pointerup', onUp);
+            clearGuideLines(inst);
 
             if (!moved && inst.mode === 'multi' && !e.ctrlKey && !e.metaKey) {
                 // 클릭만 한 경우: 단독 선택
@@ -185,19 +200,28 @@ window.assetPlacementEditor = (() => {
         const onMove = (e) => {
             if (!startPt) return;
             const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
-            const nx = Math.max(0, startGrp.x + d.dx);
-            const ny = Math.max(0, startGrp.y + d.dy);
+            let nx = Math.max(0, startGrp.x + d.dx);
+            let ny = Math.max(0, startGrp.y + d.dy);
+
+            // 그리드 스냅 적용
+            if (inst.snap.enabled) {
+                nx = snapToGrid(nx, inst.snap.gridSize);
+                ny = snapToGrid(ny, inst.snap.gridSize);
+            }
+
+            const snapDx = nx - (startGrp.x + d.dx);
+            const snapDy = ny - (startGrp.y + d.dy);
 
             updateGroupPosition(groupEl, nx, ny);
 
-            // 멤버 자산도 동일 delta 이동
+            // 멤버 자산도 동일 delta 이동 (스냅 보정 포함)
             if (memberStarts) {
                 for (const [aid, sp] of memberStarts) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (!el) continue;
                     const sz = getIconSize(el);
-                    const ax = clampX(sp.x + d.dx, sz);
-                    const ay = clampY(sp.y + d.dy, sz);
+                    const ax = clampX(sp.x + d.dx + snapDx, sz);
+                    const ay = clampY(sp.y + d.dy + snapDy, sz);
                     el.setAttribute('transform', `translate(${ax}, ${ay})`);
                     el.dataset.x = ax;
                     el.dataset.y = ay;
@@ -257,8 +281,17 @@ window.assetPlacementEditor = (() => {
         const onMove = (e) => {
             if (!startPt) return;
             const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
-            const nw = Math.max(30, startSize.w + d.dx);
-            const nh = Math.max(20, startSize.h + d.dy);
+            let nw = Math.max(30, startSize.w + d.dx);
+            let nh = Math.max(20, startSize.h + d.dy);
+
+            // 크기에 그리드 스냅 적용
+            if (inst.snap.enabled) {
+                nw = snapToGrid(nw, inst.snap.gridSize);
+                nh = snapToGrid(nh, inst.snap.gridSize);
+                nw = Math.max(30, nw);
+                nh = Math.max(20, nh);
+            }
+
             updateGroupSize(groupEl, nw, nh);
         };
 
@@ -438,6 +471,106 @@ window.assetPlacementEditor = (() => {
     function clampX(v, sz) { return Math.max(0, Math.min(VB_W - (sz || ICON_SIZE), v)); }
     function clampY(v, sz) { return Math.max(0, Math.min(VB_H - (sz || ICON_SIZE), v)); }
 
+    // ── 스냅 유틸 ──
+    function snapToGrid(v, gridSize) {
+        return Math.round(v / gridSize) * gridSize;
+    }
+
+    function collectNeighborEdges(inst, excludeIds) {
+        const edges = [];
+        inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
+            const aid = parseInt(g.dataset.assetId);
+            if (excludeIds.has(aid)) return;
+            const x = parseFloat(g.dataset.x) || 0;
+            const y = parseFloat(g.dataset.y) || 0;
+            const sz = getIconSize(g);
+            edges.push({ x, y, w: sz, h: sz });
+        });
+        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            const x = parseFloat(g.dataset.x) || 0;
+            const y = parseFloat(g.dataset.y) || 0;
+            const w = parseFloat(g.dataset.w) || 150;
+            const h = parseFloat(g.dataset.h) || 100;
+            edges.push({ x, y, w, h });
+        });
+        return edges;
+    }
+
+    function applySnap(inst, x, y, sz, excludeIds) {
+        if (!inst.snap.enabled) return { x, y, guides: [] };
+        const gs = inst.snap.gridSize;
+        const thr = inst.snap.neighborThreshold;
+        let sx = snapToGrid(x, gs);
+        let sy = snapToGrid(y, gs);
+        const guides = [];
+
+        // 이웃 스냅 (그리드 스냅보다 우선)
+        const neighbors = collectNeighborEdges(inst, excludeIds);
+        const myEdges = { left: x, right: x + sz, cx: x + sz / 2, top: y, bottom: y + sz, cy: y + sz / 2 };
+
+        let bestDx = thr + 1, bestDy = thr + 1;
+        let snapX = null, snapY = null;
+        let guideX = null, guideY = null;
+
+        for (const n of neighbors) {
+            const nEdges = [n.x, n.x + n.w, n.x + n.w / 2]; // left, right, center
+            const nYEdges = [n.y, n.y + n.h, n.y + n.h / 2];
+
+            // X축 스냅
+            for (const ne of nEdges) {
+                for (const me of [myEdges.left, myEdges.right, myEdges.cx]) {
+                    const diff = Math.abs(me - ne);
+                    if (diff < bestDx) {
+                        bestDx = diff;
+                        snapX = x + (ne - me);
+                        guideX = ne;
+                    }
+                }
+            }
+            // Y축 스냅
+            for (const ne of nYEdges) {
+                for (const me of [myEdges.top, myEdges.bottom, myEdges.cy]) {
+                    const diff = Math.abs(me - ne);
+                    if (diff < bestDy) {
+                        bestDy = diff;
+                        snapY = y + (ne - me);
+                        guideY = ne;
+                    }
+                }
+            }
+        }
+
+        if (bestDx <= thr && snapX !== null) {
+            sx = snapX;
+            guides.push({ x1: guideX, y1: 0, x2: guideX, y2: VB_H });
+        }
+        if (bestDy <= thr && snapY !== null) {
+            sy = snapY;
+            guides.push({ x1: 0, y1: guideY, x2: VB_W, y2: guideY });
+        }
+
+        return { x: sx, y: sy, guides };
+    }
+
+    function renderGuideLines(inst, guides) {
+        clearGuideLines(inst);
+        for (const g of guides) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.classList.add('ap-snap-guide');
+            line.setAttribute('x1', g.x1);
+            line.setAttribute('y1', g.y1);
+            line.setAttribute('x2', g.x2);
+            line.setAttribute('y2', g.y2);
+            inst.svg.appendChild(line);
+            inst.guideLines.push(line);
+        }
+    }
+
+    function clearGuideLines(inst) {
+        for (const l of inst.guideLines) l.remove();
+        inst.guideLines.length = 0;
+    }
+
     // ── 외부 API ──
     function setMode(containerId, mode) {
         const inst = _inst[containerId];
@@ -494,13 +627,19 @@ window.assetPlacementEditor = (() => {
         return result;
     }
 
+    function setSnapEnabled(containerId, enabled) {
+        const inst = _inst[containerId];
+        if (inst) inst.snap.enabled = !!enabled;
+    }
+
     function dispose(containerId) {
         const inst = _inst[containerId];
         if (!inst) return;
+        clearGuideLines(inst);
         inst.handlers.forEach(({ el, type, fn }) => el.removeEventListener(type, fn));
         inst.handlers.length = 0;
         delete _inst[containerId];
     }
 
-    return { init, getPositions, getGroupPositions, dispose, setMode, clearSelection };
+    return { init, getPositions, getGroupPositions, dispose, setMode, clearSelection, setSnapEnabled };
 })();

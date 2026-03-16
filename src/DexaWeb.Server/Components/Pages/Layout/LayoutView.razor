@@ -46,15 +46,22 @@
     {
         <BlueprintView Lines="_lines" BlueprintRects="_blueprintRects"
                        BlueprintConfig="_blueprintConfig"
-                       AssetStatuses="_assetStatuses" />
+                       AssetStatuses="_assetStatuses"
+                       OnAssetEditRequested="HandleAssetEditRequested" />
     }
     else
     {
         <AssetPlacementView BlueprintConfig="_blueprintConfig"
                             AssetPositions="_assetPositions"
-                            AssetStatuses="_assetStatuses" />
+                            AssetStatuses="_assetStatuses"
+                            PlacementGroups="_placementGroups"
+                            PlacementGroupMembers="_placementGroupMembers"
+                            OnAssetClicked="HandleAssetEditRequested" />
     }
 </div>
+
+<AssetEditDrawer @bind-IsOpen="_drawerOpen" AssetId="_drawerAssetId"
+                 OnSaved="HandleDrawerSaved" />
 
 @code {
     private int _viewMode;
@@ -67,6 +74,23 @@
     private TwmsBlueprintConfig? _blueprintConfig;
     private List<AssetStatusInfo> _assetStatuses = [];
     private List<TwmsAssetPosition> _assetPositions = [];
+    private List<TwmsPlacementGroup> _placementGroups = [];
+    private List<TwmsPlacementGroupMember> _placementGroupMembers = [];
+
+    // ── 자산 편집 드로어 ──
+    private bool _drawerOpen;
+    private int? _drawerAssetId;
+
+    private void HandleAssetEditRequested(int assetId)
+    {
+        _drawerAssetId = assetId;
+        _drawerOpen = true;
+    }
+
+    private async Task HandleDrawerSaved()
+    {
+        await RefreshAsync();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,18 +124,22 @@
         StateHasChanged();
         try
         {
-            var linesTask  = TwmDb.GetAllTwmsLayoutLinesAsync();
-            var rectsTask  = TwmDb.GetAllBlueprintRectsAsync(_selectedLayoutId);
-            var configTask = TwmDb.GetBlueprintConfigAsync(_selectedLayoutId);
-            var posTask    = TwmDb.GetAllAssetPositionsAsync(_selectedLayoutId);
-            var statusTask = AssetStatusService.GetAssetStatusesAsync();
-            await Task.WhenAll(linesTask, rectsTask, configTask, posTask, statusTask);
+            var linesTask   = TwmDb.GetAllTwmsLayoutLinesAsync();
+            var rectsTask   = TwmDb.GetAllBlueprintRectsAsync(_selectedLayoutId);
+            var configTask  = TwmDb.GetBlueprintConfigAsync(_selectedLayoutId);
+            var posTask     = TwmDb.GetAllAssetPositionsAsync(_selectedLayoutId);
+            var statusTask  = AssetStatusService.GetAssetStatusesAsync();
+            var groupTask   = TwmDb.GetAllPlacementGroupsAsync(_selectedLayoutId);
+            var memberTask  = TwmDb.GetPlacementGroupMembersAsync(_selectedLayoutId);
+            await Task.WhenAll(linesTask, rectsTask, configTask, posTask, statusTask, groupTask, memberTask);
 
-            _lines          = linesTask.Result;
-            _blueprintRects = rectsTask.Result;
-            _blueprintConfig = configTask.Result;
-            _assetPositions = posTask.Result;
-            _assetStatuses  = statusTask.Result;
+            _lines                  = linesTask.Result;
+            _blueprintRects         = rectsTask.Result;
+            _blueprintConfig        = configTask.Result;
+            _assetPositions         = posTask.Result;
+            _assetStatuses          = statusTask.Result;
+            _placementGroups        = groupTask.Result;
+            _placementGroupMembers  = memberTask.Result;
         }
         finally
         {

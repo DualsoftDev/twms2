@@ -2,31 +2,59 @@
 @page "/assets/{AssetId:int}"
 @page "/qr/{AssetId:int}"
 @inject AssetService AssetService
+@inject AssetStatusService AssetStatusService
+@inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
 <PageTitle>TWM - 자산 관리</PageTitle>
 
-@if (_selectedAsset != null)
-{
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">자산 관리</MudText>
-    </MudStack>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.h4">자산 관리</MudText>
+    <MudSpacer />
+    <AuthorizeView>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.TableChart"
+                   Href="/assets/table">
+            테이블 편집
+        </MudButton>
+    </AuthorizeView>
+</MudStack>
 
-    <AssetDetail Asset="_selectedAsset" OnSaved="OnAssetSaved" />
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
 else
 {
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">자산 관리</MudText>
-    </MudStack>
+    <MudGrid>
+        @* ── 좌측: 자산 리스트 패널 ── *@
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-3" Elevation="2" Style="height: calc(100vh - 180px); display: flex; flex-direction: column;">
+                <AssetListPanel Assets="_allAssets"
+                                StatusMap="_statusMap"
+                                SelectedAssetId="AssetId"
+                                OnAssetSelected="HandleAssetSelected" />
+            </MudPaper>
+        </MudItem>
 
-    <MudPaper Class="pa-8 d-flex align-center justify-center" Elevation="2"
-              Style="height: calc(100vh - 180px);">
-        <MudStack AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Large" Color="Color.Secondary" />
-            <MudText Typo="Typo.h6" Color="Color.Secondary">좌측 메뉴에서 자산을 선택하세요</MudText>
-        </MudStack>
-    </MudPaper>
+        @* ── 우측: 자산 상세 ── *@
+        <MudItem xs="12" md="7">
+            @if (_selectedAsset != null)
+            {
+                <AssetDetail Asset="_selectedAsset" OnSaved="OnAssetSaved" />
+            }
+            else
+            {
+                <MudPaper Class="pa-8 d-flex align-center justify-center" Elevation="2"
+                          Style="height: calc(100vh - 180px);">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h6" Color="Color.Secondary">자산을 선택하세요</MudText>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
 }
 
 @code {
@@ -34,11 +62,14 @@ else
 
     private ViewAsset? _selectedAsset;
     private List<ViewAsset> _allAssets = [];
+    private Dictionary<int, AssetStatusInfo> _statusMap = [];
+    private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAssetsAsync();
+        await LoadAllAsync();
         SelectAssetFromRoute();
+        _loading = false;
     }
 
     protected override void OnParametersSet()
@@ -49,21 +80,29 @@ else
     private void SelectAssetFromRoute()
     {
         if (AssetId.HasValue)
-        {
             _selectedAsset = _allAssets.FirstOrDefault(a => a.AssetId == AssetId.Value);
-        }
     }
 
-    private async Task LoadAssetsAsync()
+    private void HandleAssetSelected(ViewAsset asset)
     {
-        var all = await AssetService.GetAllAssetsAsync();
-        _allAssets = all.Where(a => a.IsRealAsset).ToList();
+        _selectedAsset = asset;
+        Navigation.NavigateTo($"/assets/{asset.AssetId}", replace: true);
+    }
+
+    private async Task LoadAllAsync()
+    {
+        var assetsTask = AssetService.GetAllAssetsAsync();
+        var statusTask = AssetStatusService.GetAssetStatusesAsync();
+        await Task.WhenAll(assetsTask, statusTask);
+
+        _allAssets = assetsTask.Result.Where(a => a.IsRealAsset).ToList();
+        _statusMap = statusTask.Result.ToDictionary(s => s.AssetId);
     }
 
     private async Task OnAssetSaved()
     {
         Snackbar.Add("자산 정보가 저장되었습니다.", Severity.Success);
-        await LoadAssetsAsync();
+        await LoadAllAsync();
         SelectAssetFromRoute();
     }
 }
