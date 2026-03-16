@@ -142,16 +142,93 @@ graph TD
 ## 데이터베이스
 
 ### DEXA DB (읽기 전용 — 외부)
-DEXA 서버가 관리하는 SQLite 데이터베이스로, 자산·사용자·스케줄·액션 로그 등 핵심 데이터를 저장합니다.
-
-- 기본 경로: `C:\ProgramData\LS\DEXA\Storage\DEXA.sqlite3`
-- 테이블: `asset`, `assetType`, `user`, `permission`, `schedule`, `trigger`, `action`, `actionLog`, `agent`
+DEXA 서버가 관리하는 SQLite 데이터베이스입니다. 경로: `C:\ProgramData\LS\DEXA\Storage\DEXA.sqlite3`
 
 ### TWM DB (읽기/쓰기 — 로컬)
-TWMS 고유 데이터를 저장하는 로컬 SQLite 데이터베이스입니다. 앱 시작 시 자동 생성·마이그레이션됩니다.
+TWMS 고유 데이터를 저장하는 로컬 SQLite입니다. 앱 시작 시 자동 생성·마이그레이션됩니다. 경로: `twm.db.sqlite3`
 
-- 기본 경로: `twm.db.sqlite3`
-- 테이블: `TwmsAsset`, `TwmsAssetConn`, `TwmsAssetPosition`, `TwmsLayout`, `TwmsLayoutLine`, `TwmsLayoutGroup`, `TwmsPlacementGroup`, `TwmsBlueprintConfig`, `TwmsBlueprintRect`, `TwmPingLog`, `TwmPingResult`
+```mermaid
+erDiagram
+    %% === DEXA DB (Read-Only) ===
+    asset {
+        int id PK
+        int parentId FK
+        int assetTypeId FK
+        string parameter
+        bool deleted
+    }
+    assetType {
+        int id PK
+        string userFriendlyName
+        bool fake
+    }
+    user {
+        int id PK
+        string name
+    }
+    permission {
+        int id PK
+        int userId FK
+    }
+    schedule {
+        int id PK
+    }
+    trigger {
+        int id PK
+        int scheduleId FK
+    }
+    actionLog {
+        int id PK
+        int assetId FK
+    }
+
+    assetType ||--o{ asset : "분류"
+    asset ||--o{ asset : "parentId"
+    user ||--o{ permission : "권한"
+    schedule ||--o{ trigger : "트리거"
+    asset ||--o{ actionLog : "이력"
+
+    %% === TWM DB (Read/Write) ===
+    TwmsAsset {
+        int DexaId PK
+        string StationNumber
+        string Vendor
+        string Spec
+        int LineId
+    }
+    TwmsAssetConn {
+        int DexaId PK
+        string Ip
+        string IpVia
+        int Base
+        int Slot
+        bool IsRobotPLC
+    }
+    TwmsLayout {
+        int Id PK
+        string Name
+    }
+    TwmsLayoutLine {
+        int Id PK
+        int LayoutId FK
+    }
+    TwmsAssetPosition {
+        int AssetId PK
+        int LayoutId FK
+        float X
+        float Y
+    }
+    TwmPingLog {
+        int Id PK
+        int AssetId FK
+    }
+
+    asset ||--o| TwmsAsset : "DexaId 확장"
+    asset ||--o| TwmsAssetConn : "DexaId 연결정보"
+    TwmsLayout ||--o{ TwmsLayoutLine : "라인"
+    TwmsLayout ||--o{ TwmsAssetPosition : "배치"
+    asset ||--o{ TwmPingLog : "Ping 이력"
+```
 
 ---
 
