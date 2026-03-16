@@ -20,7 +20,7 @@
         </AuthorizeView>
         <MudButton Variant="Variant.Outlined" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Refresh"
-                   OnClick="LoadTriggers">
+                   OnClick="LoadData">
             새로고침
         </MudButton>
     </MudStack>
@@ -49,11 +49,26 @@
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn Property="x => x.Description" Title="설명" />
+                <TemplateColumn Title="자산 매핑">
+                    <CellTemplate>
+                        @{
+                            var count = GetMappedAssetCount(context.Item.Id);
+                        }
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(count > 0 ? Color.Info : Color.Default)">
+                            @(count)개
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn Title="작업">
                     <CellTemplate>
                         <AuthorizeView Context="auth">
                             <Authorized>
                                 <MudStack Row="true" Spacing="1">
+                                    <MudIconButton Icon="@Icons.Material.Filled.AccountTree"
+                                                   Size="Size.Small" Color="Color.Info"
+                                                   Title="자산 매핑"
+                                                   OnClick="() => OpenAssetEditor(context.Item)" />
                                     <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
                                                    Size="Size.Small" Color="Color.Success"
                                                    OnClick="() => ExecuteTrigger(context.Item)" />
@@ -72,19 +87,24 @@
 
 @code {
     private List<Trigger> _triggers = [];
+    private List<Schedule> _schedules = [];
     private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadTriggers();
+        await LoadData();
     }
 
-    private async Task LoadTriggers()
+    private async Task LoadData()
     {
         _loading = true;
         _triggers = await ScheduleService.GetTriggersAsync();
+        _schedules = await ScheduleService.GetSchedulesAsync();
         _loading = false;
     }
+
+    private int GetMappedAssetCount(int triggerId)
+        => _schedules.Count(s => s.TriggerId == triggerId);
 
     private async Task OpenAddDialog()
     {
@@ -95,8 +115,26 @@
 
         if (result is { Canceled: false })
         {
-            await LoadTriggers();
+            await LoadData();
             Snackbar.Add("트리거가 추가되었습니다.", Severity.Success);
+        }
+    }
+
+    private async Task OpenAssetEditor(Trigger trigger)
+    {
+        var parameters = new DialogParameters<ScheduleAssetEditor>
+        {
+            { x => x.TriggerId, trigger.Id },
+            { x => x.TriggerName, trigger.Name }
+        };
+        var dialog = await DialogService.ShowAsync<ScheduleAssetEditor>("자산 매핑", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadData();
+            Snackbar.Add("자산 매핑이 저장되었습니다.", Severity.Success);
         }
     }
 
@@ -126,7 +164,7 @@
             var ok = await ScheduleService.DeleteTriggerAsync(trigger.Id);
             if (ok)
             {
-                await LoadTriggers();
+                await LoadData();
                 Snackbar.Add("트리거가 삭제되었습니다.", Severity.Success);
             }
             else

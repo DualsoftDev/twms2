@@ -1,0 +1,63 @@
+@inject ScheduleService ScheduleService
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle1" Class="mb-3">
+            트리거 <strong>@TriggerName</strong>에 연결할 자산을 선택하세요.
+        </MudText>
+        <MudDivider Class="mb-3" />
+        <div style="max-height: 400px; overflow-y: auto;">
+            <AssetTreeView @ref="_assetTree" MultiSelect="true" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">취소</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Submit" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            저장 (@(_assetTree?.GetSelectedAssets().Count ?? 0)개 선택)
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int TriggerId { get; set; }
+    [Parameter] public string TriggerName { get; set; } = "";
+
+    private AssetTreeView _assetTree = null!;
+    private bool _saving;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var schedules = await ScheduleService.GetSchedulesAsync();
+            var currentAssetIds = schedules
+                .Where(s => s.TriggerId == TriggerId)
+                .Select(s => s.AssetId)
+                .ToHashSet();
+
+            if (currentAssetIds.Count > 0)
+            {
+                _assetTree.SetSelectedAssetIds(currentAssetIds);
+            }
+        }
+    }
+
+    private async Task Submit()
+    {
+        _saving = true;
+        var assetIds = _assetTree.GetSelectedAssets().Select(a => a.AssetId).ToArray();
+        var ok = await ScheduleService.UpdateSchedulesAsync(TriggerId, assetIds);
+        _saving = false;
+
+        if (ok)
+            MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
