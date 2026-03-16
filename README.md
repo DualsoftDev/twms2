@@ -31,6 +31,7 @@
 | **레이아웃 시각화** | SVG 블루프린트 위에 자산 배치·편집 (드래그 앤 드롭) |
 | **상태 모니터링** | 백업 상태(BACKEDUP/UNCHANGED/FAILED) 및 실시간 Ping 모니터링 |
 | **스케줄/트리거** | Cron 기반 스케줄 관리 및 트리거 빌더 |
+| **매뉴얼 관리** | 기종별 PDF 매뉴얼 업로드·다운로드 |
 | **사용자 관리** | 사용자·권한 관리 (Admin 역할 기반) |
 | **mDNS 브로드캐스트** | `twms.local`로 네트워크 내 자동 검색 |
 
@@ -72,8 +73,8 @@ Twms2.0/
 │   │   │   └── Shared/            #   재사용 컴포넌트
 │   │   ├── Services/              #   비즈니스 로직 서비스
 │   │   ├── Models/
-│   │   │   ├── Dexa/              #   DEXA 도메인 모델
-│   │   │   ├── Twm/               #   TWM 로컬 모델
+│   │   │   ├── Dexa/              #   DEXA 도메인 모델 (ViewAsset, Action, ...)
+│   │   │   ├── Twm/               #   TWM 로컬 모델 (Layout, Conn, Manual, ...)
 │   │   │   └── Dashboard/         #   대시보드 모델
 │   │   ├── Data/                  #   DB 연결 팩토리, 초기화
 │   │   ├── HOCON/                 #   HOCON 파라미터 파싱
@@ -84,6 +85,12 @@ Twms2.0/
 │   ├── DeepPinger/                # C++ — 네이티브 Ping DLL (x64)
 │   └── DeepPingerTest/            # C# — DeepPinger 테스트 앱 (WinForms)
 │
+├── installer/                     # 인스톨러 관련 파일
+│   ├── twms2.0-setup.iss          #   InnoSetup 스크립트
+│   ├── setup-https.ps1            #   HTTPS 인증서 설정 스크립트
+│   └── output/                    #   빌드된 설치파일 출력 디렉토리
+│
+├── build-installer.bat            # 인스톨러 빌드 스크립트 (전체 빌드 + 패키징)
 └── DexaWeb.slnx                   # 솔루션 파일
 ```
 
@@ -110,6 +117,7 @@ graph LR
     Root --- Status["/status<br/>실시간 상태"]
 
     Root --- Settings["/settings<br/>앱 설정"]
+    Settings --- Manuals["/settings/manuals<br/>매뉴얼 관리"]
 
     Root --- Admin["/admin<br/>관리자"]
     Admin --- Users["/admin/users<br/>사용자·권한"]
@@ -169,7 +177,7 @@ graph TD
 DEXA 서버가 관리하는 SQLite 데이터베이스입니다. 경로: `C:\ProgramData\LS\DEXA\Storage\DEXA.sqlite3`
 
 ### TWM DB (읽기/쓰기 — 로컬)
-TWMS 고유 데이터를 저장하는 로컬 SQLite입니다. 앱 시작 시 자동 생성·마이그레이션됩니다. 경로: `twm.db.sqlite3`
+TWMS 고유 데이터를 저장하는 로컬 SQLite입니다. 앱 시작 시 자동 생성·마이그레이션됩니다. 경로: `C:\ProgramData\DualSoft\TWMS2\twm.db.sqlite3`
 
 ```mermaid
 erDiagram
@@ -242,6 +250,11 @@ erDiagram
         float X
         float Y
     }
+    TwmsManual {
+        int Id PK
+        string ModelName
+        string FileName
+    }
     TwmPingLog {
         int Id PK
         int AssetId FK
@@ -252,6 +265,20 @@ erDiagram
     TwmsLayout ||--o{ TwmsLayoutLine : "라인"
     TwmsLayout ||--o{ TwmsAssetPosition : "배치"
     asset ||--o{ TwmPingLog : "Ping 이력"
+```
+
+---
+
+## 런타임 데이터 경로
+
+설치 후 런타임 데이터는 `C:\ProgramData\DualSoft\TWMS2\` 하위에 저장됩니다.
+
+```
+C:\ProgramData\DualSoft\TWMS2\
+├── twm.db.sqlite3        # TWM 로컬 데이터베이스
+├── appsettings.json      # 런타임 설정 (UI에서 편집 가능)
+├── manuals/              # 기종별 PDF 매뉴얼 파일
+└── uploads/              # 업로드 파일 (블루프린트 이미지 등)
 ```
 
 ---
@@ -278,7 +305,7 @@ erDiagram
     "ConnectionString": "Data Source=C:\\ProgramData\\LS\\DEXA\\Storage\\DEXA.sqlite3;"
   },
   "TwmDb": {
-    "ConnectionString": "Data Source=twm.db.sqlite3;"
+    "ConnectionString": "Data Source=C:\\ProgramData\\DualSoft\\TWMS2\\twm.db.sqlite3;"
   },
   "PingSchedule": {
     "IntervalMinutes": 5,               // Ping 주기 (분)
@@ -305,7 +332,7 @@ erDiagram
 - [.NET 10.0 SDK](https://dotnet.microsoft.com/download)
 - Visual Studio 2022+ (C++ 빌드 도구 포함, DeepPinger DLL 빌드 시 필요)
 
-### 빌드
+### 개발 빌드
 
 ```bash
 cd src
@@ -321,6 +348,72 @@ dotnet run --project src/DexaWeb.Server
 ```
 
 브라우저에서 `http://localhost` 또는 `http://twms.local` (mDNS 활성화 시)로 접속합니다.
+
+---
+
+## 인스톨러 빌드
+
+`build-installer.bat`를 실행하면 전체 빌드부터 설치파일 생성까지 자동 수행됩니다.
+
+### 사전 요구 사항
+
+| 도구 | 용도 | 비고 |
+|------|------|------|
+| .NET 10.0 SDK | C#/F# 프로젝트 빌드 | `dotnet` CLI 사용 |
+| Visual Studio Build Tools | C++ DeepPinger DLL 빌드 | MSBuild + C++ 워크로드 필요 |
+| [InnoSetup 6](https://jrsoftware.org/isinfo.php) | 설치파일(.exe) 생성 | 기본 경로 설치 권장 |
+| vc_redist.x64.exe | VC++ 런타임 재배포 패키지 | 선택사항, `installer/` 폴더에 배치 |
+
+### 빌드 과정
+
+```bash
+build-installer.bat
+```
+
+스크립트가 수행하는 단계:
+
+1. **Clean** — 이전 빌드 출력 정리
+2. **MSBuild DeepPinger** — C++ DLL을 Release|x64로 빌드
+3. **dotnet publish** — `win-x64` self-contained 배포 패키지 생성
+4. **DLL 복사** — DeepPinger.dll을 publish 출력에 복사
+5. **InnoSetup 컴파일** — `installer/twms2.0-setup.iss` → `installer/output/Twms2.0-Setup-{version}.exe`
+
+빌드 완료 후 `installer/output/` 디렉토리에 설치파일이 생성됩니다.
+
+### 인스톨러 포함 사항
+
+- TWMS 2.0 애플리케이션 (self-contained, .NET 런타임 포함)
+- DeepPinger.dll (네이티브 PLC Ping)
+- Windows 서비스 등록 (`twms2.0`, 지연 자동 시작)
+- 방화벽 규칙 자동 추가 (HTTP 80, HTTPS 443)
+- ProgramData 디렉토리 자동 생성
+- HTTPS 설정 (선택 구성요소, `setup-https.ps1`)
+- VC++ 런타임 재배포 패키지 (선택, `installer/`에 배치 시)
+
+---
+
+## Windows 서비스 배포
+
+인스톨러로 설치하면 **Windows 서비스**로 자동 등록됩니다.
+
+| 항목 | 값 |
+|------|-----|
+| 서비스 이름 | `twms2.0` |
+| 표시 이름 | `TWMS 2.0` |
+| 시작 유형 | 지연 자동 시작 (`delayed-auto`) |
+| 실패 복구 | 1차·2차: 서비스 재시작, 리셋 주기: 1일 |
+| 설치 경로 | `C:\Program Files\DualSoft\TWMS2\` |
+
+서비스 관리 명령:
+
+```bash
+# 서비스 상태 확인
+sc query twms2.0
+
+# 서비스 중지/시작
+sc stop twms2.0
+sc start twms2.0
+```
 
 ---
 
@@ -341,16 +434,10 @@ dotnet run --project src/DexaWeb.Server
 | GET | `/api/download/backup/{assetId}/{version}` | 백업 ZIP 다운로드 |
 | Static | `/report/*` | DEXA 리포트 파일 서빙 |
 | Static | `/uploads/*` | 업로드 파일 서빙 |
+| Static | `/manuals/*` | PDF 매뉴얼 파일 서빙 |
 
 ---
 
 ## 라이선스
 
 Private — 내부 사용 전용
-
-
-## 구현 예정
-
-- QR 페이지
-- 레이아웃 및 에디터, 이전 종합설비에서 가져오기 기능 등
-- 기종 이름별 매뉴얼(PDF)관리 및 다운로드 제공 기능
