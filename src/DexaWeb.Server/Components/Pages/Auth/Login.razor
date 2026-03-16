@@ -55,6 +55,8 @@
 </MudContainer>
 
 @code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
     private string _userName = "";
     private string _password = "";
     private string? _errorMessage;
@@ -84,7 +86,8 @@
             if (result?.Success == true && result.User != null)
             {
                 await AuthStateProvider.LoginAsync(result.User.Id, result.User.Name!, result.User.Admin);
-                Navigation.NavigateTo("/", forceLoad: true);
+                var target = !string.IsNullOrEmpty(ReturnUrl) ? ReturnUrl : "/";
+                Navigation.NavigateTo(target, forceLoad: true);
             }
             else
             {

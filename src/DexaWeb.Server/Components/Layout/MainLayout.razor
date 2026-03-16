@@ -158,7 +158,7 @@
     private async Task HandleLogout()
     {
         await AuthStateProvider.LogoutAsync();
-        Navigation.NavigateTo("/login", forceLoad: true);
+        Navigation.NavigateTo("/", forceLoad: true);
     }
 
     private static readonly MudTheme _theme = new()

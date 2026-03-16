@@ -5,6 +5,9 @@
     {
         var uri = new Uri(Navigation.Uri);
         if (uri.AbsolutePath != "/login")
-            Navigation.NavigateTo("/login");
+        {
+            var returnUrl = Uri.EscapeDataString(uri.PathAndQuery);
+            Navigation.NavigateTo($"/login?returnUrl={returnUrl}");
+        }
     }
 }

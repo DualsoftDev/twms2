@@ -61,7 +61,8 @@ public static class LayoutHelpers
             : "Ping 내역없음";
         var health = GetHealthLabel(asset.Health);
         var backup = asset.LastBackupTime?.ToString("yyyy-MM-dd HH:mm") ?? "없음";
-        var txt = $"{asset.Name}\nIP: {asset.Ip ?? "-"}\n상태: {health}\n{online}\n최근 백업: {backup}";
+        var via = !string.IsNullOrEmpty(asset.AugIpVia) ? $"\n경유IP: {asset.AugIpVia}" : "";
+        var txt = $"{asset.Name}\nIP: {asset.Ip ?? "-"}{via}\n상태: {health}\n{online}\n최근 백업: {backup}";
         return new MarkupString($"<title>{System.Net.WebUtility.HtmlEncode(txt)}</title>");
     }
 }
