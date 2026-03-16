@@ -89,7 +89,7 @@
                         var plcColor = GetHealthColor(card.Plc.Health);
                         var dr = Math.Max(2.0, card.PlcSize * 0.12);
                         var plcIx = card.X + 2;
-                        var plcIy = card.Y + (card.CardH - card.PlcSize) / 2;
+                        var plcIy = card.Vertical ? card.Y + 2 : card.Y + (card.CardH - card.PlcSize) / 2;
 
                         @* PLC 카드 영역 클릭 → 자산 상세 *@
                         <g @onclick="() => OnAssetClick(card.Plc.AssetId)" @onclick:stopPropagation="true"
@@ -115,9 +115,21 @@
                                 <circle cx="@F(plcIx + card.PlcSize - dr)" cy="@F(plcIy + card.PlcSize - dr)"
                                         r="@F(dr)" fill="@plcColor" stroke="white" stroke-width="0.8" />
                             </g>
-                            @if (!string.IsNullOrEmpty(card.Ip))
+                            @if (card.HasIp && !string.IsNullOrEmpty(card.Ip))
                             {
-                                @(RenderIpLabel(card.X + card.PlcSize + 6, card.Y + 10, card.Ip))
+                                @* IP 인셋 배경 *@
+                                <rect x="@F(card.IpBgX)" y="@F(card.IpBgY)"
+                                      width="@F(card.IpBgW)" height="@F(card.IpBgH)"
+                                      rx="2" fill="rgba(0,0,0,0.3)"
+                                      stroke="rgba(0,0,0,0.2)" stroke-width="0.5" />
+                                @(RenderIpLabel(card.IpX, card.IpY, card.Ip))
+                                @if (card.Groups.Count > 0)
+                                {
+                                    @* IP ↔ 자식 구분선 *@
+                                    <line x1="@F(card.DivX1)" y1="@F(card.DivY)"
+                                          x2="@F(card.DivX2)" y2="@F(card.DivY)"
+                                          stroke="rgba(255,255,255,0.15)" stroke-width="0.5" />
+                                }
                             }
                         </g>
 
@@ -512,6 +524,11 @@
         public double X, Y, CardW, CardH, PlcSize;
         public AssetStatusInfo Plc = null!;
         public string? Ip;
+        public double IpX, IpY; // IP 라벨 위치
+        public bool Vertical;   // true이면 세로 배치 (IP/자식이 아래)
+        public bool HasIp;
+        public double IpBgX, IpBgY, IpBgW, IpBgH; // IP 인셋 배경
+        public double DivX1, DivX2, DivY;           // IP-자식 구분선
         public List<ChildGroupInfo> Groups = [];
     }
 
@@ -529,7 +546,6 @@
 
         if (availH < 14) return (standalones, plcCards);
 
-        // PLC 카드 단위 슬롯 수: standalone=1, PLC카드=1(카드 전체가 1슬롯)
         int totalSlots = topLevel.Count;
 
         // 영역 비율에 맞는 최적 아이콘 크기
@@ -543,10 +559,10 @@
         var childSz = Math.Round(Math.Min(sz * 0.45, sz * 0.5), 1);
         var ipFontSz = 7.0;
         var innerGap = 4.0;
+        var ipLineH = 10.0;
 
         var x = rect.X + pad;
         var y = rect.Y + headerH;
-        var rowH = sz + gap;
 
         foreach (var asset in topLevel)
         {
@@ -556,43 +572,116 @@
                     .GroupBy(c => GetAssetIcon(c.AssetTypeName, c.AugIsRobotPLC))
                     .ToList();
 
-                // rightW = IP텍스트 폭과 자식아이콘 폭 중 큰 값
                 var ipLen = !string.IsNullOrEmpty(asset.Ip) ? asset.Ip.Length : 0;
                 var ipTextW = ipLen * ipFontSz * 0.62 + 8;
                 var childrenW = groups.Count * (childSz + gap) + gap + 8;
                 var rightW = Math.Max(Math.Max(childrenW, ipTextW), 40);
-                var cardW = sz + innerGap + rightW;
-                var cardH = sz;
+                var horizCardW = sz + innerGap + rightW;
 
-                // 줄바꿈 체크
-                if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
-                if (cardW > availW) cardW = availW;
-                if (y + cardH > maxY) continue;
+                // 가로 카드가 영역 폭에 안 맞으면 → 세로 배치
+                var useVertical = horizCardW > availW || availH > availW * 1.5;
 
-                var card = new PlcCardInfo
+                if (useVertical)
                 {
-                    X = x, Y = y, CardW = cardW, CardH = cardH,
-                    PlcSize = sz, Plc = asset, Ip = asset.Ip,
-                };
+                    // ── 세로 배치: PLC 아이콘 위, IP 중간, 자식 아이콘 아래 ──
+                    var childRowH = groups.Count > 0 ? childSz + 2 : 0;
+                    var hasIp = !string.IsNullOrEmpty(asset.Ip);
+                    var cardW = Math.Max(sz, Math.Min(availW, Math.Max(ipTextW, groups.Count * (childSz + gap))));
+                    var cardH = sz + (hasIp ? ipLineH : 0) + childRowH + 4;
+                    var rowH = cardH + gap;
 
-                // 자식 아이콘은 카드 하단에 배치 (카드 영역 내에서만)
-                var childX = x + sz + innerGap;
-                var childY = y + cardH - childSz - 3;
-                var childMaxX = x + cardW - 3;
-                foreach (var grp in groups)
-                {
-                    if (childX + childSz > childMaxX) break;
-                    var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
-                    card.Groups.Add(new(childX, childY, childSz,
-                        grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
-                    childX += childSz + gap;
+                    if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
+                    if (cardW > availW) cardW = availW;
+                    if (y + cardH > maxY) continue;
+
+                    var card = new PlcCardInfo
+                    {
+                        X = x, Y = y, CardW = cardW, CardH = cardH,
+                        PlcSize = sz, Plc = asset, Ip = asset.Ip,
+                        Vertical = true,
+                    };
+
+                    // IP 위치: PLC 아이콘 바로 아래
+                    var belowY = y + sz + 2;
+                    if (hasIp)
+                    {
+                        card.HasIp = true;
+                        card.IpBgX = x + 1;
+                        card.IpBgY = belowY - 1;
+                        card.IpBgW = cardW - 2;
+                        card.IpBgH = ipLineH;
+                        card.IpX = x + 4;
+                        card.IpY = belowY + 7;
+                        card.DivX1 = x + 3;
+                        card.DivX2 = x + cardW - 3;
+                        card.DivY = belowY + ipLineH - 1;
+                        belowY += ipLineH;
+                    }
+
+                    // 자식 아이콘: IP 아래에 가로 배열
+                    var childX = x + 2;
+                    foreach (var grp in groups)
+                    {
+                        if (childX + childSz > x + cardW - 2) break;
+                        var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
+                        card.Groups.Add(new(childX, belowY, childSz,
+                            grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
+                        childX += childSz + gap;
+                    }
+
+                    plcCards.Add(card);
+                    x += cardW + gap;
+                    // 세로 카드가 높으므로 다음 줄 y 보정
+                    if (x > maxX) { x = rect.X + pad; y += rowH; }
                 }
+                else
+                {
+                    // ── 가로 배치: 기존 방식 (PLC 왼쪽, IP+자식 오른쪽) ──
+                    var cardW = horizCardW;
+                    var cardH = sz;
+                    var rowH = sz + gap;
 
-                plcCards.Add(card);
-                x += cardW + gap;
+                    if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
+                    if (cardW > availW) cardW = availW;
+                    if (y + cardH > maxY) continue;
+
+                    var hasIpH = !string.IsNullOrEmpty(asset.Ip);
+                    var card = new PlcCardInfo
+                    {
+                        X = x, Y = y, CardW = cardW, CardH = cardH,
+                        PlcSize = sz, Plc = asset, Ip = asset.Ip,
+                        Vertical = false,
+                        HasIp = hasIpH,
+                        IpX = x + sz + 6,
+                        IpY = y + 10,
+                        IpBgX = x + sz + 2,
+                        IpBgY = y + 1,
+                        IpBgW = cardW - sz - 4,
+                        IpBgH = ipLineH + 2,
+                        DivX1 = x + sz + 4,
+                        DivX2 = x + cardW - 4,
+                        DivY = y + ipLineH + 3,
+                    };
+
+                    var childX = x + sz + innerGap;
+                    var childY = y + cardH - childSz - 3;
+                    var childMaxX = x + cardW - 3;
+                    foreach (var grp in groups)
+                    {
+                        if (childX + childSz > childMaxX) break;
+                        var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
+                        card.Groups.Add(new(childX, childY, childSz,
+                            grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
+                        childX += childSz + gap;
+                    }
+
+                    plcCards.Add(card);
+                    x += cardW + gap;
+                }
             }
             else
             {
+                var rowH = sz + gap;
                 if (x + sz > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
                 if (y + sz > maxY) continue;
                 standalones.Add(new(x, y, sz, asset));

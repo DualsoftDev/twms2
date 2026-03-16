@@ -26,35 +26,20 @@
 }
 else
 {
-    <MudGrid>
-        @* ── 좌측: 자산 리스트 패널 ── *@
-        <MudItem xs="12" md="5">
-            <MudPaper Class="pa-3" Elevation="2" Style="height: calc(100vh - 180px); display: flex; flex-direction: column;">
-                <AssetListPanel Assets="_allAssets"
-                                StatusMap="_statusMap"
-                                SelectedAssetId="AssetId"
-                                OnAssetSelected="HandleAssetSelected" />
-            </MudPaper>
-        </MudItem>
-
-        @* ── 우측: 자산 상세 ── *@
-        <MudItem xs="12" md="7">
-            @if (_selectedAsset != null)
-            {
-                <AssetDetail Asset="_selectedAsset" OnSaved="OnAssetSaved" />
-            }
-            else
-            {
-                <MudPaper Class="pa-8 d-flex align-center justify-center" Elevation="2"
-                          Style="height: calc(100vh - 180px);">
-                    <MudStack AlignItems="AlignItems.Center">
-                        <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" />
-                        <MudText Typo="Typo.h6" Color="Color.Secondary">자산을 선택하세요</MudText>
-                    </MudStack>
-                </MudPaper>
-            }
-        </MudItem>
-    </MudGrid>
+    @if (_selectedAsset != null)
+    {
+        <AssetDetail Asset="_selectedAsset" OnSaved="OnAssetSaved" />
+    }
+    else
+    {
+        <MudPaper Class="pa-8 d-flex align-center justify-center" Elevation="2"
+                  Style="height: calc(100vh - 180px);">
+            <MudStack AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">자산을 선택하세요</MudText>
+            </MudStack>
+        </MudPaper>
+    }
 }
 
 @code {

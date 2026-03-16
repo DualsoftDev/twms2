@@ -53,8 +53,22 @@ else
                             그룹 (@_selectedAssetIds.Count)
                         </MudButton>
                     }
-                    @if (_selectedAssetIds.Count > 0)
+                    @if (_selectedAssetIds.Count > 0 || _selectedGroupIds.Count > 0)
                     {
+                        <MudText Typo="Typo.caption" Color="Color.Primary" Class="mx-1">
+                            @if (_selectedAssetIds.Count > 0 && _selectedGroupIds.Count > 0)
+                            {
+                                @($"자산 {_selectedAssetIds.Count} + 그룹 {_selectedGroupIds.Count} 선택")
+                            }
+                            else if (_selectedGroupIds.Count > 0)
+                            {
+                                @($"그룹 {_selectedGroupIds.Count} 선택")
+                            }
+                            else
+                            {
+                                @($"자산 {_selectedAssetIds.Count} 선택")
+                            }
+                        </MudText>
                         <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Secondary"
                                    OnClick="ClearSelection">
                             선택 해제
@@ -85,8 +99,9 @@ else
                         @foreach (var grp in _groups)
                         {
                             var isExpanded = _expandedGroupIds.Contains(grp.Id);
+                            var isGrpSelected = _selectedGroupIds.Contains(grp.Id);
                             var memberIds = GetGroupMemberIds(grp.Id);
-                            <div style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+                            <div style="border-bottom: 1px solid rgba(0,0,0,0.06); @(isGrpSelected ? "background: rgba(33,150,243,0.12);" : "")">
                                 @* 그룹 헤더 *@
                                 <div class="d-flex align-center gap-2 pa-1" style="cursor: pointer;"
                                      @onclick="() => ToggleGroupExpand(grp.Id)">
@@ -169,7 +184,7 @@ else
                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-3">
                     @if (_multiSelectMode)
                     {
-                        <span>Ctrl+클릭 또는 빈 영역 드래그로 다중 선택. 선택된 자산을 드래그하면 일괄 이동.</span>
+                        <span>Ctrl+클릭으로 자산/그룹 다중 선택. 빈 영역 드래그로 올가미 선택. 선택 항목을 드래그하면 일괄 이동.</span>
                     }
                     else
                     {
@@ -277,6 +292,7 @@ else
     private List<TwmsPlacementGroup> _groups = [];
     private Dictionary<int, List<int>> _groupMembers = new(); // groupId → assetIds
     private HashSet<int> _selectedAssetIds = new();
+    private HashSet<int> _selectedGroupIds = new();
     private HashSet<int> _groupedAssetIds = new(); // 그룹에 속한 자산 빠른 조회
     private HashSet<int> _expandedGroupIds = new(); // 펼쳐진 그룹
 
@@ -431,6 +447,13 @@ else
     }
 
     [JSInvokable]
+    public void OnGroupSelectionChanged(int[] groupIds)
+    {
+        _selectedGroupIds = new HashSet<int>(groupIds);
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
     public void OnGroupMoved(int groupId, double x, double y, double w, double h)
     {
         var grp = _groups.FirstOrDefault(g => g.Id == groupId);
@@ -469,12 +492,14 @@ else
         if (!toggled)
         {
             _selectedAssetIds.Clear();
+            _selectedGroupIds.Clear();
         }
     }
 
     private async Task ClearSelection()
     {
         _selectedAssetIds.Clear();
+        _selectedGroupIds.Clear();
         try { await JS.InvokeVoidAsync("assetPlacementEditor.clearSelection", "ap-editor-container"); }
         catch (JSDisconnectedException) { }
     }

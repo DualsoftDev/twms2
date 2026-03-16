@@ -3019,3 +3019,14 @@ a.dash-link-row:hover { text-decoration: underline; }
     opacity: 0.7;
     pointer-events: none;
 }
+
+/* 그룹 선택 시각적 피드백 */
+.ap-group-selected > rect:first-of-type {
+    stroke-width: 2.5 !important;
+    stroke-dasharray: none !important;
+    filter: drop-shadow(0 0 4px rgba(33, 150, 243, 0.6));
+}
+
+.ap-group-selected .ap-group-label {
+    font-weight: bold;
+}

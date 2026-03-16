@@ -34,6 +34,7 @@ window.assetPlacementEditor = (() => {
         const inst = {
             container, svg, dotNetRef, handlers: [],
             selectedIds: new Set(),
+            selectedGroupIds: new Set(),
             mode: 'single', // 'single' | 'multi'
             snap: { enabled: true, gridSize: 20, neighborThreshold: 8 },
             guideLines: [], // 현재 표시 중인 가이드 라인 SVG 요소
@@ -65,7 +66,8 @@ window.assetPlacementEditor = (() => {
         let startPt = null;
         let startPos = null;
         let moved = false;
-        let bulkStarts = null; // 다중 이동 시 각 자산의 시작 위치
+        let bulkStarts = null;       // 다중 이동 시 개별 자산 시작 위치
+        let bulkGroupStarts = null;  // 다중 이동 시 선택된 그룹 시작 위치
 
         const onDown = (e) => {
             e.preventDefault();
@@ -79,10 +81,13 @@ window.assetPlacementEditor = (() => {
 
             // 다중 모드에서 선택된 자산 클릭 → 일괄 이동 준비
             const isSelected = inst.selectedIds.has(assetId);
-            if (inst.mode === 'multi' && isSelected && inst.selectedIds.size > 1) {
-                bulkStarts = collectBulkStarts(inst);
+            const totalSelected = inst.selectedIds.size + inst.selectedGroupIds.size;
+            if (inst.mode === 'multi' && isSelected && totalSelected > 1) {
+                bulkGroupStarts = collectBulkGroupStarts(inst);
+                bulkStarts = collectBulkStartsExcluding(inst, bulkGroupStarts);
             } else {
                 bulkStarts = null;
+                bulkGroupStarts = null;
             }
 
             startPt = { clientX: e.clientX, clientY: e.clientY };
@@ -100,7 +105,7 @@ window.assetPlacementEditor = (() => {
             const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
 
             if (bulkStarts) {
-                // 일괄 이동 — 기준 자산(드래그 대상)만 스냅 적용, 나머지는 동일 delta
+                // 일괄 이동 — 기준 자산만 스냅, 나머지 동일 delta
                 const refSz = getIconSize(group);
                 const rawX = clampX(startPos.x + d.dx, refSz);
                 const rawY = clampY(startPos.y + d.dy, refSz);
@@ -109,6 +114,7 @@ window.assetPlacementEditor = (() => {
                 const snapDx = snapped.x - (startPos.x + d.dx);
                 const snapDy = snapped.y - (startPos.y + d.dy);
 
+                // 개별 자산 이동
                 for (const [aid, sp] of bulkStarts) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (!el) continue;
@@ -119,6 +125,9 @@ window.assetPlacementEditor = (() => {
                     el.dataset.x = nx;
                     el.dataset.y = ny;
                 }
+
+                // 선택된 그룹 + 멤버 자산 이동
+                moveBulkGroups(inst, bulkGroupStarts, d, snapDx, snapDy);
             } else {
                 // 단일 이동
                 const sz = getIconSize(group);
@@ -140,19 +149,12 @@ window.assetPlacementEditor = (() => {
             clearGuideLines(inst);
 
             if (!moved && inst.mode === 'multi' && !e.ctrlKey && !e.metaKey) {
-                // 클릭만 한 경우: 단독 선택
                 selectOnly(inst, assetId);
             }
 
             if (moved && inst.dotNetRef) {
                 if (bulkStarts) {
-                    const positions = [];
-                    for (const [aid] of bulkStarts) {
-                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                        if (!el) continue;
-                        positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
-                    }
-                    inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
+                    reportBulkPositions(inst, bulkStarts, bulkGroupStarts);
                 } else {
                     inst.dotNetRef.invokeMethodAsync('OnAssetMoved', assetId,
                         r2(parseFloat(group.dataset.x)), r2(parseFloat(group.dataset.y)));
@@ -162,6 +164,7 @@ window.assetPlacementEditor = (() => {
             startPt = null;
             startPos = null;
             bulkStarts = null;
+            bulkGroupStarts = null;
         };
 
         group.addEventListener('pointerdown', onDown);
@@ -175,21 +178,40 @@ window.assetPlacementEditor = (() => {
 
         let startPt = null;
         let startGrp = null;
+        let moved = false;
         let memberStarts = null;
+        let bulkAssetStarts = null;
+        let bulkGroupStarts = null;
 
         const onDown = (e) => {
             if (e.target.classList.contains('ap-group-resize')) return;
             e.preventDefault();
             e.stopPropagation();
 
+            // Ctrl+클릭: 그룹 선택 토글
+            if (inst.mode === 'multi' && (e.ctrlKey || e.metaKey)) {
+                toggleGroupSelect(inst, groupId, groupEl);
+                return;
+            }
+
             startPt = { clientX: e.clientX, clientY: e.clientY };
             startGrp = {
                 x: parseFloat(groupEl.dataset.x) || 0,
                 y: parseFloat(groupEl.dataset.y) || 0,
             };
+            moved = false;
 
-            // 멤버 자산 시작 위치 수집
-            memberStarts = collectGroupMemberStarts(inst, groupEl);
+            // 다중 모드에서 선택된 그룹 드래그 → 일괄 이동
+            const isSelected = inst.selectedGroupIds.has(groupId);
+            const totalSelected = inst.selectedIds.size + inst.selectedGroupIds.size;
+            if (inst.mode === 'multi' && isSelected && totalSelected > 1) {
+                bulkGroupStarts = collectBulkGroupStarts(inst);
+                bulkAssetStarts = collectBulkStartsExcluding(inst, bulkGroupStarts);
+            } else {
+                bulkGroupStarts = null;
+                bulkAssetStarts = null;
+                memberStarts = collectGroupMemberStarts(inst, groupEl);
+            }
 
             document.addEventListener('pointermove', onMove);
             document.addEventListener('pointerup', onUp);
@@ -199,32 +221,49 @@ window.assetPlacementEditor = (() => {
 
         const onMove = (e) => {
             if (!startPt) return;
+            moved = true;
             const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
+
+            // 기준 그룹 스냅
             let nx = Math.max(0, startGrp.x + d.dx);
             let ny = Math.max(0, startGrp.y + d.dy);
-
-            // 그리드 스냅 적용
             if (inst.snap.enabled) {
                 nx = snapToGrid(nx, inst.snap.gridSize);
                 ny = snapToGrid(ny, inst.snap.gridSize);
             }
-
             const snapDx = nx - (startGrp.x + d.dx);
             const snapDy = ny - (startGrp.y + d.dy);
 
-            updateGroupPosition(groupEl, nx, ny);
+            if (bulkGroupStarts) {
+                // 일괄 이동: 선택된 모든 그룹 + 멤버 + 개별 자산
+                moveBulkGroups(inst, bulkGroupStarts, d, snapDx, snapDy);
 
-            // 멤버 자산도 동일 delta 이동 (스냅 보정 포함)
-            if (memberStarts) {
-                for (const [aid, sp] of memberStarts) {
-                    const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                    if (!el) continue;
-                    const sz = getIconSize(el);
-                    const ax = clampX(sp.x + d.dx + snapDx, sz);
-                    const ay = clampY(sp.y + d.dy + snapDy, sz);
-                    el.setAttribute('transform', `translate(${ax}, ${ay})`);
-                    el.dataset.x = ax;
-                    el.dataset.y = ay;
+                if (bulkAssetStarts) {
+                    for (const [aid, sp] of bulkAssetStarts) {
+                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                        if (!el) continue;
+                        const sz = getIconSize(el);
+                        const ax = clampX(sp.x + d.dx + snapDx, sz);
+                        const ay = clampY(sp.y + d.dy + snapDy, sz);
+                        el.setAttribute('transform', `translate(${ax}, ${ay})`);
+                        el.dataset.x = ax;
+                        el.dataset.y = ay;
+                    }
+                }
+            } else {
+                // 단일 그룹 드래그
+                updateGroupPosition(groupEl, nx, ny);
+                if (memberStarts) {
+                    for (const [aid, sp] of memberStarts) {
+                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                        if (!el) continue;
+                        const sz = getIconSize(el);
+                        const ax = clampX(sp.x + d.dx + snapDx, sz);
+                        const ay = clampY(sp.y + d.dy + snapDy, sz);
+                        el.setAttribute('transform', `translate(${ax}, ${ay})`);
+                        el.dataset.x = ax;
+                        el.dataset.y = ay;
+                    }
                 }
             }
         };
@@ -234,26 +273,38 @@ window.assetPlacementEditor = (() => {
             document.removeEventListener('pointerup', onUp);
             groupEl.classList.remove('dragging');
 
-            if (startPt && inst.dotNetRef) {
-                const gx = r2(parseFloat(groupEl.dataset.x));
-                const gy = r2(parseFloat(groupEl.dataset.y));
-                const gw = r2(parseFloat(groupEl.dataset.w));
-                const gh = r2(parseFloat(groupEl.dataset.h));
-                inst.dotNetRef.invokeMethodAsync('OnGroupMoved', groupId, gx, gy, gw, gh);
+            if (!moved && inst.mode === 'multi') {
+                // 클릭만: 그룹 단독 선택
+                selectGroupOnly(inst, groupId);
+            }
 
-                // 멤버 자산 위치도 콜백
-                if (memberStarts) {
-                    const positions = [];
-                    for (const [aid] of memberStarts) {
-                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                        if (!el) continue;
-                        positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+            if (moved && startPt && inst.dotNetRef) {
+                if (bulkGroupStarts) {
+                    reportBulkPositions(inst, bulkAssetStarts, bulkGroupStarts);
+                } else {
+                    inst.dotNetRef.invokeMethodAsync('OnGroupMoved', groupId,
+                        r2(parseFloat(groupEl.dataset.x)),
+                        r2(parseFloat(groupEl.dataset.y)),
+                        r2(parseFloat(groupEl.dataset.w)),
+                        r2(parseFloat(groupEl.dataset.h)));
+                    if (memberStarts) {
+                        const positions = [];
+                        for (const [aid] of memberStarts) {
+                            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                            if (!el) continue;
+                            positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                        }
+                        if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
                     }
-                    if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
                 }
             }
+
             startPt = null;
+            startGrp = null;
+            moved = false;
             memberStarts = null;
+            bulkAssetStarts = null;
+            bulkGroupStarts = null;
         };
 
         rect.addEventListener('pointerdown', onDown);
@@ -362,9 +413,11 @@ window.assetPlacementEditor = (() => {
                 const lx2 = Math.max(startSvg.x, cur.x);
                 const ly2 = Math.max(startSvg.y, cur.y);
 
-                // 올가미 범위에 중심이 포함된 자산 선택
+                // 올가미 범위에 중심이 포함된 자산 + 그룹 선택
                 if (lx2 - lx1 > 5 || ly2 - ly1 > 5) {
                     inst.selectedIds.clear();
+                    inst.selectedGroupIds.clear();
+                    // 자산
                     inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
                         const sz = getIconSize(g);
                         const ax = (parseFloat(g.dataset.x) || 0) + sz / 2;
@@ -373,10 +426,20 @@ window.assetPlacementEditor = (() => {
                             inst.selectedIds.add(parseInt(g.dataset.assetId));
                         }
                     });
+                    // 그룹 (중심이 올가미 범위에 포함된 경우)
+                    inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+                        const gx = parseFloat(g.dataset.x) || 0;
+                        const gy = parseFloat(g.dataset.y) || 0;
+                        const gw = parseFloat(g.dataset.w) || 150;
+                        const gh = parseFloat(g.dataset.h) || 100;
+                        const cx = gx + gw / 2, cy = gy + gh / 2;
+                        if (cx >= lx1 && cx <= lx2 && cy >= ly1 && cy <= ly2) {
+                            inst.selectedGroupIds.add(parseInt(g.dataset.groupId));
+                        }
+                    });
                     updateSelectionVisual(inst);
-                    if (inst.dotNetRef) {
-                        inst.dotNetRef.invokeMethodAsync('OnSelectionChanged', [...inst.selectedIds]);
-                    }
+                    updateGroupSelectionVisual(inst);
+                    notifySelection(inst);
                 }
 
                 lassoRect.remove();
@@ -398,20 +461,55 @@ window.assetPlacementEditor = (() => {
             inst.selectedIds.add(assetId);
             el.classList.add('ap-selected');
         }
-        if (inst.dotNetRef) inst.dotNetRef.invokeMethodAsync('OnSelectionChanged', [...inst.selectedIds]);
+        notifySelection(inst);
+    }
+
+    function toggleGroupSelect(inst, groupId, groupEl) {
+        if (inst.selectedGroupIds.has(groupId)) {
+            inst.selectedGroupIds.delete(groupId);
+            groupEl.classList.remove('ap-group-selected');
+        } else {
+            inst.selectedGroupIds.add(groupId);
+            groupEl.classList.add('ap-group-selected');
+        }
+        notifySelection(inst);
     }
 
     function selectOnly(inst, assetId) {
         inst.selectedIds.clear();
         inst.selectedIds.add(assetId);
+        inst.selectedGroupIds.clear();
         updateSelectionVisual(inst);
-        if (inst.dotNetRef) inst.dotNetRef.invokeMethodAsync('OnSelectionChanged', [...inst.selectedIds]);
+        updateGroupSelectionVisual(inst);
+        notifySelection(inst);
+    }
+
+    function selectGroupOnly(inst, groupId) {
+        inst.selectedIds.clear();
+        inst.selectedGroupIds.clear();
+        inst.selectedGroupIds.add(groupId);
+        updateSelectionVisual(inst);
+        updateGroupSelectionVisual(inst);
+        notifySelection(inst);
+    }
+
+    function notifySelection(inst) {
+        if (!inst.dotNetRef) return;
+        inst.dotNetRef.invokeMethodAsync('OnSelectionChanged', [...inst.selectedIds]);
+        inst.dotNetRef.invokeMethodAsync('OnGroupSelectionChanged', [...inst.selectedGroupIds]);
     }
 
     function updateSelectionVisual(inst) {
         inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
             const aid = parseInt(g.dataset.assetId);
             g.classList.toggle('ap-selected', inst.selectedIds.has(aid));
+        });
+    }
+
+    function updateGroupSelectionVisual(inst) {
+        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            const gid = parseInt(g.dataset.groupId);
+            g.classList.toggle('ap-group-selected', inst.selectedGroupIds.has(gid));
         });
     }
 
@@ -435,6 +533,89 @@ window.assetPlacementEditor = (() => {
             if (el) map.set(aid, { x: parseFloat(el.dataset.x) || 0, y: parseFloat(el.dataset.y) || 0 });
         });
         return map;
+    }
+
+    // ── 그룹 포함 벌크 이동 헬퍼 ──
+    function collectBulkGroupStarts(inst) {
+        const map = new Map();
+        for (const gid of inst.selectedGroupIds) {
+            const gel = inst.svg.querySelector(`.ap-group-container[data-group-id="${gid}"]`);
+            if (!gel) continue;
+            map.set(gid, {
+                x: parseFloat(gel.dataset.x) || 0,
+                y: parseFloat(gel.dataset.y) || 0,
+                el: gel,
+                members: collectGroupMemberStarts(inst, gel),
+            });
+        }
+        return map;
+    }
+
+    // 선택된 개별 자산 중 선택된 그룹 멤버를 제외한 목록
+    function collectBulkStartsExcluding(inst, groupStarts) {
+        const excludeIds = new Set();
+        if (groupStarts) {
+            for (const [, gsp] of groupStarts) {
+                for (const [aid] of gsp.members) excludeIds.add(aid);
+            }
+        }
+        const map = new Map();
+        for (const aid of inst.selectedIds) {
+            if (excludeIds.has(aid)) continue;
+            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+            if (el) map.set(aid, { x: parseFloat(el.dataset.x) || 0, y: parseFloat(el.dataset.y) || 0 });
+        }
+        return map;
+    }
+
+    // 선택된 그룹들과 멤버 자산 일괄 이동
+    function moveBulkGroups(inst, groupStarts, d, snapDx, snapDy) {
+        if (!groupStarts) return;
+        for (const [, gsp] of groupStarts) {
+            const gnx = Math.max(0, gsp.x + d.dx + snapDx);
+            const gny = Math.max(0, gsp.y + d.dy + snapDy);
+            updateGroupPosition(gsp.el, gnx, gny);
+            for (const [aid, asp] of gsp.members) {
+                const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                if (!el) continue;
+                const sz = getIconSize(el);
+                const ax = clampX(asp.x + d.dx + snapDx, sz);
+                const ay = clampY(asp.y + d.dy + snapDy, sz);
+                el.setAttribute('transform', `translate(${ax}, ${ay})`);
+                el.dataset.x = ax;
+                el.dataset.y = ay;
+            }
+        }
+    }
+
+    // 벌크 이동 후 C#에 위치 보고
+    function reportBulkPositions(inst, assetStarts, groupStarts) {
+        if (!inst.dotNetRef) return;
+        const positions = [];
+        // 개별 자산 위치
+        if (assetStarts) {
+            for (const [aid] of assetStarts) {
+                const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                if (!el) continue;
+                positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+            }
+        }
+        // 그룹 위치 + 멤버 자산 위치
+        if (groupStarts) {
+            for (const [gid, gsp] of groupStarts) {
+                inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
+                    r2(parseFloat(gsp.el.dataset.x)),
+                    r2(parseFloat(gsp.el.dataset.y)),
+                    r2(parseFloat(gsp.el.dataset.w)),
+                    r2(parseFloat(gsp.el.dataset.h)));
+                for (const [aid] of gsp.members) {
+                    const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                    if (!el) continue;
+                    positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                }
+            }
+        }
+        if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
     }
 
     // ── 그룹 위치/크기 업데이트 ──
@@ -578,7 +759,9 @@ window.assetPlacementEditor = (() => {
             inst.mode = mode;
             if (mode === 'single') {
                 inst.selectedIds.clear();
+                inst.selectedGroupIds.clear();
                 updateSelectionVisual(inst);
+                updateGroupSelectionVisual(inst);
             }
         }
     }
@@ -587,7 +770,9 @@ window.assetPlacementEditor = (() => {
         const inst = _inst[containerId];
         if (inst) {
             inst.selectedIds.clear();
+            inst.selectedGroupIds.clear();
             updateSelectionVisual(inst);
+            updateGroupSelectionVisual(inst);
         }
     }
 
