@@ -380,7 +380,7 @@
                         </TemplateColumn>
                         <TemplateColumn Title="리포트" Sortable="false">
                             <CellTemplate>
-                                @if (context.Item.ContentsChanged == true)
+                                @if (context.Item.ContentsChanged == true && HasReport(context.Item.AssetId))
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
                                                    Color="GetResultColor(context.Item)" Size="Size.Small"
@@ -634,6 +634,7 @@
     private List<DexaAction> _actions = [];
     private Dictionary<int, string> _assetNames = [];
     private Dictionary<int, string> _assetTypes = [];
+    private Dictionary<int, int?> _assetTypeIds = [];
     private Dictionary<int, string> _assetLines = [];
     private string? _historyError;
     private string _periodLabel = "today";
@@ -683,6 +684,7 @@
             var assets = await assetsTask;
             _assetNames = assets.ToDictionary(a => a.AssetId, a => a.DisplayName);
             _assetTypes = assets.ToDictionary(a => a.AssetId, a => a.AssetTypeUserFriendlyName ?? "");
+            _assetTypeIds = assets.ToDictionary(a => a.AssetId, a => a.AssetTypeId);
             _assetIps = assets.ToDictionary(a => a.AssetId, a => a.Ip ?? "");
             // 라인 맵은 statusTask 이후에 구성
             _allActions = await actionsTask;
@@ -978,6 +980,10 @@
         var url = $"/api/download/backup/{action.AssetId}/{action.Version}";
         await JS.InvokeVoidAsync("open", url, "_blank");
     }
+
+    /// <summary>리포트 버튼 표시 여부: PLC(6)와 Drive/인버터(4)만 리포트 지원</summary>
+    private bool HasReport(int assetId)
+        => _assetTypeIds.TryGetValue(assetId, out var typeId) && (typeId == 4 || typeId == 6);
 
     private async Task OpenReport(DexaAction action)
     {
