@@ -97,3 +97,6 @@ appsettings.*.json
 src/DexaWeb.Server/twm.db.sqlite3
 src/DexaWeb.Server/wwwroot/uploads/app-logo.svg
 src/DexaWeb.Server/manuals/
+
+# DeepPinger source (private - use pre-built DLL from src/libs/)
+src/DeepPinger/

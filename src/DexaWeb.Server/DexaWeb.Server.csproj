@@ -21,10 +21,11 @@
     <ProjectReference Include="..\DexaWeb.Dexa\DexaWeb.Dexa.fsproj" />
   </ItemGroup>
 
-  <!-- DeepPinger.dll: 서버 빌드 전 C++ DLL 자동 빌드 -->
-  <Target Name="BuildDeepPinger" BeforeTargets="Build" Condition="'$(SkipDeepPinger)' != 'true'">
-    <MSBuild Projects="..\DeepPinger\DeepPinger.vcxproj"
-             Properties="Configuration=$(Configuration);Platform=x64;SolutionDir=$(SolutionDir)" />
+  <!-- DeepPinger.dll: 미리 빌드된 DLL을 출력 폴더에 복사 -->
+  <Target Name="CopyDeepPinger" BeforeTargets="Build">
+    <Copy SourceFiles="..\libs\DeepPinger.dll"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="true" />
   </Target>
 
 </Project>
