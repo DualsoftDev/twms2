@@ -234,13 +234,14 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<DexaAction>("""
-                SELECT a.id, a.assetId, a.version, a.started, a.finished, a.contentsChanged, a.memo
-                FROM [action] a
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                FROM [action.base] ab
+                INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
                 INNER JOIN (
-                    SELECT assetId, MAX(id) AS maxId
-                    FROM [action]
+                    SELECT assetId, MAX(actionId) AS maxId
+                    FROM [action.schedule]
                     GROUP BY assetId
-                ) latest ON a.id = latest.maxId
+                ) latest ON acs.actionId = latest.maxId
                 """);
             var list = result.ToList();
             _cache.Set(CacheKeyLatestActions, list, ActionCacheTtl);
@@ -265,9 +266,12 @@ public class DexaReadService
         try
         {
             using var conn = _dexaDb.Create();
-            var result = await conn.QueryAsync<DexaAction>(
-                "SELECT id, assetId, version, started, finished, contentsChanged, memo FROM [action] ORDER BY started DESC LIMIT @Limit",
-                new { Limit = limit });
+            var result = await conn.QueryAsync<DexaAction>("""
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                FROM [action.base] ab
+                INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
+                ORDER BY ab.started DESC LIMIT @Limit
+                """, new { Limit = limit });
             var list = result.ToList();
             _cache.Set(cacheKey, list, ActionCacheTtl);
             return list;
@@ -318,10 +322,11 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<DexaAction>("""
-                SELECT id, assetId, version, started, finished, contentsChanged, memo
-                FROM [action]
-                WHERE started >= @From AND started < @To
-                ORDER BY started DESC
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                FROM [action.base] ab
+                INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
+                WHERE ab.started >= @From AND ab.started < @To
+                ORDER BY ab.started DESC
                 """, new { From = from, To = to });
             return result.ToList();
         }
@@ -338,9 +343,10 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<DexaAction>("""
-                SELECT id, assetId, version, started, finished, contentsChanged, memo
-                FROM [action]
-                ORDER BY started DESC
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                FROM [action.base] ab
+                INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
+                ORDER BY ab.started DESC
                 """);
             return result.ToList();
         }

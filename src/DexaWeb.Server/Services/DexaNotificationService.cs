@@ -54,6 +54,8 @@ public class DexaNotificationService : IDisposable
         switch (tableName?.ToLower())
         {
             case "action":
+            case "action.base":
+            case "action.schedule":
             case "actionlog":
                 _cache.Remove("dexa_latest_actions");
                 // action 캐시는 key에 limit 포함 → 대표 키만 제거

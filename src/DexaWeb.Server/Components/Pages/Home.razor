@@ -700,7 +700,7 @@
 
     private async void HandleDatabaseChanged(string tableName)
     {
-        if (tableName is "action" or "actionlog" or "asset" or "agent" or "*")
+        if (tableName is "action" or "action.base" or "action.schedule" or "actionlog" or "asset" or "agent" or "*")
         {
             await InvokeAsync(async () =>
             {
