@@ -26,8 +26,9 @@ public class DexaDbConnection
         // 기존 Mode= 옵션 제거
         var baseStr = Regex.Replace(raw.TrimEnd(';'), @";?\s*Mode=[^;]*", "", RegexOptions.IgnoreCase);
 
-        // Microsoft.Data.Sqlite용 (읽기)
-        _readOnlyConnStr = baseStr + ";Mode=ReadOnly;";
+        // Microsoft.Data.Sqlite용 (읽기) — Pooling=False로 Dispose 시 파일 핸들 즉시 해제
+        // DEXA Server가 DB 파일의 소유자이므로, TWMS가 파일을 물고 있으면 안 됨
+        _readOnlyConnStr = baseStr + ";Mode=ReadOnly;Pooling=False;";
 
         // System.Data.SQLite용 (쓰기) — 커넥션 문자열 형식이 다름
         // "Data Source=path" 에서 path만 추출
