@@ -16,10 +16,19 @@ type DexaClientShortTermActor(logger: ILogger) =
     override this.OnReceive(message: obj) =
         let sender = this.Sender
 
-        logger.LogDebug("ShortTerm actor 메시지 수신: {Type}", message.GetType().Name :> obj)
+        logger.LogInformation("ShortTerm actor 메시지 수신: {Type} from {Sender}", message.GetType().Name :> obj, sender.Path.ToString() :> obj)
         DexaClientShortTermActor.MessageSubject.OnNext(message)
 
         match message with
+        | :? AmReplySubscription as sub ->
+            let s2c = sub :?> AmS2CReplySubscription
+            if not (isNull s2c) then
+                logger.LogInformation(
+                    "DEXA Server 구독 응답 수신 (serverVersion={Version})",
+                    (if isNull s2c.ServerVersion then "?" else s2c.ServerVersion) :> obj)
+            else
+                logger.LogInformation("DEXA Server 구독 응답 수신 (base type)")
+
         | :? AmS2CNotifyDataChanged as xnotify ->
             if not (isNull xnotify.DataChanges) then
                 for dc in xnotify.DataChanges do

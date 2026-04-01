@@ -38,6 +38,7 @@ type DexaSerializationBinder() =
                         found <- true
                 if not found then
                     assemblyName <- serializedType.Assembly.GetName().Name
+                Debug.WriteLine(sprintf "[DexaBinder] BindToName: %s → %s" typeName assemblyName)
             else
                 assemblyName <- serializedType.Assembly.GetName().Name
 

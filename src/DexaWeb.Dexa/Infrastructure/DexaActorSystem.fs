@@ -43,9 +43,13 @@ type DexaActorSystem(logger: ILogger, options: DexaClientOptions) =
 
         let hostname = Environment.MachineName
 
-        // DEXCommProxy.Initialize와 동일한 방식: 전체 HOCON을 직접 제공 (fallback 미사용)
+        // 커스텀 DexaJsonSerializer를 Akka serializer로 등록
+        // → DexaSerializationBinder가 어셈블리명 매핑 (DexaWeb.Dexa ↔ DEXA.Core.Actor)
         let hoconParts = ResizeArray<string>()
         hoconParts.Add("akka.actor.provider = \"Akka.Remote.RemoteActorRefProvider, Akka.Remote\"")
+        hoconParts.Add("akka.actor.serializers.json = \"DexaWeb.Dexa.Infrastructure.DexaJsonSerializer, DexaWeb.Dexa\"")
+        hoconParts.Add("akka.actor.serialization-bindings.\"System.Object\" = json")
+        hoconParts.Add("akka.actor.serialization-identifiers.\"DexaWeb.Dexa.Infrastructure.DexaJsonSerializer, DexaWeb.Dexa\" = 1")
         hoconParts.Add("akka.remote.dot-netty.tcp.port = 0")
         hoconParts.Add("akka.remote.dot-netty.tcp.hostname = 0.0.0.0")
         hoconParts.Add(sprintf "akka.remote.dot-netty.tcp.public-hostname = \"%s\"" hostname)
@@ -57,9 +61,17 @@ type DexaActorSystem(logger: ILogger, options: DexaClientOptions) =
         hoconParts.Add("akka.remote.dot-netty.tcp.maximum-frame-size = 30000000b")
         hoconParts.Add("akka.remote.dot-netty.tcp.connection-timeout = 10s")
         hoconParts.Add("akka.remote.dot-netty.tcp.tcp-keepalive = on")
+        // 진단용 로깅
+        hoconParts.Add("akka.actor.debug.unhandled = on")
+        hoconParts.Add("akka.log-dead-letters = on")
+        hoconParts.Add("akka.log-dead-letters-during-shutdown = off")
+        hoconParts.Add("akka.loglevel = DEBUG")
         let hocon = String.Join("\n", hoconParts)
 
-        let config = ConfigurationFactory.ParseString(hocon)
+        let config =
+            ConfigurationFactory.ParseString(hocon)
+                .WithFallback(ConfigurationFactory.Load())
+
         actorSystem <- ActorSystem.Create(DEXActorGlobal.ClientAtorSystemName, config)
 
         let boundPort =
@@ -90,6 +102,18 @@ type DexaActorSystem(logger: ILogger, options: DexaClientOptions) =
     member this.ConnectToServer() =
         let resolveTimeout = TimeSpan.FromSeconds(15.0)
         try
+            // 서버 actor 구조 탐색 — CommProxy 진입점 확인
+            let candidates = [
+                serverBase  // DEXServer (CommProxy 메인)
+                serverShortTermPath
+            ]
+            for path in candidates do
+                try
+                    let actor = actorSystem.ActorSelection(path).ResolveOne(TimeSpan.FromSeconds(3.0)).Result
+                    logger.LogInformation("서버 actor 발견: {Path} → {Actor}", path :> obj, actor.Path.ToString() :> obj)
+                with _ ->
+                    logger.LogWarning("서버 actor 없음: {Path}", path :> obj)
+
             logger.LogInformation("서버 actor resolve 시작: {Path} (timeout: {Timeout}s)",
                 serverShortTermPath :> obj, resolveTimeout.TotalSeconds :> obj)
             DexaActorSystem.ServerShortTermActor <-

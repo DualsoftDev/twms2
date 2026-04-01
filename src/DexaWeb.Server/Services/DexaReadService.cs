@@ -169,7 +169,10 @@ public class DexaReadService
     {
         using var conn = _dexaDb.CreateReadWrite();
         await conn.ExecuteAsync(
-            "INSERT INTO schedule (triggerId, assetId, deleted) VALUES (@TriggerId, @AssetId, 0)",
+            """
+            INSERT INTO schedule (triggerId, assetId, deleted) VALUES (@TriggerId, @AssetId, 0)
+            ON CONFLICT (triggerId, assetId) DO UPDATE SET deleted = 0
+            """,
             new { TriggerId = triggerId, AssetId = assetId });
     }
 
