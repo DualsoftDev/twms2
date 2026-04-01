@@ -168,6 +168,97 @@ type AmS2CReplyLicenseInfo(query: AmC2SRequestLicenseInfo) =
     member val State: int = 0 with get, set
     private new() = AmS2CReplyLicenseInfo(Unchecked.defaultof<_>)
 
+// --- 2.20 new S2C Reply Messages ---
+
+type AmS2CReplyAssetStatus() =
+    inherit AmReply()
+    member val AssetStatuses: AssetStatus array = null with get, set
+
+type AmS2CReplyActionSchedule() =
+    inherit AmReply()
+    member val Actions: Action array = null with get, set
+
+type AmS2CReplyActionLog() =
+    inherit AmReply()
+    member val ActionLogs: ActionLog array = null with get, set
+
+type AmS2CReplyProjectFileContents() =
+    inherit AmReply()
+    member val Contents: byte array = null with get, set
+
+type AmS2CReplyAddPermission() =
+    inherit AmReply()
+
+type AmS2CReplyRemovePermission() =
+    inherit AmReply()
+
+type AmS2CReplyUpdateUsers() =
+    inherit AmReply()
+
+type AmS2CReplyDeleteAssetById() =
+    inherit AmReply()
+
+type AmS2CReplyAssetDataInfo() =
+    inherit AmReply()
+
+type AmS2CReplyImportAssets() =
+    inherit AmReply()
+
+type AmS2CReplyShowScheduleFromQuartz() =
+    inherit AmReply()
+
+type AmS2CReplyServerExport() =
+    inherit AmReply()
+
+type AmS2CReplyUpdateServerAppConfig() =
+    inherit AmReply()
+
+type AmS2CReplyTargetLog() =
+    inherit AmReply()
+
+type AmS2CReplyLog4NetLog() =
+    inherit AmReply()
+    member val Contents: byte array = null with get, set
+
+type AmS2CReplyGetServerDebugState() =
+    inherit AmReply()
+
+type AmS2CReplyDelay() =
+    inherit AmReply()
+
+type AmS2CReplyAssetCommand() =
+    inherit AmReply()
+
+type AmS2CReplyExecuteAssetCommand() =
+    inherit AmReply()
+
+type AmS2CReplyCheckUploadAssetData() =
+    inherit AmReply()
+
+type AmS2CReplyUploadAssetData() =
+    inherit AmReply()
+
+type AmS2CReplyAllAliveConnectedPeers() =
+    inherit AmReply()
+
+type AmS2CReplyConnectedProxy() =
+    inherit AmReply()
+
+type AmS2CReplyRegisterLicense() =
+    inherit AmReply()
+
+type AmS2CReplyGetLicenseKeyData() =
+    inherit AmReply()
+
+type AmS2CReplyTableInfo() =
+    inherit AmReply()
+
+type AmS2CReplyTableInfos() =
+    inherit AmReply()
+
+type AmS2CReplyExecuteTestEvent() =
+    inherit AmReply()
+
 // Subscription reply
 [<AllowNullLiteral>]
 type AmS2CReplySubscription(query: AmC2SSubscribe,
@@ -186,11 +277,14 @@ type AmS2CReplySubscription(query: AmC2SSubscribe,
     member val IsSQLiteDatabase: bool = isSQLite with get, set
     private new() = AmS2CReplySubscription(Unchecked.defaultof<_>, Seq.empty, Seq.empty, Seq.empty, null, null, false)
 
-// --- S2X Broadcast Messages ---
+// --- S2C Broadcast Messages ---
 
-type AmS2XNotifyDataChanged(dataChanges: DataChangedNotification array) =
+type AmS2CNotifyDataChanged(dataChanges: DataChangedNotification array) =
     inherit ActorMessage()
     member val DataChanges: DataChangedNotification array = dataChanges with get, set
+
+// Legacy alias for backward compatibility
+type AmS2XNotifyDataChanged = AmS2CNotifyDataChanged
 
 type AmS2XServerShutdown(query: AmC2SRequestServerRestart) =
     inherit AmReply(null, query)

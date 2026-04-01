@@ -16,6 +16,7 @@ type Action() =
 
     member this.Succeeded =
         this.NthSucceeded.HasValue && this.NthSucceeded.Value >= 0
+        && not (String.Equals(this.Memo, "false", StringComparison.OrdinalIgnoreCase))
 
     member val ContentsChanged: bool = false with get, set
     member val Memo: string = null with get, set

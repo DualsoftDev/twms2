@@ -89,7 +89,81 @@ type AmC2SNotifyDataChanged(tableName: string, operation: DatabaseChangeOperatio
     member val Operation: DatabaseChangeOperation = operation with get, set
 
 // ────────────────────────────────────────────────────────────────
-// Reserved — DEXA protocol definitions, not yet used by Server
+// 2.20 new — new messages added in DEXA 2.20
+// ────────────────────────────────────────────────────────────────
+
+// Asset status query
+type AmC2SRequestAssetStatus() = inherit ActorMessage()
+
+// Action schedule / action log queries
+type AmC2SRequestActionSchedule() = inherit ActorMessage()
+type AmC2SRequestActionLog() = inherit ActorMessage()
+
+// Project file contents
+type AmC2SRequestProjectFileContents() = inherit ActorMessage()
+
+// Permission management
+type AmC2SRequestAddPermission() = inherit ActorMessage()
+type AmC2SRequestRemovePermission() = inherit ActorMessage()
+
+// User management
+type AmC2SRequestUpdateUsers() = inherit ActorMessage()
+
+// Asset operations
+type AmC2SRequestDeleteAssetById(assetId: int) =
+    inherit ActorMessage()
+    member val AssetId: int = assetId with get, set
+    private new() = AmC2SRequestDeleteAssetById(0)
+
+type AmC2SRequestAssetDataInfo() = inherit ActorMessage()
+type AmC2SRequestImportAssets() = inherit ActorMessage()
+
+type AmC2SRequestCopyAssetToNewAsset() = inherit ActorMessage()
+
+// Quartz schedule query
+type AmC2SRequestScheduleFromQuartz() = inherit ActorMessage()
+
+// Server management
+type AmC2SRequestServerExport() = inherit ActorMessage()
+type AmC2SRequestUpdateServerAppConfig() = inherit ActorMessage()
+type AmC2SRequestTargetLog() = inherit ActorMessage()
+type AmC2SRequestLog4NetLog() = inherit ActorMessage()
+type AmC2SRequestGetServerDebugState() = inherit ActorMessage()
+type AmC2SRequestDelay() = inherit ActorMessage()
+
+// Asset command (Topic system)
+type AmC2SRequestAssetCommand() = inherit ActorMessage()
+type AmC2SRequestExecuteAssetCommand() = inherit ActorMessage()
+
+// DLL upload
+type AmC2SRequestCheckUploadAssetData() = inherit ActorMessage()
+type AmC2SRequestUploadAssetData() = inherit ActorMessage()
+
+// Peer info
+type AmC2SRequestAllAliveConnectedPeers() = inherit ActorMessage()
+type AmC2SRequestConnectedProxy() = inherit ActorMessage()
+
+// License
+type AmC2SRequestRegisterLicense() = inherit ActorMessage()
+type AmC2SRequestGetLicenseKeyData() = inherit ActorMessage()
+
+// Table info (stream)
+type AmC2SRequestTableInfo() = inherit ActorMessage()
+type AmC2SRequestTableInfos() = inherit ActorMessage()
+
+// Execute backup (extended - with action type for trigger backup)
+type AmC2SRequestExecuteBackupOnce(assetId: int, scheduleId: Nullable<int>, actionId: Nullable<int>, actionType: int) =
+    inherit AmExecuteBackup(assetId, None)
+    member val ScheduleId: Nullable<int> = scheduleId with get, set
+    member val ActionId: Nullable<int> = actionId with get, set
+    member val ActionType: int = actionType with get, set
+    private new() = AmC2SRequestExecuteBackupOnce(0, Nullable<int>(), Nullable<int>(), 0)
+
+// Test event
+type AmC2SExecuteTestEvent() = inherit ActorMessage()
+
+// ────────────────────────────────────────────────────────────────
+// Reserved — DEXA protocol definitions
 // ────────────────────────────────────────────────────────────────
 
 // Simple request markers (reserved)

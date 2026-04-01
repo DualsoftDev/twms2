@@ -57,8 +57,8 @@ public class DexaNotificationService : IDisposable
             case "action.base":
             case "action.schedule":
             case "actionlog":
+            case "backuplog":
                 _cache.Remove("dexa_latest_actions");
-                // action 캐시는 key에 limit 포함 → 대표 키만 제거
                 _cache.Remove("dexa_actions_200");
                 _cache.Remove("dexa_actions_100");
                 break;
@@ -67,6 +67,19 @@ public class DexaNotificationService : IDisposable
                 break;
             case "agent":
                 _cache.Remove("dexa_agents");
+                break;
+            case "asset.status":
+            case "asset_status":
+                _cache.Remove("dexa_asset_statuses");
+                break;
+            case "client":
+                _cache.Remove("dexa_clients");
+                break;
+            case "dll":
+                _cache.Remove("dexa_dlls");
+                break;
+            case "storage":
+                _cache.Remove("dexa_view_assets");
                 break;
         }
     }
@@ -78,6 +91,9 @@ public class DexaNotificationService : IDisposable
         _cache.Remove("dexa_latest_actions");
         _cache.Remove("dexa_actions_200");
         _cache.Remove("dexa_actions_100");
+        _cache.Remove("dexa_asset_statuses");
+        _cache.Remove("dexa_clients");
+        _cache.Remove("dexa_dlls");
     }
 
     /// <summary>설정 변경 등 수동으로 UI 갱신 트리거</summary>

@@ -1,102 +1,86 @@
 namespace DexaWeb.Dexa
 
 open System
-open System.Diagnostics
 open System.Reactive.Subjects
 open System.Threading
 open System.Threading.Tasks
 open Akka.Actor
-open DEX.Common
 open DEX.Core.Actor
-open DEX.Core.Database.ORM
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 
+/// CommProxy 패턴 기반 DEXA Client.
+/// 서버의 ShortTerm/LongTerm/Stream actor와 직접 통신.
 type DexaClient(options: IOptions<DexaClientOptions>, logger: ILogger<DexaClient>) =
     let opts = options.Value
     let mutable actorSystem: DexaActorSystem option = None
     let mutable initialized = false
     let mutable disposed = false
     let mutable connectivityTimer: Timer option = None
-    let mutable subscriptionMessage: AmInjectSubscription option = None
     let notifications = new Subject<obj>()
-
-    let createSubscriptionMessage () =
-        let ipAddress = EmDns.getLocalIpAddress().ToString()
-        let swVersion = "1.0.0"
-        let assemblies = sprintf "DexaWeb.Dexa\t%s\t%O" swVersion DateTime.Now
-        let pid = Process.GetCurrentProcess().Id
-
-        let clientInfo =
-            ClientInfo(
-                DexaActorSystem.SelfGuardianActor,
-                opts.ClientName,
-                swVersion,
-                assemblies,
-                ipAddress,
-                pid)
-
-        AmInjectSubscription(AmC2SSubscribe(clientInfo))
 
     let checkConnectivity (_state: obj) =
         if not initialized || disposed then ()
         else
             try
-                if isNull DexaActorSystem.TheServerActor then
+                if not (isNull DexaActorSystem.ServerShortTermActor) then ()
+                else
                     logger.LogInformation("DEXA Server 재연결 시도 중...")
-                    let msg =
-                        match subscriptionMessage with
-                        | Some m -> m
-                        | None -> createSubscriptionMessage ()
-                    if not (isNull DexaActorSystem.SelfGuardianActor) then
-                        DexaActorSystem.SelfGuardianActor.Tell(msg)
+                    match actorSystem with
+                    | Some system ->
+                        if system.ConnectToServer() then
+                            logger.LogInformation("DEXA Server 연결됨")
+                            notifications.OnNext(ConnectivityChangedNotification(true))
+                        else
+                            logger.LogWarning("DEXA Server 연결 끊김")
+                            notifications.OnNext(ConnectivityChangedNotification(false))
+                    | None -> ()
             with ex ->
                 logger.LogDebug(ex, "Connectivity check 예외")
 
     interface IDexaClient with
         member _.IsConnected =
-            initialized && not (isNull DexaActorSystem.TheServerActor)
+            initialized && not (isNull DexaActorSystem.ServerShortTermActor)
 
         member _.PingServerAsync() =
-            Task.FromResult(initialized && not (isNull DexaActorSystem.TheServerActor))
+            Task.FromResult(initialized && not (isNull DexaActorSystem.ServerShortTermActor))
 
         member _.InitializeAsync() =
             try
                 let system = new DexaActorSystem(logger, opts)
                 actorSystem <- Some system
 
-                DexaActorSystem.SelfGuardianActor <-
+                // 로컬 ShortTerm actor 생성 (서버 알림 수신용)
+                let actorName = opts.ClientName + "-ShortTerm"
+                DexaActorSystem.SelfShortTermActor <-
                     system.ActorSystem.ActorOf(
-                        Props.Create(fun () -> DexaClientGuardian(system)),
-                        DEXActorGlobal.GuardianActorName)
+                        Props.Create(fun () -> DexaClientShortTermActor(logger)),
+                        actorName)
+                logger.LogInformation("로컬 ShortTerm actor 생성: {Name}", actorName :> obj)
 
-                system.ConnectToServer()
+                // 서버 ShortTerm/LongTerm/Stream actor resolve
+                let connected = system.ConnectToServer()
 
-                let msg = createSubscriptionMessage ()
-                subscriptionMessage <- Some msg
-                DexaActorSystem.SelfGuardianActor.Tell(msg)
+                // 알림 구독
+                DexaClientShortTermActor.DataChanged.Subscribe(fun dc ->
+                    notifications.OnNext(dc)) |> ignore
 
-                DexaClientGuardian.DataChanged.Subscribe(fun dc -> notifications.OnNext(dc)) |> ignore
-                DexaClientGuardian.MessageSubject.Subscribe(fun msg -> notifications.OnNext(msg)) |> ignore
-
-                DexaGuardianActor.MonitorActorSubject.Subscribe(fun msg ->
-                    match msg with
-                    | :? AmReplySubscription ->
-                        logger.LogInformation("DEXA Server 연결됨")
-                        notifications.OnNext(ConnectivityChangedNotification(true))
-                    | :? Terminated
-                    | :? AmS2XServerShutdown
-                    | :? DEX.Common.ActorErrors.RepeatedFailToConnect ->
-                        logger.LogWarning("DEXA Server 연결 끊김")
-                        notifications.OnNext(ConnectivityChangedNotification(false))
-                    | _ -> ()
-                ) |> ignore
+                DexaClientShortTermActor.MessageSubject.Subscribe(fun msg ->
+                    notifications.OnNext(msg)) |> ignore
 
                 initialized <- true
-                logger.LogInformation(
-                    "DEXA Client 초기화 완료 (서버: {ServerIp}:{ServerPort})",
-                    opts.ServerIp, opts.ServerPort)
 
+                if connected then
+                    logger.LogInformation(
+                        "DEXA Client 초기화 완료 - 서버 연결됨 (서버: {ServerIp}:{ServerPort})",
+                        opts.ServerIp :> obj, opts.ServerPort :> obj)
+                    notifications.OnNext(ConnectivityChangedNotification(true))
+                else
+                    logger.LogWarning(
+                        "DEXA Client 초기화 완료 - 서버 미연결 (서버: {ServerIp}:{ServerPort}). 재연결 시도 예정.",
+                        opts.ServerIp :> obj, opts.ServerPort :> obj)
+
+                // 주기적 연결 체크 타이머
                 connectivityTimer <-
                     Some(new Timer(
                         TimerCallback(checkConnectivity),
@@ -110,15 +94,17 @@ type DexaClient(options: IOptions<DexaClientOptions>, logger: ILogger<DexaClient
             Task.CompletedTask
 
         member _.AskServerAsync<'T>(message: obj, ?timeout: TimeSpan) =
-            if not initialized || isNull DexaActorSystem.TheServerActor then
+            let serverActor = DexaActorSystem.ServerShortTermActor
+            if not initialized || isNull serverActor then
                 raise (InvalidOperationException("DEXA Server에 연결되지 않았습니다."))
             let actualTimeout = defaultArg timeout (TimeSpan.FromSeconds(float opts.AskTimeoutSeconds))
-            DexaActorSystem.TheServerActor.Ask<'T>(message, actualTimeout)
+            serverActor.Ask<'T>(message, actualTimeout)
 
         member _.TellServer(message: obj) =
-            if not initialized || isNull DexaActorSystem.TheServerActor then
+            let serverActor = DexaActorSystem.ServerShortTermActor
+            if not initialized || isNull serverActor then
                 raise (InvalidOperationException("DEXA Server에 연결되지 않았습니다."))
-            DexaActorSystem.TheServerActor.Tell(message)
+            serverActor.Tell(message)
 
         member _.ServerNotifications = notifications :> IObservable<obj>
 

@@ -15,6 +15,7 @@ type ViewSchedule() =
     member val AssetDescription: string = null with get, set
     member val AssetDeleted: bool = false with get, set
     member val ScheduleDeleted: bool = false with get, set
+    member val ConnectionString: string = null with get, set
 
     member this.GetAssetName() : string =
         this.AssetParameter

@@ -22,9 +22,11 @@ public class DexaReadService
     private static readonly TimeSpan AssetCacheTtl = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ActionCacheTtl = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan AgentCacheTtl = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan AssetStatusCacheTtl = TimeSpan.FromSeconds(15);
     private const string CacheKeyAssets = "dexa_view_assets";
     private const string CacheKeyAgents = "dexa_agents";
     private const string CacheKeyLatestActions = "dexa_latest_actions";
+    private const string CacheKeyAssetStatuses = "dexa_asset_statuses";
 
     /// <summary>
     /// 삭제되지 않은 자산 조회 기본 SQL.
@@ -234,7 +236,8 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<DexaAction>("""
-                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
+                       acs.contentsChanged, acs.nthSucceeded, ab.memo
                 FROM [action.base] ab
                 INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
                 INNER JOIN (
@@ -267,7 +270,8 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<DexaAction>("""
-                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
+                       acs.contentsChanged, acs.nthSucceeded, ab.memo
                 FROM [action.base] ab
                 INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
                 ORDER BY ab.started DESC LIMIT @Limit
@@ -322,7 +326,8 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<DexaAction>("""
-                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
+                       acs.contentsChanged, acs.nthSucceeded, ab.memo
                 FROM [action.base] ab
                 INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
                 WHERE ab.started >= @From AND ab.started < @To
@@ -343,7 +348,8 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<DexaAction>("""
-                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished, acs.contentsChanged, ab.memo
+                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
+                       acs.contentsChanged, acs.nthSucceeded, ab.memo
                 FROM [action.base] ab
                 INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
                 ORDER BY ab.started DESC
@@ -381,6 +387,42 @@ public class DexaReadService
             _logger.LogError(ex, "DEXA DB 에이전트 목록 조회 실패");
             return [];
         }
+    }
+
+    // ── 에셋 상태 (2.20) ──
+
+    /// <summary>
+    /// 에셋 실시간 상태 목록 조회 (asset_status 테이블, 15초 캐시).
+    /// PLC Trigger/Topic 시스템이 주기적으로 갱신하는 데이터.
+    /// </summary>
+    public async Task<List<AssetStatus>> GetAssetStatusesAsync()
+    {
+        if (_cache.TryGetValue(CacheKeyAssetStatuses, out List<AssetStatus>? cached))
+            return cached!;
+
+        try
+        {
+            using var conn = _dexaDb.Create();
+            var result = await conn.QueryAsync<AssetStatus>(
+                "SELECT assetId, available, time, status, detail FROM [asset.status]");
+            var list = result.ToList();
+            _cache.Set(CacheKeyAssetStatuses, list, AssetStatusCacheTtl);
+            return list;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "DEXA DB asset_status 조회 실패 (테이블 미존재 가능)");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// 특정 에셋의 실시간 상태 조회.
+    /// </summary>
+    public async Task<AssetStatus?> GetAssetStatusAsync(int assetId)
+    {
+        var all = await GetAssetStatusesAsync();
+        return all.FirstOrDefault(s => s.AssetId == assetId);
     }
 
     // ── 쓰기 ──

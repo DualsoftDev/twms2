@@ -203,21 +203,22 @@
 </div>
 </div>
 
-@* ── 주의 필요 및 오프라인 자산 ── *@
+@* ── 주의 필요 자산 ── *@
 <div class="grid-stack-item" gs-id="attention" gs-x="0" gs-y="8" gs-w="6" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"attention"'>
 <div class="grid-stack-item-content">
     <MudPaper Class="pa-5" Elevation="2">
         <div class="panel-header" style="flex-shrink:0;">
             <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem;">
-                주의 필요 및 오프라인 자산
+                주의 필요 자산
+                <MudText Typo="Typo.caption" Inline="true" Style="color: var(--mud-palette-text-secondary); margin-left: 8px;">
+                    연속 3회 이상 작업 실패 자산
+                </MudText>
             </MudText>
         </div>
         @{
             var attentionAssets = _assetStatuses
-                .Where(a => a.ConsecutiveFailureCount >= 3 || a.LatestPing is { Reachable: false })
-                .OrderByDescending(a => a.Health == AssetHealthStatus.Failed ? 1 : 0)
-                .ThenByDescending(a => a.ConsecutiveFailureCount)
-                .ThenBy(a => a.LatestPing?.Reachable == true ? 1 : 0)
+                .Where(a => a.ConsecutiveFailureCount >= 3)
+                .OrderByDescending(a => a.ConsecutiveFailureCount)
                 .Take(10)
                 .ToList();
         }
@@ -233,7 +234,7 @@
                         <th>자산명</th>
                         <th>타입</th>
                         <th>백업 상태</th>
-                        <th>네트워크</th>
+                        <th>연속 실패</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -263,18 +264,7 @@
                                 }
                             </td>
                             <td>
-                                @if (asset.LatestPing is { Reachable: true })
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">온라인</MudChip>
-                                }
-                                else if (asset.LatestPing is { Reachable: false })
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">오프라인</MudChip>
-                                }
-                                else
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">-</MudChip>
-                                }
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@(asset.ConsecutiveFailureCount)회</MudChip>
                             </td>
                         </tr>
                     }

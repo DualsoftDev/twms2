@@ -69,6 +69,8 @@ type ViewAsset() =
 
     member val AssetTypeDotnetClassName: string = null with get, set
 
+    member val StorageConnectionString: string = null with get, set
+
     member this.ProjectFilePath
         with get () = this.ProjectFile.Path
         and set (v) = this.ProjectFile.Path <- v

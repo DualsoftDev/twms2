@@ -302,7 +302,7 @@
                                              Icon="@Icons.Material.Filled.HourglassTop"
                                              Style="font-weight:600; min-width:80px; justify-content:center;">작업중</MudChip>
                                 }
-                                else if (context.Item.Memo?.ToLower() != "true")
+                                else if (!context.Item.IsSuccess)
                                 {
                                     @if (IsStaleIncomplete(context.Item))
                                     {
@@ -358,7 +358,7 @@
                                                            Color="Color.Default" Size="Size.Small" Disabled="true" />
                                         </MudTooltip>
                                     }
-                                    else if (context.Item.Memo?.ToLower() != "true")
+                                    else if (!context.Item.IsSuccess)
                                     {
                                         <MudTooltip Text="@($"작업 실패 — 마지막 성공 백업 v{context.Item.Version} 다운로드")">
                                             <MudIconButton Icon="@Icons.Material.Filled.Download"
@@ -890,19 +890,19 @@
 
     private Color GetResultColor(DexaAction a)
         => IsInProgress(a) ? Color.Warning
-         : a.Memo?.ToLower() != "true" ? Color.Error
+         : !a.IsSuccess ? Color.Error
          : a.ContentsChanged == true ? Color.Success
          : Color.Info;
 
     private string? GetDownloadBadgeLabel(DexaAction a)
         => IsInProgress(a) ? null
-         : a.Memo?.ToLower() != "true" ? "이전 버전"
+         : !a.IsSuccess ? "이전 버전"
          : a.ContentsChanged == true ? "새 버전"
          : "버전 유지";
 
     private string GetResultLabel(DexaAction a)
         => IsInProgress(a) ? "작업중"
-         : a.Memo?.ToLower() != "true" ? "작업 실패"
+         : !a.IsSuccess ? "작업 실패"
          : a.ContentsChanged == true ? "백업 갱신"
          : "변경 없음";
 

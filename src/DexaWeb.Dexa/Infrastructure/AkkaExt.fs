@@ -25,6 +25,21 @@ type AkkaExt =
             reraise ()
 
     [<Extension>]
+    static member GetServerActorAsync(actorSystem: ActorSystem, actorPath: string, logger: ILogger) =
+        task {
+            try
+                return! actorSystem.ActorSelection(actorPath).ResolveOne(AkkaExt.DefaultAskTimeout)
+            with ex ->
+                if ex.ToString().Contains("Akka.Actor.ActorNotFoundException") then
+                    if not (isNull logger) then
+                        logger.LogWarning("Actor를 찾을 수 없습니다: {ActorPath}", actorPath)
+                else
+                    if not (isNull logger) then
+                        logger.LogError(ex, "Actor 연결 실패: {ActorPath}", actorPath)
+                return raise ex
+        }
+
+    [<Extension>]
     static member GetIdentityAsync(actor: ICanTell, timeout: TimeSpan) : Task<ActorIdentity> =
         task {
             try

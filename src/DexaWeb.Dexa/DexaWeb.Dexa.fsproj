@@ -28,6 +28,11 @@
     <Compile Include="Models/DeepPingError.fs" />
     <Compile Include="Models/DashboardAssetReport.fs" />
     <Compile Include="Models/ViewSchedule.fs" />
+    <Compile Include="Models/Storage.fs" />
+    <Compile Include="Models/AssetStatus.fs" />
+    <Compile Include="Models/Client.fs" />
+    <Compile Include="Models/Dll.fs" />
+    <Compile Include="Models/BackupLog.fs" />
     <Compile Include="Messages/DEXActorGlobal.fs" />
     <Compile Include="Messages/ActorType.fs" />
     <Compile Include="Messages/Base/ActorMessage.fs" />
@@ -59,6 +64,7 @@
     <Compile Include="Infrastructure/AkkaExt.fs" />
     <Compile Include="Infrastructure/DexaBaseActor.fs" />
     <Compile Include="Infrastructure/DexaActorSystem.fs" />
+    <Compile Include="Infrastructure/DexaClientShortTermActor.fs" />
     <Compile Include="Infrastructure/DexaGuardianActor.fs" />
     <Compile Include="Infrastructure/DexaClientGuardian.fs" />
     <Compile Include="IDexaClient.fs" />
@@ -66,8 +72,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Akka" Version="1.4.24" />
-    <PackageReference Include="Akka.Remote" Version="1.4.24" />
+    <!-- Akka 1.5.x는 1.4.x와 wire 호환 + .NET 6+ DotNetty 호환성 개선 -->
+    <PackageReference Include="Akka" Version="1.5.27" />
+    <PackageReference Include="Akka.Remote" Version="1.5.27" />
     <PackageReference Include="System.Reactive" Version="6.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.*" />

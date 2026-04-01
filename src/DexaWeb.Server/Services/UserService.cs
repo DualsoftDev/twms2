@@ -1,4 +1,7 @@
-using DEX.Core.Actor;
+using System.Security.Cryptography;
+using System.Text;
+using Dapper;
+using DexaWeb.Server.Data;
 using DexaWeb.Server.Models.Dexa;
 
 namespace DexaWeb.Server.Services;
@@ -6,52 +9,72 @@ namespace DexaWeb.Server.Services;
 /// <summary>
 /// 인증/사용자 관련 서비스.
 /// 읽기: DEXA SQLite 직접 조회 (DexaReadService)
-/// 인증: DEXA Server Akka 메시징 (비밀번호 복호화/비교는 서버가 내부 처리)
+/// 인증: DEXA SQLite DB 직접 인증 (SHA256 해시 비교, salt 없음)
 /// </summary>
 public class UserService
 {
     private readonly DexaReadService _dexaRead;
-    private readonly DexaServerClient _dexa;
+    private readonly DexaDbConnection _dexaDb;
     private readonly ILogger<UserService> _logger;
 
-    public UserService(DexaReadService dexaRead, DexaServerClient dexa, ILogger<UserService> logger)
+    public UserService(DexaReadService dexaRead, DexaDbConnection dexaDb, ILogger<UserService> logger)
     {
         _dexaRead = dexaRead;
-        _dexa = dexa;
+        _dexaDb = dexaDb;
         _logger = logger;
     }
 
     /// <summary>
-    /// DEXA Server 로그인 (Akka - 비밀번호 검증은 서버에서 처리)
+    /// DEXA DB 직접 로그인 (SHA256 해시 비교, salt 없음)
     /// </summary>
     public async Task<LoginResult> LoginAsync(string userName, string password)
     {
         try
         {
-            var reply = await _dexa.AskAsync<AmS2CReplyAuthenticateUser>(
-                new AmC2SRequestAuthenticateUser(userName, password));
+            using var conn = _dexaDb.Create();
+            var user = await conn.QueryFirstOrDefaultAsync<UserWithPassword>(
+                "SELECT id, userName AS Name, password AS Password, isAdmin AS Admin FROM user WHERE userName = @UserName",
+                new { UserName = userName });
 
-            if (reply?.User == null)
-                return new LoginResult { Success = false, Message = reply?.Status ?? "인증 실패" };
+            if (user == null)
+                return new LoginResult { Success = false, Message = "사용자를 찾을 수 없습니다." };
 
-            _logger.LogInformation("로그인 성공: {UserName} (Admin: {IsAdmin})", userName, reply.User.IsAdmin);
+            var inputHash = ComputeSha256(password);
+            if (!string.Equals(user.Password, inputHash, StringComparison.OrdinalIgnoreCase))
+                return new LoginResult { Success = false, Message = "비밀번호가 일치하지 않습니다." };
+
+            _logger.LogInformation("로그인 성공: {UserName} (Admin: {IsAdmin})", userName, user.Admin);
 
             return new LoginResult
             {
                 Success = true,
                 User = new LoginUser
                 {
-                    Id = reply.User.Id ?? 0,
-                    Name = reply.User.UserName,
-                    Admin = reply.User.IsAdmin,
+                    Id = user.Id,
+                    Name = user.Name,
+                    Admin = user.Admin,
                 }
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "로그인 실패: {UserName}", userName);
-            return new LoginResult { Success = false, Message = $"서버 연결 오류: {ex.Message}" };
+            return new LoginResult { Success = false, Message = $"인증 오류: {ex.Message}" };
         }
+    }
+
+    private static string ComputeSha256(string input)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexStringLower(bytes);
+    }
+
+    private class UserWithPassword
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public string? Password { get; set; }
+        public bool Admin { get; set; }
     }
 
     /// <summary>

@@ -57,7 +57,7 @@ public class AssetStatusService
                 .ToDictionary(
                     g => g.Key,
                     g => g.OrderByDescending(a => a.Id)
-                          .TakeWhile(a => a.Memo?.ToLower() != "true")
+                          .TakeWhile(a => !a.IsSuccess)
                           .Count());
 
             var result = new List<AssetStatusInfo>();

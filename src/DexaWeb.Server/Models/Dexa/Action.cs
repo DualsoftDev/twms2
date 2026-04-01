@@ -7,17 +7,27 @@ public class DexaAction
 
     public int Id { get; set; }
     public int AssetId { get; set; }
+    public int AgentId { get; set; }
+    public int? ScheduleId { get; set; }
     public int? Version { get; set; }
     public DateTime? Started { get; set; }
     public DateTime? Finished { get; set; }
     public bool? ContentsChanged { get; set; }
+
+    /// <summary>
+    /// DEXA 2.20: null이면 fail, 음수(-1)이면 아직 결과 미수신, >= 0이면 성공.
+    /// </summary>
+    public int? NthSucceeded { get; set; }
+
     public string? Memo { get; set; }
+    public string? Exception { get; set; }
 
-    /// <summary>백업 성공 여부 (Memo가 "true"이면 성공)</summary>
-    public bool IsSuccess => Memo?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+    /// <summary>백업 성공 여부 (nthSucceeded >= 0이고 memo가 "false"가 아니면 성공)</summary>
+    public bool IsSuccess => NthSucceeded.HasValue && NthSucceeded.Value >= 0
+        && !string.Equals(Memo, "false", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>진행 중 여부 (미완료 + Memo 없음)</summary>
-    public bool IsInProgress => Finished == null && string.IsNullOrEmpty(Memo);
+    /// <summary>진행 중 여부 (미완료 + 결과 미수신)</summary>
+    public bool IsInProgress => Finished == null && (!NthSucceeded.HasValue || NthSucceeded.Value < 0);
 
     /// <summary>미완료 판정 (진행 중 + IncompleteThreshold 초과)</summary>
     public bool IsIncomplete => IsInProgress

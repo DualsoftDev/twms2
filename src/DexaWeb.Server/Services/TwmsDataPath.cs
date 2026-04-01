@@ -35,7 +35,7 @@ public static class TwmsDataPath
             {
                 ServerIp = Environment.MachineName,
                 ServerPort = 50001,
-                AskTimeoutSeconds = 5,
+                AskTimeoutSeconds = 30,
                 PingTimeoutSeconds = 5,
                 ClientName = "twm-web"
             },
