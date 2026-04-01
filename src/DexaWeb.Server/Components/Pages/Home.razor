@@ -670,22 +670,35 @@
 
     private async Task StartPeriodicTimerAsync()
     {
-        _periodicTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
-        while (await _periodicTimer.WaitForNextTickAsync())
+        _periodicTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        int tickCount = 0;
+        try
         {
-            await InvokeAsync(async () =>
+            while (await _periodicTimer.WaitForNextTickAsync())
             {
-                if (DateOnly.FromDateTime(DateTime.Today) != _lastRefreshDate)
-                    await RefreshAll();
-                else
+                tickCount++;
+                await InvokeAsync(async () =>
                 {
-                    var nowMin = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
-                    _nowPct = AxisRange > 0 ? Math.Clamp(((double)nowMin - _axisStartMinutes) / AxisRange * 100, 0, 100) : 0;
-                    RebuildBars();
-                    StateHasChanged();
-                }
-            });
+                    try
+                    {
+                        if (DateOnly.FromDateTime(DateTime.Today) != _lastRefreshDate || tickCount % 2 == 0)
+                        {
+                            await RefreshAll();
+                        }
+                        else
+                        {
+                            var nowMin = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
+                            _nowPct = AxisRange > 0 ? Math.Clamp(((double)nowMin - _axisStartMinutes) / AxisRange * 100, 0, 100) : 0;
+                            RebuildBars();
+                        }
+                        StateHasChanged();
+                    }
+                    catch { }
+                });
+            }
         }
+        catch (OperationCanceledException) { }
+        catch { }
     }
 
     private async void HandleDatabaseChanged(string tableName)
@@ -972,7 +985,7 @@
             }
             else if (entry.Success == true)
             {
-                endDt = entry.Finished!.Value;
+                endDt = entry.Finished ?? entry.Started.AddMinutes(1);
                 endStr = endDt.ToString("HH:mm");
                 prefix = "성공";
                 cssClass = "schedule-bar-success";

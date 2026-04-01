@@ -153,9 +153,16 @@
                                                    Size="Size.Small" Color="Color.Info"
                                                    Title="자산 매핑"
                                                    OnClick="() => OpenAssetEditor(context.Item)" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
-                                                   Size="Size.Small" Color="Color.Success"
-                                                   OnClick="() => ExecuteTrigger(context.Item)" />
+                                    @if (_runningTriggerIds.Contains(context.Item.Id))
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Color="Color.Warning" Indeterminate="true" Style="width:24px;height:24px" />
+                                    }
+                                    else
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                                       Size="Size.Small" Color="Color.Success"
+                                                       OnClick="() => ExecuteTrigger(context.Item)" />
+                                    }
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                                    Size="Size.Small" Color="Color.Error"
                                                    OnClick="() => DeleteTrigger(context.Item)" />
@@ -308,13 +315,35 @@
         }
     }
 
+    private readonly HashSet<int> _runningTriggerIds = new();
+
     private async Task ExecuteTrigger(Trigger trigger)
     {
+        _runningTriggerIds.Add(trigger.Id);
+        StateHasChanged();
+
         var ok = await ScheduleService.ExecuteTriggerAsync(trigger.Id);
         if (ok)
-            Snackbar.Add($"트리거 '{trigger.Name}' 실행 요청됨", Severity.Success);
+        {
+            Snackbar.Add($"트리거 '{trigger.Name}' 백업 실행 요청됨", Severity.Success);
+
+            // 매핑된 자산 수에 비례한 예상 시간 동안 스피너 표시 후 자동 해제
+            var schedules = await ScheduleService.GetSchedulesAsync();
+            var assetCount = schedules.Count(s => s.TriggerId == trigger.Id);
+            var waitSeconds = Math.Max(10, assetCount * 3); // 자산당 3초 예상, 최소 10초
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(waitSeconds));
+                _runningTriggerIds.Remove(trigger.Id);
+                await InvokeAsync(StateHasChanged);
+            });
+        }
         else
+        {
             Snackbar.Add("트리거 실행 실패", Severity.Error);
+            _runningTriggerIds.Remove(trigger.Id);
+            StateHasChanged();
+        }
     }
 
     private static string CronToReadable(string? cron)

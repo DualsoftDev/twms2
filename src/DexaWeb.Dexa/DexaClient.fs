@@ -3,212 +3,275 @@ namespace DexaWeb.Dexa
 open System
 open System.Collections.Concurrent
 open System.Diagnostics
+open System.IO
+open System.IO.Pipes
 open System.Reactive.Subjects
-open System.Reflection
+open System.Text
 open System.Threading
 open System.Threading.Tasks
-open Akka.Actor
-open DEX.Common
+open Newtonsoft.Json
+open Newtonsoft.Json.Linq
 open DEX.Core.Actor
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 
-/// CommProxy 패턴 기반 DEXA Client.
-/// 서버의 ShortTerm/LongTerm/Stream actor와 직접 통신.
-/// Ask는 SelfShortTermActor를 sender로 Tell + 응답 대기 방식.
+/// Named Pipe 기반 DEXA Client.
+/// DexaBridge(.NET 4.8)를 자식 프로세스로 실행하고 Named Pipe로 통신.
 type DexaClient(options: IOptions<DexaClientOptions>, logger: ILogger<DexaClient>) =
     let opts = options.Value
-    let mutable actorSystem: DexaActorSystem option = None
+    let mutable bridgeProcess: Process = null
+    let mutable pipeClient: NamedPipeClientStream = null
+    let mutable pipeReader: StreamReader = null
+    let mutable pipeWriter: StreamWriter = null
     let mutable initialized = false
     let mutable disposed = false
-    let mutable connectivityTimer: Timer option = None
+    let mutable readTask: Task = null
     let notifications = new Subject<obj>()
+    let writeLock = obj ()
+    let pipeName = sprintf "DexaBridge_%d" (Process.GetCurrentProcess().Id)
 
-    /// 대기 중인 Ask 요청 — 응답 타입별로 TaskCompletionSource 보관
-    /// Key: 요청 메시지의 Guid (ActorMessage.Guid)
-    let pendingRequests = ConcurrentDictionary<Guid, TaskCompletionSource<obj>>()
+    /// 대기 중인 Ask 요청
+    let pendingRequests = ConcurrentDictionary<string, TaskCompletionSource<JToken>>()
 
-    let sendSubscription () =
-        if isNull DexaActorSystem.ServerShortTermActor then
-            logger.LogWarning("DEXA Server 구독 건너뜀 — 서버 actor가 null")
-        else
-            let selfActor = DexaActorSystem.SelfShortTermActor
-            let ip = EmDns.getLocalIpAddress().ToString()
-            let ver =
-                let asm = Assembly.GetExecutingAssembly()
-                let fvi = FileVersionInfo.GetVersionInfo(asm.Location)
-                if isNull fvi.FileVersion then "2.0.0" else fvi.FileVersion
-            let clientInfo =
-                ClientInfo(
-                    selfActor,
-                    opts.ClientName,
-                    ver,
-                    null,
-                    ip,
-                    Process.GetCurrentProcess().Id)
-            DexaActorSystem.ServerShortTermActor.Tell(AmC2SSubscribe(clientInfo), selfActor)
-            logger.LogInformation("DEXA Server 구독 요청 전송 (Tell, sender={Sender})", selfActor.Path.ToString() :> obj)
+    let jsonSettings = JsonSerializerSettings(
+        NullValueHandling = NullValueHandling.Ignore,
+        ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+        MissingMemberHandling = MissingMemberHandling.Ignore)
 
-    let checkConnectivity (_state: obj) =
-        if not initialized || disposed then ()
-        else
+    let deserializeSettings =
+        let s = JsonSerializerSettings(
+            NullValueHandling = NullValueHandling.Ignore,
+            MissingMemberHandling = MissingMemberHandling.Ignore,
+            Error = System.EventHandler<Serialization.ErrorEventArgs>(fun _ args ->
+                args.ErrorContext.Handled <- true))
+        s
+
+    let sendRequest (method: string) (msgType: string) (payload: obj) (timeout: float option) =
+        let id = Guid.NewGuid().ToString()
+        let req = JObject()
+        req.["id"] <- JToken.FromObject(id)
+        req.["method"] <- JToken.FromObject(method)
+        if not (isNull msgType) then
+            req.["type"] <- JToken.FromObject(msgType)
+        if not (isNull payload) then
+            req.["payload"] <- JToken.FromObject(payload, JsonSerializer.Create(jsonSettings))
+        match timeout with
+        | Some t -> req.["timeout"] <- JToken.FromObject(t)
+        | None -> ()
+        id, req
+
+    let writeLine (json: string) =
+        lock writeLock (fun () ->
+            if not (isNull pipeWriter) then
+                pipeWriter.WriteLine(json)
+                pipeWriter.Flush())
+
+    let handleNotification (resp: JObject) =
+        let notifType = resp.Value<string>("type")
+        match notifType with
+        | "Connected" ->
+            let connected = resp.["payload"].Value<bool>("connected")
+            logger.LogInformation("DexaBridge 연결 상태: {Connected}", connected :> obj)
+            notifications.OnNext(DEX.Core.Actor.ConnectivityChangedNotification(connected))
+        | "DatabaseChangedNotification" ->
+            logger.LogDebug("DexaBridge DB 변경 알림 수신")
             try
-                if not (isNull DexaActorSystem.ServerShortTermActor) then ()
-                else
-                    logger.LogInformation("DEXA Server 재연결 시도 중...")
-                    match actorSystem with
-                    | Some system ->
-                        if system.ConnectToServer() then
-                            sendSubscription ()
-                            logger.LogInformation("DEXA Server 재연결 및 구독 요청 전송")
-                            notifications.OnNext(ConnectivityChangedNotification(true))
-                        else
-                            logger.LogWarning("DEXA Server 연결 끊김")
-                            notifications.OnNext(ConnectivityChangedNotification(false))
-                    | None -> ()
+                let p = resp.["payload"]
+                let tableName =
+                    if not (isNull p) then
+                        p.Value<string>("TableName")
+                        |> Option.ofObj
+                        |> Option.defaultWith (fun () -> p.Value<string>("tableName") |> Option.ofObj |> Option.defaultValue "")
+                    else ""
+                let opStr =
+                    if not (isNull p) then
+                        p.Value<string>("DatabaseChangeOperation")
+                        |> Option.ofObj
+                        |> Option.defaultWith (fun () -> p.Value<string>("databaseChangeOperation") |> Option.ofObj |> Option.defaultValue "")
+                    else ""
+                let op =
+                    match opStr.ToLowerInvariant() with
+                    | "create" | "insert" -> DatabaseChangeOperation.Create
+                    | "update" -> DatabaseChangeOperation.Update
+                    | "delete" -> DatabaseChangeOperation.Delete
+                    | _ -> DatabaseChangeOperation.Update
+                notifications.OnNext(DatabaseChangedNotification(null, tableName, op))
             with ex ->
-                logger.LogDebug(ex, "Connectivity check 예외")
+                logger.LogWarning("DexaBridge DatabaseChanged 파싱 실패: {Err}", ex.Message :> obj)
+        | "RefreshNotification" ->
+            logger.LogDebug("DexaBridge 전체 갱신 알림 수신")
+            notifications.OnNext(DEX.Core.Actor.RefreshNotification())
+        | "ServerLockStatusChangedNotification" ->
+            notifications.OnNext(DEX.Core.Actor.ServerLockStatusChangedNotification(null))
+        | "ReminderStatusChangeNotification" ->
+            notifications.OnNext(DEX.Core.Actor.ReminderStatusChangeNotification(null))
+        | _ ->
+            logger.LogDebug("DexaBridge 알림: {Type}", notifType :> obj)
 
-    /// 서버 응답을 매칭하여 대기 중인 Ask 완료 처리
-    let tryCompleteRequest (message: obj) =
-        match message with
-        | :? AmReply as reply ->
-            let query = reply.QueryMessage
-            if not (isNull query) then
-                let mutable tcs = Unchecked.defaultof<_>
-                if pendingRequests.TryRemove(query.Guid, &tcs) then
-                    tcs.TrySetResult(message) |> ignore
-                    true
-                else false
-            else false
-        | _ -> false
+    let handleResponse (resp: JObject) =
+        let id = resp.Value<string>("id")
+        if isNull id then
+            // Notification
+            handleNotification resp
+        else
+            let mutable tcs = Unchecked.defaultof<_>
+            if pendingRequests.TryRemove(id, &tcs) then
+                let success = resp.Value<bool>("success")
+                if success then
+                    tcs.TrySetResult(resp.["payload"]) |> ignore
+                else
+                    let error = resp.Value<string>("error")
+                    tcs.TrySetException(Exception(error)) |> ignore
+
+    let mutable pipeConnected = false
+
+    let readLoop () =
+        task {
+            try
+                let mutable running = true
+                while running && not disposed && not (isNull pipeReader) do
+                    let! line = pipeReader.ReadLineAsync()
+                    if isNull line then
+                        logger.LogWarning("DexaBridge pipe 연결 끊김")
+                        pipeConnected <- false
+                        running <- false
+                    else
+                        try
+                            let resp = JObject.Parse(line)
+                            handleResponse resp
+                        with ex ->
+                            logger.LogWarning("DexaBridge 응답 파싱 실패: {Err}", ex.Message :> obj)
+            with ex ->
+                if not disposed then
+                    logger.LogWarning("DexaBridge read loop 종료: {Err}", ex.Message :> obj)
+                    pipeConnected <- false
+        } :> Task
+
+    let startBridgeProcess () =
+        // DexaBridge.exe 경로 찾기
+        let basePath = AppContext.BaseDirectory
+        let bridgePath = Path.Combine(basePath, "DexaBridge", "DexaBridge.exe")
+        if not (File.Exists(bridgePath)) then
+            // 개발 시 빌드 출력 경로
+            let devPath = Path.Combine(basePath, "..", "..", "..", "..", "DexaBridge", "bin", "Debug", "net48", "DexaBridge.exe")
+            let devPathResolved = Path.GetFullPath(devPath)
+            if not (File.Exists(devPathResolved)) then
+                failwithf "DexaBridge.exe not found at '%s' or '%s'" bridgePath devPathResolved
+            devPathResolved
+        else
+            bridgePath
 
     interface IDexaClient with
-        member _.IsConnected =
-            initialized && not (isNull DexaActorSystem.ServerShortTermActor)
+        member _.IsConnected = initialized && pipeConnected && not (isNull pipeWriter)
 
         member _.PingServerAsync() =
-            Task.FromResult(initialized && not (isNull DexaActorSystem.ServerShortTermActor))
+            task {
+                if not initialized || isNull pipeWriter then return false
+                else
+                    try
+                        let id, req = sendRequest "ping" null null None
+                        let tcs = TaskCompletionSource<JToken>(TaskCreationOptions.RunContinuationsAsynchronously)
+                        pendingRequests.[id] <- tcs
+                        writeLine (req.ToString(Formatting.None))
+                        let! _ = Task.WhenAny(tcs.Task, Task.Delay(3000))
+                        if tcs.Task.IsCompleted then return true
+                        else
+                            pendingRequests.TryRemove(id) |> ignore
+                            return false
+                    with _ -> return false
+            }
 
         member _.InitializeAsync() =
-            try
-                let system = new DexaActorSystem(logger, opts)
-                actorSystem <- Some system
+            task {
+                try
+                    let bridgeExe = startBridgeProcess ()
+                    logger.LogInformation("DexaBridge 시작: {Path}", bridgeExe :> obj)
 
-                // 로컬 ShortTerm actor 생성 (서버 알림 수신용)
-                let actorName = opts.ClientName + "-ShortTerm"
-                DexaActorSystem.SelfShortTermActor <-
-                    system.ActorSystem.ActorOf(
-                        Props.Create(fun () -> DexaClientShortTermActor(logger)),
-                        actorName)
-                logger.LogInformation("로컬 ShortTerm actor 생성: {Name}", actorName :> obj)
+                    let psi = ProcessStartInfo(
+                        FileName = bridgeExe,
+                        Arguments = sprintf "--pipe %s --server-ip %s --server-port %d" pipeName opts.ServerIp opts.ServerPort,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardError = true)
 
-                // 서버 ShortTerm/LongTerm/Stream actor resolve
-                let connected = system.ConnectToServer()
+                    bridgeProcess <- Process.Start(psi)
+                    bridgeProcess.ErrorDataReceived.Add(fun e ->
+                        if not (isNull e.Data) then
+                            logger.LogInformation("[DexaBridge] {Line}", e.Data :> obj))
+                    bridgeProcess.BeginErrorReadLine()
 
-                // 알림 구독
-                DexaClientShortTermActor.DataChanged.Subscribe(fun dc ->
-                    notifications.OnNext(dc)) |> ignore
+                    logger.LogInformation("DexaBridge PID={Pid}, pipe={Pipe}", bridgeProcess.Id :> obj, pipeName :> obj)
 
-                // 서버 응답 수신 → pendingRequests 매칭
-                DexaClientShortTermActor.MessageSubject.Subscribe(fun msg ->
-                    notifications.OnNext(msg)
-                    tryCompleteRequest msg |> ignore
-                ) |> ignore
+                    // 잠시 대기 후 pipe 연결
+                    do! Task.Delay(2000)
 
-                initialized <- true
+                    pipeClient <- new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous)
+                    do! pipeClient.ConnectAsync(30000)
+                    logger.LogInformation("DexaBridge Named Pipe 연결 성공")
 
-                if connected then
-                    // 진단: AmPing으로 서버 직렬화 호환성 테스트
-                    try
-                        let selfActor = DexaActorSystem.SelfShortTermActor
-                        let pingMsg = AmPing()
-                        logger.LogInformation("진단: AmPing 전송 (guid={Guid})", pingMsg.Guid.ToString().[..7] :> obj)
-                        // 1) Tell (selfActor sender) — 서버가 selfActor로 응답
-                        DexaActorSystem.ServerShortTermActor.Tell(pingMsg, selfActor)
-                        // 2) Ask (temp actor sender) — 서버가 temp actor로 응답
-                        try
-                            let pongResult =
-                                DexaActorSystem.ServerShortTermActor
-                                    .Ask<AmPong>(AmPing(), TimeSpan.FromSeconds(5.0))
-                                    .GetAwaiter().GetResult()
-                            logger.LogInformation("진단: Ask AmPing → AmPong 성공!")
-                        with ex ->
-                            logger.LogWarning("진단: Ask AmPing 실패: {Err}", ex.Message :> obj)
-                    with ex ->
-                        logger.LogWarning("진단: Ping 테스트 실패: {Err}", ex.Message :> obj)
+                    logger.LogInformation("Pipe reader/writer 생성 중...")
+                    let utf8NoBom = UTF8Encoding(false)
+                    pipeReader <- new StreamReader(pipeClient, utf8NoBom)
+                    let writer = new StreamWriter(pipeClient, utf8NoBom)
+                    writer.AutoFlush <- true
+                    pipeWriter <- writer
+                    logger.LogInformation("Pipe reader/writer 생성 완료")
 
-                    sendSubscription ()
-                    logger.LogInformation(
-                        "DEXA Client 초기화 완료 - 서버 연결됨, 구독 요청 전송 (서버: {ServerIp}:{ServerPort})",
-                        opts.ServerIp :> obj, opts.ServerPort :> obj)
-                    notifications.OnNext(ConnectivityChangedNotification(true))
-                else
-                    logger.LogWarning(
-                        "DEXA Client 초기화 완료 - 서버 미연결 (서버: {ServerIp}:{ServerPort}). 재연결 시도 예정.",
-                        opts.ServerIp :> obj, opts.ServerPort :> obj)
+                    // 읽기 루프 시작
+                    pipeConnected <- true
+                    readTask <- readLoop ()
+                    logger.LogInformation("Read loop 시작됨")
 
-                // 주기적 연결 체크 타이머
-                connectivityTimer <-
-                    Some(new Timer(
-                        TimerCallback(checkConnectivity),
-                        null,
-                        TimeSpan.FromSeconds(10.0),
-                        TimeSpan.FromSeconds(10.0)))
-            with ex ->
-                initialized <- false
-                logger.LogError(ex, "DEXA Client 초기화 실패")
-
-            Task.CompletedTask
+                    initialized <- true
+                    logger.LogInformation("DexaClient 초기화 완료 (DexaBridge 방식)")
+                with ex ->
+                    initialized <- false
+                    logger.LogError(ex, "DexaClient 초기화 실패")
+            } :> Task
 
         member _.AskServerAsync<'T>(message: obj, ?timeout: TimeSpan) =
-            let serverActor = DexaActorSystem.ServerShortTermActor
-            let selfActor = DexaActorSystem.SelfShortTermActor
-            if not initialized || isNull serverActor then
+            if not initialized || isNull pipeWriter then
                 raise (InvalidOperationException("DEXA Server에 연결되지 않았습니다."))
 
+            let msgType = message.GetType().Name
             let actualTimeout = defaultArg timeout (TimeSpan.FromSeconds(float opts.AskTimeoutSeconds))
 
-            // ActorMessage에서 Guid 추출 (응답 매칭용)
-            let guid =
-                match message with
-                | :? ActorMessage as am -> am.Guid
-                | _ -> Guid.NewGuid()
+            let id, req = sendRequest "ask" msgType message (Some actualTimeout.TotalSeconds)
+            let tcs = TaskCompletionSource<JToken>(TaskCreationOptions.RunContinuationsAsynchronously)
+            pendingRequests.[id] <- tcs
 
-            let tcs = TaskCompletionSource<obj>(TaskCreationOptions.RunContinuationsAsynchronously)
-            pendingRequests.[guid] <- tcs
+            writeLine (req.ToString(Formatting.None))
 
-            logger.LogInformation(
-                "Tell 전송 (Ask 대체): {MsgType} → {ActorPath} (guid={Guid}, timeout: {Timeout}s)",
-                message.GetType().Name :> obj,
-                serverActor.Path.ToString() :> obj,
-                guid.ToString().[..7] :> obj,
-                actualTimeout.TotalSeconds :> obj)
-
-            // SelfShortTermActor를 sender로 Tell — 서버가 구독된 클라이언트로 인식
-            serverActor.Tell(message, selfActor)
-
-            // 타임아웃 처리
+            // Timeout
             let cts = new CancellationTokenSource(actualTimeout)
             cts.Token.Register(fun () ->
                 let mutable removed = Unchecked.defaultof<_>
-                if pendingRequests.TryRemove(guid, &removed) then
+                if pendingRequests.TryRemove(id, &removed) then
                     removed.TrySetException(
-                        AskTimeoutException(sprintf "Timeout after %O seconds" actualTimeout)) |> ignore
+                        Akka.Actor.AskTimeoutException(sprintf "Timeout after %O" actualTimeout)) |> ignore
             ) |> ignore
 
             task {
                 let! result = tcs.Task
                 cts.Dispose()
-                return result :?> 'T
+                // JToken → 'T 변환 (역직렬화 에러 무시)
+                if isNull result then return Unchecked.defaultof<'T>
+                else
+                    try
+                        let serializer = JsonSerializer.Create(deserializeSettings)
+                        return result.ToObject<'T>(serializer)
+                    with _ ->
+                        // 역직렬화 실패 시 기본값 (null) — 호출자가 null 체크
+                        logger.LogWarning("DexaBridge 응답 역직렬화 실패 (type={Type}), 기본값 반환", typeof<'T>.Name :> obj)
+                        return Unchecked.defaultof<'T>
             }
 
         member _.TellServer(message: obj) =
-            let serverActor = DexaActorSystem.ServerShortTermActor
-            let selfActor = DexaActorSystem.SelfShortTermActor
-            if not initialized || isNull serverActor then
+            if not initialized || isNull pipeWriter then
                 raise (InvalidOperationException("DEXA Server에 연결되지 않았습니다."))
-            serverActor.Tell(message, selfActor)
+            let msgType = message.GetType().Name
+            let _, req = sendRequest "tell" msgType message None
+            writeLine (req.ToString(Formatting.None))
 
         member _.ServerNotifications = notifications :> IObservable<obj>
 
@@ -216,16 +279,21 @@ type DexaClient(options: IOptions<DexaClientOptions>, logger: ILogger<DexaClient
         member _.Dispose() =
             if not disposed then
                 disposed <- true
-                match connectivityTimer with
-                | Some t -> t.Dispose()
-                | None -> ()
                 // 대기 중인 요청 모두 취소
                 for kvp in pendingRequests do
                     kvp.Value.TrySetCanceled() |> ignore
                 pendingRequests.Clear()
                 notifications.OnCompleted()
                 notifications.Dispose()
-                match actorSystem with
-                | Some s -> (s :> IDisposable).Dispose()
-                | None -> ()
+                try
+                    if not (isNull pipeWriter) then pipeWriter.Dispose()
+                    if not (isNull pipeReader) then pipeReader.Dispose()
+                    if not (isNull pipeClient) then pipeClient.Dispose()
+                with _ -> ()
+                try
+                    if not (isNull bridgeProcess) && not bridgeProcess.HasExited then
+                        bridgeProcess.Kill()
+                        bridgeProcess.WaitForExit(3000) |> ignore
+                        bridgeProcess.Dispose()
+                with _ -> ()
                 initialized <- false

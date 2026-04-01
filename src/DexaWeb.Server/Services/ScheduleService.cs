@@ -69,11 +69,20 @@ public class ScheduleService
         return reply != null;
     }
 
-    public async Task<bool> ExecuteTriggerAsync(int id)
+    public Task<bool> ExecuteTriggerAsync(int id)
     {
-        var reply = await _dexa.AskAsync<AmS2CReplyExecuteTriggerOnce>(
-            new AmC2SExecuteTriggerOnce(id));
-        return reply != null;
+        // Tell (fire-and-forget) — 트리거 백업은 오래 걸리므로 응답을 기다리지 않음
+        // 완료 알림은 서버에서 DataChanged로 수신
+        try
+        {
+            _dexa.Tell(new AmC2SExecuteTriggerOnce(id));
+            return Task.FromResult(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "트리거 실행 요청 실패 (triggerId={TriggerId})", id);
+            return Task.FromResult(false);
+        }
     }
 
     public async Task<bool> UpdateSchedulesAsync(int triggerId, int[] assetIds)

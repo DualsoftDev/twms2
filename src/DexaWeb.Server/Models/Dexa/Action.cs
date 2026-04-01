@@ -26,8 +26,8 @@ public class DexaAction
     public bool IsSuccess => NthSucceeded.HasValue && NthSucceeded.Value >= 0
         && !string.Equals(Memo, "false", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>진행 중 여부 (미완료 + 결과 미수신)</summary>
-    public bool IsInProgress => Finished == null && (!NthSucceeded.HasValue || NthSucceeded.Value < 0);
+    /// <summary>진행 중 여부 (Started 있고 Finished 없으면 진행 중)</summary>
+    public bool IsInProgress => Started.HasValue && Finished == null;
 
     /// <summary>미완료 판정 (진행 중 + IncompleteThreshold 초과)</summary>
     public bool IsIncomplete => IsInProgress
