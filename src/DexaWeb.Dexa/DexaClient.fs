@@ -147,7 +147,24 @@ type DexaClient(options: IOptions<DexaClientOptions>, logger: ILogger<DexaClient
                     pipeConnected <- false
         } :> Task
 
+    let killOrphanBridgeProcesses () =
+        try
+            let currentPid = Process.GetCurrentProcess().Id
+            for proc in Process.GetProcessesByName("DexaBridge") do
+                try
+                    // 현재 서버의 자식이 아닌 고아 프로세스 정리
+                    logger.LogInformation("고아 DexaBridge 프로세스 종료: PID={Pid}", proc.Id :> obj)
+                    proc.Kill()
+                    proc.WaitForExit(3000) |> ignore
+                    proc.Dispose()
+                with ex ->
+                    logger.LogWarning("DexaBridge 프로세스 종료 실패 (PID={Pid}): {Err}", proc.Id :> obj, ex.Message :> obj)
+        with _ -> ()
+
     let startBridgeProcess () =
+        // 이전 고아 프로세스 정리
+        killOrphanBridgeProcesses ()
+
         // DexaBridge.exe 경로 찾기
         let basePath = AppContext.BaseDirectory
         let bridgePath = Path.Combine(basePath, "DexaBridge", "DexaBridge.exe")

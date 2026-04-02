@@ -60,6 +60,7 @@ namespace DexaBridge
         {
             { "AmC2SExecuteTriggerOnce", "AmC2SExecuteTestEvent" },
             { "AmS2CReplyExecuteTriggerOnce", "AmS2CReplyExecuteTestEvent" },
+            { "AmC2SExecuteBackupOnce", "AmC2SRequestExecuteBackupOnce" },
         };
 
         public static Type FindType(string typeName)
