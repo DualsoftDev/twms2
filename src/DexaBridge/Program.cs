@@ -91,9 +91,6 @@ namespace DexaBridge
             proxy.Name = "twm-web";
             proxy.ActorType = DEX.Interfaces.Akka.ActorType.Client;
 
-            Console.Error.WriteLine("[DexaBridge] CommProxy.Initialize 호출...");
-
-            // IDEXCommProxy 인터페이스로 캐스트하여 직접 호출
             var commProxy = (IDEXCommProxy)proxy;
             try
             {
@@ -102,62 +99,33 @@ namespace DexaBridge
                     typeof(DEXClientShortTermActor),
                     typeof(DEX.Client.DEXClientLongTermActor),
                     typeof(DEX.Client.DEXClientStreamActor));
-                Console.Error.WriteLine("[DexaBridge] Initialize 성공");
             }
             catch (Exception ex)
             {
-                // 전체 예외 체인 출력
-                var e = ex;
-                int depth = 0;
-                while (e != null)
-                {
-                    Console.Error.WriteLine($"[DexaBridge] Initialize error [{depth}]: {e.GetType().Name}: {e.Message}");
-                    if (depth == 0) Console.Error.WriteLine($"[DexaBridge] Stack: {e.StackTrace}");
-                    e = e.InnerException;
-                    depth++;
-                }
+                Console.Error.WriteLine($"[DexaBridge] Initialize error: {ex.GetType().Name}: {ex.Message}");
             }
 
-            Console.Error.WriteLine($"[DexaBridge] CommProxy.Connect({serverIp}:{serverPort}) 호출...");
             proxy.Connect(serverIp, serverPort);
-            Console.Error.WriteLine("[DexaBridge] CommProxy 초기화 완료");
+            Console.Error.WriteLine($"[DexaBridge] CommProxy initialized, connecting to {serverIp}:{serverPort}");
         }
 
         static void FindAskMethod()
         {
-            // IDEXCommProxy 인터페이스에서 Ask<T> 메서드 찾기
-            if (DEXActorSystem.CommProxy == null)
-            {
-                Console.Error.WriteLine("[DexaBridge] Warning: CommProxy is null, will retry later");
-                return;
-            }
+            if (DEXActorSystem.CommProxy == null) return;
 
             var proxyType = DEXActorSystem.CommProxy.GetType();
-            Console.Error.WriteLine($"[DexaBridge] CommProxy type: {proxyType.FullName}");
-
-            // Ask 메서드 탐색 — 모든 인터페이스 포함
             var methods = proxyType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
                 .Where(m => m.Name == "Ask" && m.IsGenericMethod)
                 .ToArray();
 
-            Console.Error.WriteLine($"[DexaBridge] Found {methods.Length} Ask methods");
-            foreach (var m in methods)
-            {
-                var parms = m.GetParameters();
-                Console.Error.WriteLine($"[DexaBridge]   Ask<T>({string.Join(", ", parms.Select(p => p.ParameterType.Name + " " + p.Name))})");
-            }
-
-            // 가장 적합한 Ask 메서드 선택 (object message 파라미터를 가진 것)
             _askMethodGeneric = methods.FirstOrDefault(m =>
             {
                 var p = m.GetParameters();
                 return p.Length >= 1 && p[0].ParameterType == typeof(object);
             }) ?? methods.FirstOrDefault();
 
-            if (_askMethodGeneric != null)
-                Console.Error.WriteLine($"[DexaBridge] Selected Ask method: {_askMethodGeneric}");
-            else
-                Console.Error.WriteLine("[DexaBridge] Warning: No Ask method found on CommProxy!");
+            if (_askMethodGeneric == null)
+                Console.Error.WriteLine("[DexaBridge] Warning: No Ask method found on CommProxy");
         }
 
         /// <summary>
@@ -232,7 +200,7 @@ namespace DexaBridge
 
         static void WaitForConnection()
         {
-            Console.Error.WriteLine("[DexaBridge] Waiting for DEXA server connection (actors)...");
+            Console.Error.WriteLine("[DexaBridge] Waiting for DEXA server connection...");
             for (int i = 0; i < 60; i++)
             {
                 Thread.Sleep(500);
@@ -246,23 +214,16 @@ namespace DexaBridge
 
                     if (shortTerm != null && serverShortTerm != null)
                     {
-                        Console.Error.WriteLine($"[DexaBridge] ShortTermActor ready: {shortTerm}");
-                        Console.Error.WriteLine($"[DexaBridge] ServerShortTermActor ready: {serverShortTerm}");
-                        if (_askMethodGeneric == null)
-                            FindAskMethod();
+                        Console.Error.WriteLine("[DexaBridge] Server actors ready");
+                        if (_askMethodGeneric == null) FindAskMethod();
                         return;
-                    }
-                    if (i % 10 == 9)
-                    {
-                        Console.Error.WriteLine($"[DexaBridge] Still waiting... ShortTerm={shortTerm}, ServerShortTerm={serverShortTerm}");
                     }
                 }
                 catch { }
             }
 
             Console.Error.WriteLine("[DexaBridge] Warning: Server actors not ready after 30s, continuing anyway");
-            if (_askMethodGeneric == null)
-                FindAskMethod();
+            if (_askMethodGeneric == null) FindAskMethod();
         }
 
         static void SubscribeNotifications()
@@ -380,8 +341,6 @@ namespace DexaBridge
                 request = JsonConvert.DeserializeObject<PipeRequest>(line);
                 if (request == null) return;
 
-                Console.Error.WriteLine($"[DexaBridge] Request: {request.Method} {request.Type}");
-
                 PipeResponse response;
                 switch (request.Method)
                 {
@@ -426,10 +385,8 @@ namespace DexaBridge
             if (_askServerMethodGeneric == null)
             {
                 _askServerMethodGeneric = proxy.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(m => m.Name == "AskServer" && m.IsGenericMethod)
-                    .FirstOrDefault();
+                    .FirstOrDefault(m => m.Name == "AskServer" && m.IsGenericMethod);
 
-                // 인터페이스에서도 탐색
                 if (_askServerMethodGeneric == null)
                 {
                     foreach (var iface in proxy.GetType().GetInterfaces())
@@ -439,41 +396,26 @@ namespace DexaBridge
                         if (_askServerMethodGeneric != null) break;
                     }
                 }
-
-                Console.Error.WriteLine($"[DexaBridge] AskServer method: {_askServerMethodGeneric}");
             }
 
             if (_askServerMethodGeneric == null)
-            {
-                Console.Error.WriteLine("[DexaBridge] AskServer not found, falling back to Ask");
                 return CallAskGeneric(proxy, replyType, message);
-            }
 
-            var genericMethod = _askServerMethodGeneric.MakeGenericMethod(replyType);
-            return genericMethod.Invoke(proxy, new object[] { message });
+            return _askServerMethodGeneric.MakeGenericMethod(replyType).Invoke(proxy, new object[] { message });
         }
 
         static object CallAskGeneric(object proxy, Type replyType, object message)
         {
-            if (_askMethodGeneric == null)
-                FindAskMethod();
+            if (_askMethodGeneric == null) FindAskMethod();
             if (_askMethodGeneric == null)
                 throw new InvalidOperationException("CommProxy.Ask method not found");
 
-            var genericMethod = _askMethodGeneric.MakeGenericMethod(replyType);
-            Console.Error.WriteLine($"[DexaBridge] Ask generic method: {genericMethod}");
-            Console.Error.WriteLine($"[DexaBridge] Proxy is null: {proxy == null}");
-            Console.Error.WriteLine($"[DexaBridge] Message type: {message?.GetType().FullName}");
-
             try
             {
-                var result = genericMethod.Invoke(proxy, new object[] { message });
-                Console.Error.WriteLine($"[DexaBridge] Invoke result: {result?.GetType().FullName ?? "NULL"}");
-                return result;
+                return _askMethodGeneric.MakeGenericMethod(replyType).Invoke(proxy, new object[] { message });
             }
             catch (TargetInvocationException tex)
             {
-                Console.Error.WriteLine($"[DexaBridge] Ask invoke error: {tex.InnerException}");
                 throw tex.InnerException ?? tex;
             }
         }
@@ -486,23 +428,14 @@ namespace DexaBridge
             try
             {
                 var message = MessageFactory.Create(request.Type, request.Payload);
-                Console.Error.WriteLine($"[DexaBridge] Created message: {message.GetType().FullName}");
-
                 var timeout = TimeSpan.FromSeconds(request.TimeoutSeconds ?? 600);
                 var replyType = MessageFactory.GetExpectedReplyType(request.Type);
-                Console.Error.WriteLine($"[DexaBridge] Expected reply type: {replyType?.FullName ?? "null"}");
 
-                if (_askMethodGeneric == null)
-                    FindAskMethod();
-
+                if (_askMethodGeneric == null) FindAskMethod();
                 if (_askMethodGeneric == null)
                     return PipeResponse.Fail(request.Id, "CommProxy.Ask method not found");
 
-                // CommProxy.AskServer<T> — 서버로 메시지 전송
-                Console.Error.WriteLine($"[DexaBridge] Invoking CommProxy.AskServer<{replyType.Name}>...");
-
                 var taskObj = CallAskServerGeneric(DEXActorSystem.CommProxy, replyType, message);
-
                 if (taskObj == null)
                     return PipeResponse.Fail(request.Id, "CommProxy.Ask returned null task");
 
@@ -514,19 +447,17 @@ namespace DexaBridge
                     return PipeResponse.Fail(request.Id, taskCast.Exception?.InnerException?.Message ?? "Ask faulted");
 
                 var result = taskCast.GetType().GetProperty("Result").GetValue(taskCast);
-
-                Console.Error.WriteLine($"[DexaBridge] Ask result: {result?.GetType().Name ?? "null"}");
                 return PipeResponse.Ok(request.Id, result?.GetType().Name, result);
             }
             catch (AggregateException aex)
             {
                 var inner = aex.InnerException ?? aex;
-                Console.Error.WriteLine($"[DexaBridge] Ask error: {inner}");
+                Console.Error.WriteLine($"[DexaBridge] Ask error: {inner.Message}");
                 return PipeResponse.Fail(request.Id, inner.Message);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[DexaBridge] Ask error: {ex}");
+                Console.Error.WriteLine($"[DexaBridge] Ask error: {ex.Message}");
                 return PipeResponse.Fail(request.Id, ex.Message);
             }
         }
@@ -537,13 +468,6 @@ namespace DexaBridge
                 throw new InvalidOperationException("DEXA Server not connected");
 
             var message = MessageFactory.Create(request.Type, request.Payload);
-            // TriggerId 등 핵심 프로퍼티 확인
-            var triggerIdProp = message.GetType().GetProperty("TriggerId");
-            if (triggerIdProp != null)
-                Console.Error.WriteLine($"[DexaBridge] TellServer: {message.GetType().Name} (TriggerId={triggerIdProp.GetValue(message)})");
-            else
-                Console.Error.WriteLine($"[DexaBridge] TellServer: {message.GetType().Name}");
-
             DEXActorSystem.CommProxy.TellServer(message);
         }
     }

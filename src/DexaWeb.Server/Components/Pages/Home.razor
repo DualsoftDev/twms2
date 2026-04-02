@@ -166,12 +166,7 @@
         <div class="type-stat-list">
             @foreach (var ts in _typeStats)
             {
-                var total = ts.BackedUp + ts.Unchanged + ts.Failed + ts.InProgress + ts.Unknown;
-                var pctBackedUp = total > 0 ? 100.0 * ts.BackedUp / total : 0;
-                var pctUnchanged = total > 0 ? 100.0 * ts.Unchanged / total : 0;
-                var pctFailed = total > 0 ? 100.0 * ts.Failed / total : 0;
-                var pctInProgress = total > 0 ? 100.0 * ts.InProgress / total : 0;
-                var pctUnknown = total > 0 ? 100.0 * ts.Unknown / total : 0;
+                var segs = TypeStat.ToSegments(ts);
                 <div class="type-stat-item">
                     <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))" class="dash-link type-stat-header">
                         <span class="type-stat-name">
@@ -182,14 +177,19 @@
                             }
                             @ts.TypeName
                         </span>
-                        <span class="type-stat-count">@total</span>
+                        <span class="type-stat-count">@segs.Total</span>
                     </a>
                     <div class="neu-bar-track type-stat-bar">
-                        @if (pctBackedUp > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=backedup" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctBackedUp.ToString("F1"))%;background:var(--mud-palette-success);" data-name="@ts.TypeName" data-status="백업갱신" data-value="@ts.BackedUp" data-total="@total">@(pctBackedUp >= 15 ? $"{pctBackedUp:F0}%" : "")</a> }
-                        @if (pctUnchanged > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=unchanged" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnchanged.ToString("F1"))%;background:var(--mud-palette-info);" data-name="@ts.TypeName" data-status="변경없음" data-value="@ts.Unchanged" data-total="@total">@(pctUnchanged >= 15 ? $"{pctUnchanged:F0}%" : "")</a> }
-                        @if (pctFailed > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=failed" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctFailed.ToString("F1"))%;background:var(--mud-palette-error);" data-name="@ts.TypeName" data-status="실패" data-value="@ts.Failed" data-total="@total">@(pctFailed >= 15 ? $"{pctFailed:F0}%" : "")</a> }
-                        @if (pctInProgress > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=inprogress" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctInProgress.ToString("F1"))%;background:var(--mud-palette-warning);" data-name="@ts.TypeName" data-status="작업중" data-value="@ts.InProgress" data-total="@total">@(pctInProgress >= 15 ? $"{pctInProgress:F0}%" : "")</a> }
-                        @if (pctUnknown > 0) { <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=unknown" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnknown.ToString("F1"))%;background:var(--mud-palette-text-disabled);" data-name="@ts.TypeName" data-status="내역없음" data-value="@ts.Unknown" data-total="@total">@(pctUnknown >= 15 ? $"{pctUnknown:F0}%" : "")</a> }
+                        @foreach (var seg in segs.Items)
+                        {
+                            @if (seg.Pct > 0)
+                            {
+                                <a href="/history?tab=1&type=@(Uri.EscapeDataString(ts.TypeName))&health=@seg.Health"
+                                   class="neu-bar-fill type-bar-seg dash-link"
+                                   style="width:@(seg.Pct.ToString("F1"))%;background:@seg.Color;"
+                                   data-name="@ts.TypeName" data-status="@seg.Label" data-value="@seg.Value" data-total="@segs.Total">@(seg.Pct >= 15 ? $"{seg.Pct:F0}%" : "")</a>
+                            }
+                        }
                     </div>
                 </div>
             }
@@ -321,58 +321,58 @@
 @* ── 라인별 현황 ── *@
 <div class="grid-stack-item" gs-id="line-stat" gs-x="9" gs-y="8" gs-w="3" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"line-stat"'>
 <div class="grid-stack-item-content">
-    <MudPaper Class="pa-4" Elevation="2">
-        <div class="stat-panel-header" style="flex-shrink:0;">
-            <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem; margin-bottom: 12px;">
-                라인별 현황
-            </MudText>
-            @if (_editMode)
+<MudPaper Class="pa-4" Elevation="2">
+    <div class="stat-panel-header" style="flex-shrink:0;">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem; margin-bottom: 12px;">
+            라인별 현황
+        </MudText>
+        @if (_editMode)
+        {
+            <MudToggleIconButton Toggled="@(_lineStatChartType == "donut")"
+                                 ToggledChanged="@(v => OnChartTypeToggle("line-stat", v))"
+                                 Icon="@Icons.Material.Filled.DonutSmall"
+                                 ToggledIcon="@Icons.Material.Filled.BarChart"
+                                 Size="Size.Small"
+                                 ToggledColor="Color.Primary"
+                                 Title="차트 전환" />
+        }
+    </div>
+    @if (_lineStatChartType == "bar")
+    {
+        <div class="type-stat-list">
+            @foreach (var ls in _lineStats)
             {
-                <MudToggleIconButton Toggled="@(_lineStatChartType == "donut")"
-                                     ToggledChanged="@(v => OnChartTypeToggle("line-stat", v))"
-                                     Icon="@Icons.Material.Filled.DonutSmall"
-                                     ToggledIcon="@Icons.Material.Filled.BarChart"
-                                     Size="Size.Small"
-                                     ToggledColor="Color.Primary"
-                                     Title="차트 전환" />
+                var segs = TypeStat.ToSegments(ls);
+                <div class="type-stat-item">
+                    <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))" class="dash-link type-stat-header">
+                        <span class="type-stat-name">@ls.TypeName</span>
+                        <span class="type-stat-count">@segs.Total</span>
+                    </a>
+                    <div class="neu-bar-track type-stat-bar">
+                        @foreach (var seg in segs.Items)
+                        {
+                            @if (seg.Pct > 0)
+                            {
+                                <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=@seg.Health"
+                                   class="neu-bar-fill type-bar-seg dash-link"
+                                   style="width:@(seg.Pct.ToString("F1"))%;background:@seg.Color;"
+                                   data-name="@ls.TypeName" data-status="@seg.Label" data-value="@seg.Value" data-total="@segs.Total">@(seg.Pct >= 15 ? $"{seg.Pct:F0}%" : "")</a>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+            @if (_lineStats.Count == 0)
+            {
+                <MudText Color="Color.Secondary" Typo="Typo.body2">라인 데이터가 없습니다.</MudText>
             }
         </div>
-        @if (_lineStatChartType == "bar")
-        {
-            <div class="type-stat-list">
-                @foreach (var ls in _lineStats)
-                {
-                    var total = ls.BackedUp + ls.Unchanged + ls.Failed + ls.InProgress + ls.Unknown;
-                    var pctBackedUp = total > 0 ? 100.0 * ls.BackedUp / total : 0;
-                    var pctUnchanged = total > 0 ? 100.0 * ls.Unchanged / total : 0;
-                    var pctFailed = total > 0 ? 100.0 * ls.Failed / total : 0;
-                    var pctInProgress = total > 0 ? 100.0 * ls.InProgress / total : 0;
-                    var pctUnknown = total > 0 ? 100.0 * ls.Unknown / total : 0;
-                    <div class="type-stat-item">
-                        <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))" class="dash-link type-stat-header">
-                            <span class="type-stat-name">@ls.TypeName</span>
-                            <span class="type-stat-count">@total</span>
-                        </a>
-                        <div class="neu-bar-track type-stat-bar">
-                            @if (pctBackedUp > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=backedup" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctBackedUp.ToString("F1"))%;background:var(--mud-palette-success);" data-name="@ls.TypeName" data-status="백업갱신" data-value="@ls.BackedUp" data-total="@total">@(pctBackedUp >= 15 ? $"{pctBackedUp:F0}%" : "")</a> }
-                            @if (pctUnchanged > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=unchanged" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnchanged.ToString("F1"))%;background:var(--mud-palette-info);" data-name="@ls.TypeName" data-status="변경없음" data-value="@ls.Unchanged" data-total="@total">@(pctUnchanged >= 15 ? $"{pctUnchanged:F0}%" : "")</a> }
-                            @if (pctFailed > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=failed" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctFailed.ToString("F1"))%;background:var(--mud-palette-error);" data-name="@ls.TypeName" data-status="실패" data-value="@ls.Failed" data-total="@total">@(pctFailed >= 15 ? $"{pctFailed:F0}%" : "")</a> }
-                            @if (pctInProgress > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=inprogress" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctInProgress.ToString("F1"))%;background:var(--mud-palette-warning);" data-name="@ls.TypeName" data-status="작업중" data-value="@ls.InProgress" data-total="@total">@(pctInProgress >= 15 ? $"{pctInProgress:F0}%" : "")</a> }
-                            @if (pctUnknown > 0) { <a href="/history?tab=1&line=@(Uri.EscapeDataString(ls.TypeName))&health=unknown" class="neu-bar-fill type-bar-seg dash-link" style="width:@(pctUnknown.ToString("F1"))%;background:var(--mud-palette-text-disabled);" data-name="@ls.TypeName" data-status="내역없음" data-value="@ls.Unknown" data-total="@total">@(pctUnknown >= 15 ? $"{pctUnknown:F0}%" : "")</a> }
-                        </div>
-                    </div>
-                }
-                @if (_lineStats.Count == 0)
-                {
-                    <MudText Color="Color.Secondary" Typo="Typo.body2">라인 데이터가 없습니다.</MudText>
-                }
-            </div>
-        }
-        else
-        {
-            <div id="line-stat-donut" class="stat-donut-container"></div>
-        }
-    </MudPaper>
+    }
+    else
+    {
+        <div id="line-stat-donut" class="stat-donut-container"></div>
+    }
+</MudPaper>
 </div>
 </div>
 
@@ -952,6 +952,25 @@
         public int Failed { get; init; }
         public int InProgress { get; init; }
         public int Unknown { get; init; }
+
+        public static SegmentGroup ToSegments(TypeStat ts)
+        {
+            var total = ts.BackedUp + ts.Unchanged + ts.Failed + ts.InProgress + ts.Unknown;
+            return new SegmentGroup(total,
+            [
+                new("backedup",    "백업갱신", ts.BackedUp,    total, "var(--mud-palette-success)"),
+                new("unchanged",   "변경없음", ts.Unchanged,   total, "var(--mud-palette-info)"),
+                new("failed",      "실패",     ts.Failed,      total, "var(--mud-palette-error)"),
+                new("inprogress",  "작업중",   ts.InProgress,  total, "var(--mud-palette-warning)"),
+                new("unknown",     "내역없음", ts.Unknown,     total, "var(--mud-palette-text-disabled)"),
+            ]);
+        }
+    }
+
+    private record SegmentGroup(int Total, BarSegment[] Items);
+    private record BarSegment(string Health, string Label, int Value, int Total, string Color)
+    {
+        public double Pct => Total > 0 ? 100.0 * Value / Total : 0;
     }
 
     // ── 타임라인 바 레인 레이아웃 ──

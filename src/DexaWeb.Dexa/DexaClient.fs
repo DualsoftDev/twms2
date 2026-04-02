@@ -189,7 +189,7 @@ type DexaClient(options: IOptions<DexaClientOptions>, logger: ILogger<DexaClient
 
                     let psi = ProcessStartInfo(
                         FileName = bridgeExe,
-                        Arguments = sprintf "--pipe %s --server-ip %s --server-port %d" pipeName opts.ServerIp opts.ServerPort,
+                        Arguments = sprintf "--pipe %s" pipeName,
                         UseShellExecute = false,
                         CreateNoWindow = true,
                         RedirectStandardError = true)

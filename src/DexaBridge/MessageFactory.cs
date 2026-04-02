@@ -53,8 +53,6 @@ namespace DexaBridge
             }
 
             Console.Error.WriteLine($"[DexaBridge] MessageFactory: {TypeCache.Count} message types cached");
-            foreach (var kv in TypeCache.Where(k => k.Key.StartsWith("AmC2S")).Take(10))
-                Console.Error.WriteLine($"[DexaBridge]   {kv.Key} → {kv.Value.FullName}");
         }
 
         // DexaWeb.Dexa 타입명 → DEXA 2.20 실제 타입명 매핑
@@ -103,17 +101,9 @@ namespace DexaBridge
 
             var proxy = DEXActorSystem.CommProxy;
 
-            // 모든 생성자를 파라미터 수 오름차순으로 시도
             var ctors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
                 .OrderBy(c => c.GetParameters().Length)
                 .ToArray();
-
-            Console.Error.WriteLine($"[DexaBridge] {typeName}: {ctors.Length} constructors:");
-            foreach (var c in ctors)
-            {
-                var p = c.GetParameters();
-                Console.Error.WriteLine($"[DexaBridge]   ({string.Join(", ", p.Select(x => x.ParameterType.Name + " " + x.Name))})");
-            }
 
             Exception lastError = null;
             foreach (var ctor in ctors)
@@ -171,21 +161,15 @@ namespace DexaBridge
                     if (matched)
                     {
                         var result = ctor.Invoke(args);
-                        // payload 프로퍼티를 추가 설정
                         if (payload != null)
                             ApplyPayloadProperties(result, payload);
-                        // Sender 프로퍼티 확인/설정
                         EnsureSender(result, proxy);
-                        // 생성된 메시지의 Sender 확인
-                        var senderVal = result.GetType().GetProperty("Sender")?.GetValue(result);
-                        Console.Error.WriteLine($"[DexaBridge] Message.Sender = {senderVal?.GetType().Name ?? "NULL"} ({senderVal})");
                         return result;
                     }
                 }
                 catch (Exception ex)
                 {
                     lastError = ex;
-                    Console.Error.WriteLine($"[DexaBridge] {typeName} ctor({string.Join(",", ctor.GetParameters().Select(p => p.ParameterType.Name))}) failed: {ex.Message}");
                 }
             }
 
@@ -214,13 +198,10 @@ namespace DexaBridge
             try
             {
                 var senderProp = obj.GetType().GetProperty("Sender", BindingFlags.Public | BindingFlags.Instance);
-                if (senderProp != null && senderProp.CanWrite && senderProp.GetValue(obj) == null)
+                if (senderProp != null && senderProp.CanWrite && senderProp.GetValue(obj) == null
+                    && senderProp.PropertyType.IsInstanceOfType(proxy))
                 {
-                    if (senderProp.PropertyType.IsInstanceOfType(proxy))
-                    {
-                        senderProp.SetValue(obj, proxy);
-                        Console.Error.WriteLine($"[DexaBridge] Set Sender property on {obj.GetType().Name}");
-                    }
+                    senderProp.SetValue(obj, proxy);
                 }
             }
             catch { }
