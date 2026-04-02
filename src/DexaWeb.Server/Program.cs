@@ -200,6 +200,87 @@ app.MapGet("/api/download/backup/{assetId:int}/{version:int}", (int assetId, int
     return Results.File(fullPath, "application/zip", fileName);
 });
 
+// 프로젝트 일괄 다운로드 API (필터된 자산들의 최신 백업을 하나의 ZIP으로)
+// POST: 자산 1000개 이상 시 URL 길이 제한 회피 + Response.Body 직접 스트리밍으로 메모리 절약
+app.MapPost("/api/download/backup/bulk", async (HttpContext ctx, DexaReadService dexaRead) =>
+{
+    int[] assetIds;
+    try
+    {
+        assetIds = await ctx.Request.ReadFromJsonAsync<int[]>() ?? [];
+    }
+    catch
+    {
+        ctx.Response.StatusCode = 400;
+        await ctx.Response.WriteAsync("잘못된 요청 형식입니다.");
+        return;
+    }
+
+    if (assetIds.Length == 0)
+    {
+        ctx.Response.StatusCode = 400;
+        await ctx.Response.WriteAsync("다운로드할 자산이 없습니다.");
+        return;
+    }
+
+    // 자산별 최신 액션(버전) 조회
+    var latestActions = await dexaRead.GetLatestActionPerAssetAsync();
+    var versionMap = latestActions
+        .Where(a => a.Version.HasValue && a.Version > 0)
+        .ToDictionary(a => a.AssetId, a => a.Version!.Value);
+
+    // 자산명 조회 (zip 내 파일명용)
+    var assets = await dexaRead.GetViewAssetsAsync();
+    var nameMap = assets.ToDictionary(a => a.AssetId, a => a.DisplayName);
+
+    // 대상 자산의 백업 파일 수집
+    var filesToPack = new List<(string ZipEntryName, string FilePath)>();
+    foreach (var assetId in assetIds)
+    {
+        if (!versionMap.TryGetValue(assetId, out var version)) continue;
+
+        var versionDir = Path.Combine(backupBasePath, assetId.ToString(), version.ToString());
+        if (!Directory.Exists(versionDir)) continue;
+
+        var zipFile = Directory.GetFiles(versionDir, "*.zip").FirstOrDefault();
+        if (zipFile == null) continue;
+
+        var fullPath = Path.GetFullPath(zipFile);
+        if (!fullPath.StartsWith(backupBasePath, StringComparison.OrdinalIgnoreCase)) continue;
+
+        var assetName = nameMap.TryGetValue(assetId, out var n) ? n : assetId.ToString();
+        var entryName = $"{assetName}_V{version}.zip";
+        filesToPack.Add((entryName, fullPath));
+    }
+
+    if (filesToPack.Count == 0)
+    {
+        ctx.Response.StatusCode = 404;
+        await ctx.Response.WriteAsync("다운로드 가능한 백업 파일이 없습니다.");
+        return;
+    }
+
+    // Response.Body에 직접 스트리밍 (메모리에 전체 ZIP을 올리지 않음)
+    var fileName = $"DEXA_Backup_{DateTime.Now:yyyyMMdd_HHmm}.zip";
+    ctx.Response.ContentType = "application/zip";
+    ctx.Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
+
+    using var archive = new System.IO.Compression.ZipArchive(ctx.Response.Body, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true);
+    var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var (entryName, filePath) in filesToPack)
+    {
+        var finalName = entryName;
+        var idx = 1;
+        while (!usedNames.Add(finalName))
+            finalName = $"{Path.GetFileNameWithoutExtension(entryName)}_{idx++}.zip";
+
+        var entry = archive.CreateEntry(finalName, System.IO.Compression.CompressionLevel.NoCompression);
+        using var entryStream = entry.Open();
+        await using var fileStream = File.OpenRead(filePath);
+        await fileStream.CopyToAsync(entryStream);
+    }
+});
+
 // 업로드 파일 서빙 (ProgramData\DualSoft\TWMS2\uploads → /uploads)
 app.UseStaticFiles(new StaticFileOptions
 {

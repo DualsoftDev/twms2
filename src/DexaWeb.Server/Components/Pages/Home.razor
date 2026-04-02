@@ -558,6 +558,8 @@
     private double _statFailedPct;
     private double _statUnknownPct;
 
+    private DotNetObjectReference<Home>? _dotNetRef;
+
     protected override async Task OnInitializedAsync()
     {
         NotificationService.OnDatabaseChanged += HandleDatabaseChanged;
@@ -573,6 +575,17 @@
             var user = auth.User.Identity?.Name ?? "guest";
             _layoutKey = $"twm.layout.{user}";
             _prevDarkMode = IsDarkMode;
+
+            // 탭 visibility 변경 시 데이터 새로고침 (백그라운드 탭 쓰로틀링 대응)
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("eval", """
+                window.__twmVisHandler = (ref) => {
+                    const handler = () => { if (!document.hidden) ref.invokeMethodAsync('OnTabVisible'); };
+                    document.addEventListener('visibilitychange', handler);
+                    window.__twmVisCleanup = () => document.removeEventListener('visibilitychange', handler);
+                };
+                """);
+            await JS.InvokeVoidAsync("__twmVisHandler", _dotNetRef);
         }
         try
         {
@@ -671,26 +684,15 @@
     private async Task StartPeriodicTimerAsync()
     {
         _periodicTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
-        int tickCount = 0;
         try
         {
             while (await _periodicTimer.WaitForNextTickAsync())
             {
-                tickCount++;
                 await InvokeAsync(async () =>
                 {
                     try
                     {
-                        if (DateOnly.FromDateTime(DateTime.Today) != _lastRefreshDate || tickCount % 2 == 0)
-                        {
-                            await RefreshAll();
-                        }
-                        else
-                        {
-                            var nowMin = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
-                            _nowPct = AxisRange > 0 ? Math.Clamp(((double)nowMin - _axisStartMinutes) / AxisRange * 100, 0, 100) : 0;
-                            RebuildBars();
-                        }
+                        await RefreshAll();
                         StateHasChanged();
                     }
                     catch { }
@@ -713,12 +715,21 @@
         }
     }
 
+    [JSInvokable]
+    public async Task OnTabVisible()
+    {
+        await RefreshAll();
+        StateHasChanged();
+    }
+
     public async ValueTask DisposeAsync()
     {
         NotificationService.OnDatabaseChanged -= HandleDatabaseChanged;
         _periodicTimer?.Dispose();
+        _dotNetRef?.Dispose();
         try
         {
+            await JS.InvokeVoidAsync("eval", "window.__twmVisCleanup?.()");
             await JS.InvokeVoidAsync("heatmapFit.dispose");
             await JS.InvokeVoidAsync("barTooltip.dispose");
             await JS.InvokeVoidAsync("statDonutChart.dispose", "type-stat-donut");

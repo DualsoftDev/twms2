@@ -7,6 +7,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject TwmDbService TwmDb
+@inject ISnackbar Snackbar
 @using System.Text
 @using DexaWeb.Server.Models.Dashboard
 @using DexaWeb.Server.Models.Twm
@@ -59,6 +60,20 @@
                 </select>
                 <div style="flex: 1 1 auto;"></div>
                 <div style="width: 1px; height: 24px; background: var(--mud-palette-lines-default); opacity: 0.4; margin: 0 6px;"></div>
+                <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small"
+                           OnClick="DownloadFilteredBackups" Disabled="@(!FilteredAssets.Any() || _bulkDownloading)"
+                           StartIcon="@Icons.Material.Filled.Download"
+                           Style="flex: 0 0 auto;">
+                    @if (_bulkDownloading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" Style="width:14px;height:14px;" />
+                        @:다운로드중...
+                    }
+                    else
+                    {
+                        @:프로젝트 일괄다운로드
+                    }
+                </MudButton>
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
                            OnClick="ExportAssetCsv" Disabled="!FilteredAssets.Any()"
                            StartIcon="@Icons.Material.Filled.Save"
@@ -337,7 +352,7 @@
                         </TemplateColumn>
                         <TemplateColumn Title="다운로드" Sortable="false">
                             <CellTemplate>
-                                @if (context.Item.Version.HasValue)
+                                @if (context.Item.DownloadableVersion.HasValue)
                                 {
                                     @if (IsNewUpdate(context.Item))
                                     {
@@ -360,7 +375,7 @@
                                     }
                                     else if (!context.Item.IsSuccess)
                                     {
-                                        <MudTooltip Text="@($"작업 실패 — 마지막 성공 백업 v{context.Item.Version} 다운로드")">
+                                        <MudTooltip Text="@($"작업 실패 — 마지막 성공 백업 v{context.Item.DownloadableVersion} 다운로드")">
                                             <MudIconButton Icon="@Icons.Material.Filled.Download"
                                                            Color="Color.Error" Size="Size.Small"
                                                            Style="opacity:0.5;"
@@ -569,6 +584,7 @@
     private List<string> _lineNames = [];
     private string? _filterAssetType;
     private string? _filterHealth;
+    private bool _bulkDownloading;
 
     // 타입별 컬럼 가시성
     private bool ShowConnColumns => string.IsNullOrEmpty(_filterAssetType)
@@ -688,6 +704,7 @@
             _assetIps = assets.ToDictionary(a => a.AssetId, a => a.Ip ?? "");
             // 라인 맵은 statusTask 이후에 구성
             _allActions = await actionsTask;
+            FillLastSuccessVersions(_allActions);
             FilterActions();
 
             // 자산 정보 데이터
@@ -793,6 +810,68 @@
     }
 
     // ─── 탭 1: 자산 CSV ───
+    private async Task DownloadFilteredBackups()
+    {
+        var assetIds = FilteredAssets.Select(a => a.AssetId).ToArray();
+        if (assetIds.Length == 0)
+        {
+            Snackbar.Add("다운로드할 자산이 없습니다.", Severity.Warning);
+            return;
+        }
+
+        _bulkDownloading = true;
+        StateHasChanged();
+        try
+        {
+            // POST로 자산 ID 배열 전송하여 일괄 ZIP 스트리밍 다운로드
+            var idsJson = System.Text.Json.JsonSerializer.Serialize(assetIds);
+            // 파일명에 필터 조건 반영
+            var nameParts = new List<string> { "DEXA_Backup" };
+            if (!string.IsNullOrEmpty(_filterLine)) nameParts.Add(_filterLine);
+            if (!string.IsNullOrEmpty(_filterAssetType)) nameParts.Add(_filterAssetType);
+            if (!string.IsNullOrEmpty(_filterHealth))
+            {
+                var healthLabel = _filterHealth switch
+                {
+                    "backedup" => "백업갱신",
+                    "unchanged" => "변경없음",
+                    "failed" => "실패",
+                    "inprogress" => "작업중",
+                    "unknown" => "내역없음",
+                    _ => _filterHealth
+                };
+                nameParts.Add(healthLabel);
+            }
+            nameParts.Add(DateTime.Now.ToString("yyyyMMdd_HHmm"));
+            var downloadName = string.Join("_", nameParts) + ".zip";
+            await JS.InvokeVoidAsync("eval", $@"
+                (async()=>{{
+                    const r=await fetch('/api/download/backup/bulk',{{
+                        method:'POST',
+                        headers:{{'Content-Type':'application/json'}},
+                        body:'{idsJson}'
+                    }});
+                    if(!r.ok){{alert(await r.text()||'다운로드 실패');return;}}
+                    const b=await r.blob();
+                    const u=URL.createObjectURL(b);
+                    const a=document.createElement('a');
+                    a.href=u;
+                    a.download='{downloadName}';
+                    a.click();
+                    URL.revokeObjectURL(u);
+                }})()");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"다운로드 실패: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _bulkDownloading = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task ExportAssetCsv()
     {
         var sb = new StringBuilder();
@@ -945,6 +1024,23 @@
             a.Finished?.ToString("yyyy-MM-dd HH:mm:ss") ?? "",
             GetResultLabel(a));
 
+    private static void FillLastSuccessVersions(List<DexaAction> actions)
+    {
+        // 자산별로 그룹핑하여, 실패한 액션에 마지막 성공 버전을 채움
+        foreach (var group in actions.GroupBy(a => a.AssetId))
+        {
+            // 시간 역순 (최신 먼저) — _allActions는 이미 started DESC
+            int? lastSuccess = null;
+            foreach (var action in group.OrderByDescending(a => a.Id))
+            {
+                if (action.IsSuccess && action.Version.HasValue)
+                    lastSuccess = action.Version;
+                else if (!action.IsSuccess)
+                    action.LastSuccessVersion = lastSuccess;
+            }
+        }
+    }
+
     private void FilterActions()
     {
         var query = _allActions
@@ -976,8 +1072,9 @@
 
     private async Task DownloadBackup(DexaAction action)
     {
-        if (action.Version == null) return;
-        var url = $"/api/download/backup/{action.AssetId}/{action.Version}";
+        var version = action.DownloadableVersion;
+        if (version == null) return;
+        var url = $"/api/download/backup/{action.AssetId}/{version}";
         await JS.InvokeVoidAsync("open", url, "_blank");
     }
 
