@@ -178,7 +178,7 @@ public class DashboardService
                 Source = "dexa",
                 AssetId = a.AssetId,
                 AssetName = name ?? $"Asset #{a.AssetId}",
-                Action = a.IsIncomplete ? "백업 미완료" : a.IsInProgress ? "백업 진행중" : "백업",
+                Action = a.IsIncomplete ? "작업 미완료" : a.IsInProgress ? "작업 진행중" : "작업",
                 Success = a.IsIncomplete ? false : a.IsInProgress ? null : a.IsSuccess,
                 Timestamp = a.Started ?? DateTime.MinValue,
             });

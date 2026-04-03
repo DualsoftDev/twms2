@@ -1630,9 +1630,18 @@ h1:focus {
    Dashboard — Schedule Timeline
    ========================================================= */
 
+/* 타임라인 패널: flex column으로 내부 트랙이 패널 높이에 맞게 늘어남 */
+.timeline-panel {
+    display: flex;
+    flex-direction: column;
+}
+
 .schedule-timeline {
     width: 100%;
-    overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     padding-bottom: 4px;
 }
 
@@ -1655,7 +1664,7 @@ h1:focus {
 }
 
 .schedule-ruler-track {
-    flex: 1;
+    flex: none;
     position: relative;
     height: 18px;
     border-bottom: 1px solid var(--mud-palette-lines-default);
@@ -1679,7 +1688,7 @@ h1:focus {
 .schedule-track {
     flex: 1;
     position: relative;
-    height: 20px;
+    min-height: 20px;
     background: var(--mud-palette-background-grey, rgba(128,128,128,0.08));
     border-radius: 5px;
     overflow: hidden;

@@ -275,12 +275,12 @@
 </div>
 </div>
 
-@* ── 최근 백업 갱신 활동 ── *@
+@* ── 최근 작업 ── *@
 <div class="grid-stack-item" gs-id="activities" gs-x="6" gs-y="8" gs-w="3" gs-h="6" gs-min-w="3" gs-min-h="2" @key='"activities"'>
 <div class="grid-stack-item-content">
     <MudPaper Class="pa-4" Elevation="2">
         <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem; margin-bottom: 8px; flex-shrink: 0;">
-            최근 백업 갱신 활동
+            최근 작업
         </MudText>
         @if (_recentActivities.Count == 0)
         {
@@ -379,7 +379,7 @@
 @* ── 작업 현황 타임라인 ── *@
 <div class="grid-stack-item" gs-id="timeline" gs-x="0" gs-y="14" gs-w="12" gs-h="2" gs-min-w="3" gs-min-h="2" @key='"timeline"'>
 <div class="grid-stack-item-content">
-<MudPaper Class="pa-3" Elevation="2">
+<MudPaper Class="pa-3 timeline-panel" Elevation="2">
     <div class="panel-header" style="margin-bottom: 4px;">
         <MudText Typo="Typo.subtitle1" Style="font-weight: 800; font-size: 1.05rem;">
             작업 현황
@@ -410,7 +410,7 @@
             </div>
 
             @* 통합 트랙 — 레인 배정으로 겹침 방지 *@
-            <div class="schedule-track" style="height:@(TrackHeight)px;">
+            <div class="schedule-track" style="min-height:@(TrackHeight)px;">
                 <div class="schedule-now-line" style="left:@(Pct(_nowPct))%"></div>
                 @foreach (var bar in _bars)
                 {
