@@ -37,8 +37,7 @@ public static class TwmsDataPath
                 ServerPort = 50001,
                 AskTimeoutSeconds = 30,
                 PingTimeoutSeconds = 5,
-                ClientName = "twm-web",
-                DirectMode = false
+                ClientName = "twm-web"
             },
             DexaDb = new
             {
