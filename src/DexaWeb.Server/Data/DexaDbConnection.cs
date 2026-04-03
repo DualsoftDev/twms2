@@ -2,14 +2,17 @@ using System.Data;
 using System.Data.SQLite;
 using System.Text.RegularExpressions;
 using System.Xml;
-using Microsoft.Data.Sqlite;
+using Dapper;
+using Microsoft.Data.SqlClient;
 
 namespace DexaWeb.Server.Data;
 
+public enum DexaDbProvider { Sqlite, SqlServer }
+
 /// <summary>
 /// DEXA DB 연결 팩토리.
-/// 읽기: Microsoft.Data.Sqlite (ReadOnly)
-/// 쓰기: System.Data.SQLite (DEXA Server와 동일 라이브러리 → 잠금 프로토콜 공유)
+/// SQLite: 읽기/쓰기 모두 System.Data.SQLite (DEXA Server와 동일 라이브러리 → 잠금 프로토콜 공유)
+/// MSSQL:  읽기/쓰기 모두 Microsoft.Data.SqlClient
 /// </summary>
 public class DexaDbConnection
 {
@@ -19,44 +22,57 @@ public class DexaDbConnection
     private readonly string _readOnlyConnStr;
     private readonly string _readWriteConnStr;
 
-    /// <summary>DEXA DB 파일 경로 (드라이브 용량 조회 등에 활용)</summary>
-    public string DbFilePath { get; }
+    /// <summary>현재 사용 중인 DB 프로바이더</summary>
+    public DexaDbProvider Provider { get; }
+
+    /// <summary>DEXA DB 파일 경로 (SQLite일 때만 유효, MSSQL이면 null)</summary>
+    public string? DbFilePath { get; }
+
+    /// <summary>MSSQL 스키마 이름 (MSSQL일 때만 유효)</summary>
+    public string? Schema { get; }
 
     public DexaDbConnection(IConfiguration configuration, ILogger<DexaDbConnection> logger)
     {
-        var serverConfigPath = configuration["DexaServer:ConfigPath"] ?? DefaultServerConfigPath;
-        var raw = TryReadDexaServerConfig(serverConfigPath, logger)
+        var configPath = configuration["DexaServer:ConfigPath"] ?? DefaultServerConfigPath;
+        var (connStr, providerName) = TryReadDexaServerConfig(configPath, logger);
+
+        // Provider 결정: config에서 감지 → appsettings → 기본값
+        Provider = ResolveProvider(providerName, configuration);
+
+        // ConnectionString 결정: config에서 감지 → appsettings → 기본값
+        var raw = connStr
             ?? configuration["DexaDb:ConnectionString"]
-            ?? "Data Source=C:\\ProgramData\\LS\\DEXA\\Storage\\DEXA.sqlite3;";
+            ?? (Provider == DexaDbProvider.SqlServer
+                ? "Server=localhost;Database=lpb;Trusted_Connection=True;"
+                : @"Data Source=C:\ProgramData\LS\DEXA\Storage\DEXA.sqlite3;");
 
-        // 기존 Mode= 옵션 제거
-        var baseStr = Regex.Replace(raw.TrimEnd(';'), @";?\s*Mode=[^;]*", "", RegexOptions.IgnoreCase);
+        if (Provider == DexaDbProvider.SqlServer)
+        {
+            // MSSQL: 단일 라이브러리 (Microsoft.Data.SqlClient)
+            _readOnlyConnStr = raw;
+            _readWriteConnStr = raw;
+            Schema = ExtractValue(raw, "Database") ?? ExtractValue(raw, "Initial Catalog") ?? "lpb";
 
-        // Microsoft.Data.Sqlite용 (읽기) — Pooling=False로 Dispose 시 파일 핸들 즉시 해제
-        // DEXA Server가 DB 파일의 소유자이므로, TWMS가 파일을 물고 있으면 안 됨
-        _readOnlyConnStr = baseStr + ";Mode=ReadOnly;Pooling=False;";
+            logger.LogInformation("DEXA DB (SqlServer) 연결: {Schema}", Schema);
+            TestSqlServerConnection(logger);
+        }
+        else
+        {
+            // SQLite: 읽기/쓰기 모두 System.Data.SQLite
+            var dbPath = ExtractValue(raw, "Data Source");
+            DbFilePath = dbPath;
+            _readOnlyConnStr = $"Data Source={dbPath};Version=3;Journal Mode=WAL;Read Only=True;";
+            _readWriteConnStr = $"Data Source={dbPath};Version=3;Journal Mode=WAL;";
 
-        // System.Data.SQLite용 (쓰기) — 커넥션 문자열 형식이 다름
-        // "Data Source=path" 에서 path만 추출
-        var dbPath = ExtractDataSource(baseStr);
-        DbFilePath = dbPath;
-        _readWriteConnStr = $"Data Source={dbPath};Version=3;Journal Mode=WAL;";
+            logger.LogInformation("DEXA DB (SQLite) 읽기: {ConnStr}", _readOnlyConnStr);
+            logger.LogInformation("DEXA DB (SQLite) 쓰기: {ConnStr}", _readWriteConnStr);
+            TestSqliteWrite(logger);
+        }
 
-        logger.LogInformation("DEXA DB 읽기 (Microsoft.Data.Sqlite): {ConnStr}", _readOnlyConnStr);
-        logger.LogInformation("DEXA DB 쓰기 (System.Data.SQLite): {ConnStr}", _readWriteConnStr);
-
-        TestWriteConnection(logger);
         ValidateSchema(logger);
     }
 
-    /// <summary>DEXA DB 스키마 호환성 경고 목록 (시작 시 수집)</summary>
-    public IReadOnlyList<string> SchemaWarnings => _schemaWarnings;
-    private readonly List<string> _schemaWarnings = [];
-
-    /// <summary>
-    /// 서버 시작 시 쓰기 연결 테스트 (System.Data.SQLite).
-    /// </summary>
-    private void TestWriteConnection(ILogger logger)
+    private void TestSqliteWrite(ILogger logger)
     {
         try
         {
@@ -66,26 +82,93 @@ public class DexaDbConnection
 
             cmd.CommandText = "PRAGMA journal_mode;";
             var journalMode = cmd.ExecuteScalar()?.ToString();
-            logger.LogInformation("DEXA DB journal_mode: {Mode} (System.Data.SQLite)", journalMode);
 
-            // 쓰기 테스트
+            if (!string.Equals(journalMode, "wal", StringComparison.OrdinalIgnoreCase))
+            {
+                cmd.CommandText = "PRAGMA journal_mode=WAL;";
+                var result = cmd.ExecuteScalar()?.ToString();
+
+                if (string.Equals(result, "wal", StringComparison.OrdinalIgnoreCase))
+                    logger.LogInformation("DEXA DB journal_mode 변경: {From} → WAL", journalMode);
+                else
+                    logger.LogWarning("DEXA DB journal_mode WAL 전환 실패 (현재: {Mode}) — DEXA Server가 DB를 사용 중이면 서버 재시작 후 다시 시도하세요", result);
+            }
+            else
+            {
+                logger.LogInformation("DEXA DB journal_mode: WAL");
+            }
+
             cmd.CommandText = "UPDATE asset SET parameter = parameter WHERE 0";
             cmd.ExecuteNonQuery();
-            logger.LogInformation("DEXA DB 쓰기 테스트 성공 (System.Data.SQLite)");
+            logger.LogInformation("DEXA DB SQLite 쓰기 테스트 성공");
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "DEXA DB 쓰기 연결 실패 (System.Data.SQLite)");
+            logger.LogWarning(ex, "DEXA DB SQLite 쓰기 연결 실패");
         }
     }
 
-    /// <summary>
-    /// DEXA DB 스키마가 TWMS가 기대하는 구조와 일치하는지 검증.
-    /// 테이블/컬럼 누락 시 경고 로그 + SchemaWarnings에 기록.
-    /// </summary>
-    private void ValidateSchema(ILogger logger)
+    private void TestSqlServerConnection(ILogger logger)
     {
-        // TWMS가 사용하는 테이블 → 필수 컬럼 매핑
+        try
+        {
+            using var conn = new SqlConnection(_readWriteConnStr);
+            conn.Open();
+            conn.Execute($"USE {Schema}; SET LANGUAGE us_english; SET DATEFORMAT mdy;");
+
+            var result = conn.QuerySingleOrDefault<int>("SELECT 1");
+            logger.LogInformation("DEXA DB SqlServer 연결 테스트 성공");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "DEXA DB SqlServer 연결 실패 — MSSQL 서버가 실행 중인지 확인하세요");
+        }
+    }
+
+    /// <summary>읽기 전용 연결</summary>
+    public IDbConnection Create()
+    {
+        if (Provider == DexaDbProvider.SqlServer)
+        {
+            var conn = new SqlConnection(_readOnlyConnStr);
+            conn.Open();
+            conn.Execute($"USE {Schema}; SET LANGUAGE us_english; SET DATEFORMAT mdy;");
+            return conn;
+        }
+        else
+        {
+            var conn = new SQLiteConnection(_readOnlyConnStr);
+            conn.Open();
+            return conn;
+        }
+    }
+
+    /// <summary>읽기/쓰기 연결</summary>
+    public IDbConnection CreateReadWrite()
+    {
+        if (Provider == DexaDbProvider.SqlServer)
+        {
+            var conn = new SqlConnection(_readWriteConnStr);
+            conn.Open();
+            conn.Execute($"USE {Schema}; SET LANGUAGE us_english; SET DATEFORMAT mdy;");
+            return conn;
+        }
+        else
+        {
+            var conn = new SQLiteConnection(_readWriteConnStr);
+            conn.Open();
+            return conn;
+        }
+    }
+
+    // ── 스키마 검증 ──────────────────────────────────────────
+
+    public IReadOnlyList<string> SchemaWarnings => _schemaWarnings;
+    private readonly List<string> _schemaWarnings = [];
+
+    /// <summary>DEXA DB 스키마가 TWMS가 기대하는 구조와 일치하는지 검증</summary>
+    public void ValidateSchema(ILogger logger)
+    {
         var expectedSchema = new Dictionary<string, string[]>
         {
             ["asset"] = ["id", "parentId", "assetTypeId", "agentPreferences", "parameter", "deleted"],
@@ -100,57 +183,14 @@ public class DexaDbConnection
             ["agent"] = ["id", "name", "ip", "swVersion", "online", "connected", "disconnected"],
         };
 
-        // 선택적 테이블 (존재하지 않아도 정상 동작)
-        var optionalTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "asset.status" };
-
         try
         {
-            using var conn = new SqliteConnection(_readOnlyConnStr);
-            conn.Open();
+            using var conn = Create();
 
-            // 현재 DB의 테이블 목록
-            var existingTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table'";
-                using var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                    existingTables.Add(reader.GetString(0));
-            }
-
-            foreach (var (table, expectedCols) in expectedSchema)
-            {
-                if (!existingTables.Contains(table))
-                {
-                    var msg = $"DEXA 스키마 경고: 테이블 '{table}' 없음";
-                    _schemaWarnings.Add(msg);
-                    if (optionalTables.Contains(table))
-                        logger.LogDebug(msg);
-                    else
-                        logger.LogWarning(msg);
-                    continue;
-                }
-
-                // PRAGMA table_info로 컬럼 확인
-                var actualCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                using (var cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = $"PRAGMA table_info([{table}])";
-                    using var reader = cmd.ExecuteReader();
-                    while (reader.Read())
-                        actualCols.Add(reader.GetString(1)); // column 1 = name
-                }
-
-                foreach (var col in expectedCols)
-                {
-                    if (!actualCols.Contains(col))
-                    {
-                        var msg = $"DEXA 스키마 경고: 테이블 '{table}'에 컬럼 '{col}' 없음";
-                        _schemaWarnings.Add(msg);
-                        logger.LogWarning(msg);
-                    }
-                }
-            }
+            if (Provider == DexaDbProvider.SqlServer)
+                ValidateSchemaMssql(conn, expectedSchema, logger);
+            else
+                ValidateSchemaSqlite(conn, expectedSchema, logger);
 
             if (_schemaWarnings.Count == 0)
                 logger.LogInformation("DEXA DB 스키마 검증 통과 — 모든 테이블/컬럼 정상");
@@ -159,80 +199,146 @@ public class DexaDbConnection
         }
         catch (Exception ex)
         {
-            var msg = $"DEXA DB 스키마 검증 실패: {ex.Message}";
-            _schemaWarnings.Add(msg);
+            _schemaWarnings.Add($"DEXA DB 스키마 검증 실패: {ex.Message}");
             logger.LogWarning(ex, "DEXA DB 스키마 검증 중 오류");
         }
     }
 
-    /// <summary>
-    /// DEXA ServerService.exe.config에서 DB 연결 문자열을 읽는다.
-    /// appSettings/DatabaseConnection → connectionStrings에서 해당 name의 connectionString 룩업.
-    /// </summary>
-    private static string? TryReadDexaServerConfig(string configPath, ILogger logger)
+    private void ValidateSchemaSqlite(IDbConnection conn, Dictionary<string, string[]> expected, ILogger logger)
+    {
+        var tables = conn.Query<string>("SELECT name FROM sqlite_master WHERE type='table'")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (table, expectedCols) in expected)
+        {
+            if (!tables.Contains(table))
+            {
+                var msg = $"DEXA 스키마 경고: 테이블 '{table}' 없음";
+                _schemaWarnings.Add(msg);
+                logger.LogWarning(msg);
+                continue;
+            }
+
+            var cols = conn.Query("PRAGMA table_info([" + table + "])")
+                .Select(r => (string)r.name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in expectedCols.Where(c => !cols.Contains(c)))
+            {
+                var msg = $"DEXA 스키마 경고: '{table}'.'{col}' 없음";
+                _schemaWarnings.Add(msg);
+                logger.LogWarning(msg);
+            }
+        }
+    }
+
+    private void ValidateSchemaMssql(IDbConnection conn, Dictionary<string, string[]> expected, ILogger logger)
+    {
+        var tables = conn.Query<string>(
+            "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (table, expectedCols) in expected)
+        {
+            if (!tables.Contains(table))
+            {
+                var msg = $"DEXA 스키마 경고: 테이블 '{table}' 없음";
+                _schemaWarnings.Add(msg);
+                logger.LogWarning(msg);
+                continue;
+            }
+
+            var cols = conn.Query<string>(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @Table",
+                new { Table = table })
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in expectedCols.Where(c => !cols.Contains(c)))
+            {
+                var msg = $"DEXA 스키마 경고: '{table}'.'{col}' 없음";
+                _schemaWarnings.Add(msg);
+                logger.LogWarning(msg);
+            }
+        }
+    }
+
+    // ── Private helpers ──────────────────────────────────────
+
+    /// <summary>DEXA ServerService.exe.config에서 (connectionString, providerName) 읽기</summary>
+    private static (string? connStr, string? providerName) TryReadDexaServerConfig(
+        string configPath, ILogger logger)
     {
         try
         {
             if (!File.Exists(configPath))
             {
                 logger.LogInformation("DEXA Server config 없음: {Path}", configPath);
-                return null;
+                return (null, null);
             }
 
             var doc = new XmlDocument();
             doc.Load(configPath);
 
-            // 1) appSettings에서 사용 중인 DB 프로바이더 이름 읽기 (e.g. "Sqlite3")
-            var providerNode = doc.SelectSingleNode(
+            var dbConnNode = doc.SelectSingleNode(
                 "//appSettings/add[@key='DatabaseConnection']/@value");
-            var providerName = providerNode?.Value;
-            if (string.IsNullOrEmpty(providerName))
+            var dbConnName = dbConnNode?.Value;   // e.g. "Sqlite3", "SqlServer"
+            if (string.IsNullOrEmpty(dbConnName))
             {
                 logger.LogWarning("DEXA Server config에 DatabaseConnection 키 없음");
-                return null;
+                return (null, null);
             }
 
-            // 2) connectionStrings에서 해당 name의 connectionString 읽기
             var connNode = doc.SelectSingleNode(
-                $"//connectionStrings/add[@name='{providerName}']/@connectionString");
-            var connStr = connNode?.Value;
+                $"//connectionStrings/add[@name='{dbConnName}']");
+            var connStr = connNode?.Attributes?["connectionString"]?.Value;
+            var providerName = connNode?.Attributes?["providerName"]?.Value;
+
             if (string.IsNullOrEmpty(connStr))
             {
-                logger.LogWarning("DEXA Server config에 connectionString '{Provider}' 없음", providerName);
-                return null;
+                logger.LogWarning("DEXA Server config에 connectionString '{Name}' 없음", dbConnName);
+                return (null, null);
             }
 
             logger.LogInformation(
-                "DEXA Server config에서 DB 연결 정보 로드: Provider={Provider}", providerName);
-            return connStr;
+                "DEXA Server config 로드: DatabaseConnection={Name}, Provider={Provider}",
+                dbConnName, providerName);
+            return (connStr, providerName);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "DEXA Server config 읽기 실패");
-            return null;
+            return (null, null);
         }
     }
 
-    /// <summary>"Data Source=C:\path\DEXA.db" 에서 경로만 추출</summary>
-    private static string ExtractDataSource(string connStr)
+    /// <summary>providerName으로 DbProvider 결정</summary>
+    private static DexaDbProvider ResolveProvider(string? providerName, IConfiguration config)
     {
-        var match = Regex.Match(connStr, @"Data Source\s*=\s*(.+?)(?:;|$)", RegexOptions.IgnoreCase);
-        return match.Success ? match.Groups[1].Value.Trim() : connStr;
+        // 1) DEXA config의 providerName으로 결정
+        if (!string.IsNullOrEmpty(providerName))
+        {
+            if (providerName.Contains("SqlClient", StringComparison.OrdinalIgnoreCase))
+                return DexaDbProvider.SqlServer;
+            if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
+                return DexaDbProvider.Sqlite;
+        }
+
+        // 2) appsettings.json의 DexaDb:Provider로 결정
+        var cfgProvider = config["DexaDb:Provider"];
+        if (!string.IsNullOrEmpty(cfgProvider))
+        {
+            if (cfgProvider.Contains("sql", StringComparison.OrdinalIgnoreCase)
+                && !cfgProvider.Contains("lite", StringComparison.OrdinalIgnoreCase))
+                return DexaDbProvider.SqlServer;
+        }
+
+        return DexaDbProvider.Sqlite;
     }
 
-    /// <summary>읽기 전용 연결 — Microsoft.Data.Sqlite (조회용)</summary>
-    public IDbConnection Create()
+    /// <summary>connection string에서 key=value 추출 (e.g. "Data Source", "Database")</summary>
+    private static string? ExtractValue(string connStr, string key)
     {
-        var connection = new SqliteConnection(_readOnlyConnStr);
-        connection.Open();
-        return connection;
-    }
-
-    /// <summary>읽기/쓰기 연결 — System.Data.SQLite (자산 수정용)</summary>
-    public IDbConnection CreateReadWrite()
-    {
-        var connection = new SQLiteConnection(_readWriteConnStr);
-        connection.Open();
-        return connection;
+        var match = Regex.Match(connStr, key + @"\s*=\s*(.+?)(?:;|$)", RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups[1].Value.Trim() : null;
     }
 }

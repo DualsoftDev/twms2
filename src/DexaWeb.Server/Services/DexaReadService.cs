@@ -7,7 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace DexaWeb.Server.Services;
 
 /// <summary>
-/// DEXA SQLite DB 직접 접근 서비스 (Dapper).
+/// DEXA DB 직접 접근 서비스 (Dapper). SQLite / MSSQL 자동 대응.
 /// 읽기: 자산/스케줄/에이전트 등 조회.
 /// 쓰기: parameter 내 description 등 경량 필드 직접 갱신.
 /// 실행 작업(백업 트리거 등)은 Akka 메시징(DexaServerClient)을 사용.
@@ -18,6 +18,7 @@ public class DexaReadService
     private readonly DexaDbConnection _dexaDb;
     private readonly IMemoryCache _cache;
     private readonly ILogger<DexaReadService> _logger;
+    private bool IsSqlServer => _dexaDb.Provider == DexaDbProvider.SqlServer;
 
     private static readonly TimeSpan AssetCacheTtl = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ActionCacheTtl = TimeSpan.FromSeconds(15);
@@ -168,12 +169,19 @@ public class DexaReadService
     public async Task AddScheduleAsync(int triggerId, int assetId)
     {
         using var conn = _dexaDb.CreateReadWrite();
-        await conn.ExecuteAsync(
-            """
-            INSERT INTO schedule (triggerId, assetId, deleted) VALUES (@TriggerId, @AssetId, 0)
-            ON CONFLICT (triggerId, assetId) DO UPDATE SET deleted = 0
-            """,
-            new { TriggerId = triggerId, AssetId = assetId });
+        var sql = IsSqlServer
+            ? """
+              MERGE INTO schedule AS t
+              USING (SELECT @TriggerId AS triggerId, @AssetId AS assetId) AS s
+              ON t.triggerId = s.triggerId AND t.assetId = s.assetId
+              WHEN MATCHED THEN UPDATE SET deleted = 0
+              WHEN NOT MATCHED THEN INSERT (triggerId, assetId, deleted) VALUES (s.triggerId, s.assetId, 0);
+              """
+            : """
+              INSERT INTO schedule (triggerId, assetId, deleted) VALUES (@TriggerId, @AssetId, 0)
+              ON CONFLICT (triggerId, assetId) DO UPDATE SET deleted = 0
+              """;
+        await conn.ExecuteAsync(sql, new { TriggerId = triggerId, AssetId = assetId });
     }
 
     public async Task RemoveScheduleAsync(int triggerId, int assetId)
@@ -272,13 +280,22 @@ public class DexaReadService
         try
         {
             using var conn = _dexaDb.Create();
-            var result = await conn.QueryAsync<DexaAction>("""
-                SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
-                       acs.contentsChanged, acs.nthSucceeded, ab.memo
-                FROM [action.base] ab
-                INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
-                ORDER BY ab.started DESC LIMIT @Limit
-                """, new { Limit = limit });
+            var sql = IsSqlServer
+                ? """
+                  SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
+                         acs.contentsChanged, acs.nthSucceeded, ab.memo
+                  FROM [action.base] ab
+                  INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
+                  ORDER BY ab.started DESC OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY
+                  """
+                : """
+                  SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
+                         acs.contentsChanged, acs.nthSucceeded, ab.memo
+                  FROM [action.base] ab
+                  INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
+                  ORDER BY ab.started DESC LIMIT @Limit
+                  """;
+            var result = await conn.QueryAsync<DexaAction>(sql, new { Limit = limit });
             var list = result.ToList();
             _cache.Set(cacheKey, list, ActionCacheTtl);
             return list;
@@ -304,9 +321,13 @@ public class DexaReadService
                 "SELECT COUNT(*) FROM actionLog WHERE actionId = @ActionId",
                 new { ActionId = actionId });
 
-            string sql = loadAll
-                ? "SELECT id, actionId, level, message, dateTime FROM actionLog WHERE actionId = @ActionId ORDER BY dateTime"
-                : "SELECT id, actionId, level, message, dateTime FROM actionLog WHERE actionId = @ActionId ORDER BY dateTime LIMIT @Limit";
+            string sql;
+            if (loadAll)
+                sql = "SELECT id, actionId, level, message, dateTime FROM actionLog WHERE actionId = @ActionId ORDER BY dateTime";
+            else if (IsSqlServer)
+                sql = "SELECT id, actionId, level, message, dateTime FROM actionLog WHERE actionId = @ActionId ORDER BY dateTime OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+            else
+                sql = "SELECT id, actionId, level, message, dateTime FROM actionLog WHERE actionId = @ActionId ORDER BY dateTime LIMIT @Limit";
 
             var result = await conn.QueryAsync<ActionLog>(sql,
                 new { ActionId = actionId, Limit = limit });
