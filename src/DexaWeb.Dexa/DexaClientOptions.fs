@@ -6,3 +6,4 @@ type DexaClientOptions() =
     member val AskTimeoutSeconds: int = 30 with get, set
     member val PingTimeoutSeconds: int = 5 with get, set
     member val ClientName: string = "twm-web" with get, set
+    member val DllPath: string = @"C:\Program Files (x86)\LS\DEXA\Client" with get, set

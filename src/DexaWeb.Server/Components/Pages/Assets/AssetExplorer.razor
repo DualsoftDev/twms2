@@ -121,7 +121,7 @@ else
 
         try
         {
-            var msg = new AmC2SExecuteBackupOnce(_selectedAsset.AssetId);
+            var msg = new AmC2SRequestExecuteBackupOnce(_selectedAsset.AssetId);
             DexaClient.Tell(msg);
             Snackbar.Add($"'{_selectedAsset.DisplayName}' 백업 작업을 시작했습니다.", Severity.Info);
 

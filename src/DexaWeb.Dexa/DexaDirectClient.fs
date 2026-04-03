@@ -29,14 +29,13 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
     let mutable disposed = false
     let mutable dataChangedSub: IDisposable = null
     let mutable messageSub: IDisposable = null
-    let dexaPath = @"C:\Program Files (x86)\LS\DEXA\Client"
+    let dexaPath = opts.DllPath
 
     /// DEXA DLL 경로에서 어셈블리 resolve
     static let mutable resolverRegistered = false
-    static let registerResolver () =
+    static let registerResolver (path: string) =
         if not resolverRegistered then
             resolverRegistered <- true
-            let path = @"C:\Program Files (x86)\LS\DEXA\Client"
             AppDomain.CurrentDomain.add_AssemblyResolve(ResolveEventHandler(fun _ args ->
                 let name = AssemblyName(args.Name)
                 let dllPath = Path.Combine(path, name.Name + ".dll")
@@ -103,7 +102,6 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
     let typeAliases =
         dict [
             "AmC2SExecuteTriggerOnce", "AmC2SExecuteTestEvent"
-            "AmC2SExecuteBackupOnce", "AmC2SRequestExecuteBackupOnce"
         ]
 
     /// DexaBridge MessageFactory.Create와 동일한 방식으로 DEXA DLL 타입 인스턴스 생성.
@@ -251,7 +249,7 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                     logger.LogInformation("DexaDirectClient 초기화 시작 (CommProxy in-process)")
 
                     // 1. AssemblyResolve 등록
-                    registerResolver ()
+                    registerResolver dexaPath
 
                     // 2. DEXA config 로드
                     loadDexaConfig ()
