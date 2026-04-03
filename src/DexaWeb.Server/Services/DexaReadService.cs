@@ -137,7 +137,7 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<Trigger>(
-                "SELECT id, name, cronSpec AS CronExpression, enable AS Enabled, description FROM trigger WHERE deleted = 0");
+                "SELECT id, name, cronSpec AS CronExpression, enable AS Enabled, description FROM [trigger] WHERE deleted = 0");
             return result.ToList();
         }
         catch (Exception ex)
@@ -203,7 +203,7 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<User>(
-                "SELECT id, userName AS Name, isAdmin AS Admin FROM user");
+                "SELECT id, userName AS Name, isAdmin AS Admin FROM [user]");
             return result.ToList();
         }
         catch (Exception ex)

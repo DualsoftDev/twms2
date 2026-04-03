@@ -33,7 +33,7 @@ public class UserService
         {
             using var conn = _dexaDb.Create();
             var user = await conn.QueryFirstOrDefaultAsync<UserWithPassword>(
-                "SELECT id, userName AS Name, password AS Password, isAdmin AS Admin FROM user WHERE userName = @UserName",
+                "SELECT id, userName AS Name, password AS Password, isAdmin AS Admin FROM [user] WHERE userName = @UserName",
                 new { UserName = userName });
 
             if (user == null)

@@ -30,7 +30,7 @@ MSSQL_CONNECTION = (
     "SERVER=localhost;"
     "DATABASE=lpb;"
     "UID=sa;"
-    "PWD=yourpassword;"
+    "PWD=dual@soft;"
 )
 
 # FK 의존 순서. 실제 DB에 없는 테이블은 자동으로 건너뜀.

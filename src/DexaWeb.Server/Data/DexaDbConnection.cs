@@ -49,6 +49,10 @@ public class DexaDbConnection
         if (Provider == DexaDbProvider.SqlServer)
         {
             // MSSQL: 단일 라이브러리 (Microsoft.Data.SqlClient)
+            // TrustServerCertificate 미지정 시 자동 추가 (로컬 자체 서명 인증서 대응)
+            if (!raw.Contains("TrustServerCertificate", StringComparison.OrdinalIgnoreCase))
+                raw += "TrustServerCertificate=True;";
+
             _readOnlyConnStr = raw;
             _readWriteConnStr = raw;
             Schema = ExtractValue(raw, "Database") ?? ExtractValue(raw, "Initial Catalog") ?? "lpb";
