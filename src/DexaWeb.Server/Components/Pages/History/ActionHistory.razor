@@ -1026,12 +1026,12 @@
 
     private static void FillLastSuccessVersions(List<DexaAction> actions)
     {
-        // 자산별로 그룹핑하여, 실패한 액션에 마지막 성공 버전을 채움
+        // 자산별로 그룹핑하여, 실패한 액션에 직전 성공 버전을 채움
         foreach (var group in actions.GroupBy(a => a.AssetId))
         {
-            // 시간 역순 (최신 먼저) — _allActions는 이미 started DESC
+            // 과거→최신 순으로 순회하며 마지막 성공 버전을 추적
             int? lastSuccess = null;
-            foreach (var action in group.OrderByDescending(a => a.Id))
+            foreach (var action in group.OrderBy(a => a.Id))
             {
                 if (action.IsSuccess && action.Version.HasValue)
                     lastSuccess = action.Version;

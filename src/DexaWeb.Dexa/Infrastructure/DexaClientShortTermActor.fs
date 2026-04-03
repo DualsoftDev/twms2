@@ -28,6 +28,8 @@ type DexaClientShortTermActor(logger: ILogger) =
                     (if isNull s2c.ServerVersion then "?" else s2c.ServerVersion) :> obj)
             else
                 logger.LogInformation("DEXA Server 구독 응답 수신 (base type)")
+            // 구독 성공 → 연결 확인 알림
+            DexaClientShortTermActor.DataChanged.OnNext(ConnectivityChangedNotification(true))
 
         | :? AmS2CNotifyDataChanged as xnotify ->
             if not (isNull xnotify.DataChanges) then
@@ -50,8 +52,9 @@ type DexaClientShortTermActor(logger: ILogger) =
             logger.LogError("Quarantined by {RemoteAddress}", associationError.RemoteAddress :> obj)
             DexaActorSystem.ActorSystemSubject.OnNext(DEX.Common.ActorErrors.Quarantined())
 
-        | :? Terminated ->
-            logger.LogWarning("서버 actor Terminated 수신")
+        | :? Terminated as t ->
+            logger.LogWarning("서버 actor Terminated 수신: {Actor}", t.ActorRef.Path.ToString() :> obj)
+            DexaClientShortTermActor.DataChanged.OnNext(ConnectivityChangedNotification(false))
 
         | _ ->
             logger.LogDebug("처리되지 않은 메시지: {Type} - {Message}", message.GetType().Name :> obj, message :> obj)
@@ -60,3 +63,6 @@ type DexaClientShortTermActor(logger: ILogger) =
         base.PreStart()
         let ctx = UntypedActor.Context
         ctx.System.EventStream.Subscribe(this.Self, typeof<AssociationErrorEvent>) |> ignore
+        // 서버 ShortTerm actor를 Watch → Terminated 수신으로 연결 끊김 감지
+        if not (isNull DexaActorSystem.ServerShortTermActor) then
+            ctx.Watch(DexaActorSystem.ServerShortTermActor) |> ignore

@@ -26,6 +26,15 @@ type DexaSerializationBinder() =
             "DEX.Common", "DEXA.Common"
         ]
 
+    /// 역방향 타입 별칭: DEXA 서버가 보내는 타입명 → F# 어셈블리의 타입명
+    /// (DexaJsonSerializer.manifestAliases의 역방향)
+    static let reverseTypeAliases =
+        dict [
+            "DEX.Core.Actor.AmC2SExecuteTestEvent",              "DEX.Core.Actor.AmC2SExecuteTriggerOnce"
+            "DEX.Core.Actor.AmS2CReplyExecuteTestEvent",         "DEX.Core.Actor.AmS2CReplyExecuteTriggerOnce"
+            "DEX.Core.Actor.AmC2SRequestExecuteBackupOnce",      "DEX.Core.Actor.AmC2SExecuteBackupOnce"
+        ]
+
     interface ISerializationBinder with
         member _.BindToName(serializedType: Type, assemblyName: string byref, typeName: string byref) =
             typeName <- serializedType.FullName
@@ -43,13 +52,19 @@ type DexaSerializationBinder() =
                 assemblyName <- serializedType.Assembly.GetName().Name
 
         member _.BindToType(assemblyName: string, typeName: string) : Type =
+            // 역방향 별칭 적용: 서버 타입명 → F# 타입명
+            let mutable resolvedName = ""
+            let actualTypeName =
+                if reverseTypeAliases.TryGetValue(typeName, &resolvedName) then resolvedName
+                else typeName
+
             if not (isNull assemblyName) && knownDexaAssemblies.Contains(assemblyName) then
-                let t = ourAssembly.GetType(typeName)
+                let t = ourAssembly.GetType(actualTypeName)
                 if not (isNull t) then t
                 else
-                    DexaSerializationBinder.FallbackResolve(assemblyName, typeName)
+                    DexaSerializationBinder.FallbackResolve(assemblyName, actualTypeName)
             else
-                DexaSerializationBinder.FallbackResolve(assemblyName, typeName)
+                DexaSerializationBinder.FallbackResolve(assemblyName, actualTypeName)
 
     static member private FallbackResolve(assemblyName: string, typeName: string) : Type =
         if not (isNull assemblyName) then

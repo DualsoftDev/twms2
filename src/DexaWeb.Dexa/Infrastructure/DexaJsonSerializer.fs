@@ -39,6 +39,8 @@ type DexaJsonSerializer(system: ExtendedActorSystem) =
 
     let settings =
         let s = JsonSerializerSettings()
+        // DEXA 서버 NewtonSoftJsonSerializer 기본값과 일치:
+        // EncodeTypeNames=true, PreserveObjectReferences=true
         s.PreserveReferencesHandling <- PreserveReferencesHandling.Objects
         s.NullValueHandling <- NullValueHandling.Ignore
         s.DefaultValueHandling <- DefaultValueHandling.Ignore

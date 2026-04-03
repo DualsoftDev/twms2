@@ -45,9 +45,12 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, AuthStateProvider>();
 builder.Services.AddScoped<AuthStateProvider>();
 
-// DEXA Client (Bridge 대체 - Akka TCP 직접 연결)
+// DEXA Client
 builder.Services.Configure<DexaClientOptions>(builder.Configuration.GetSection("DexaServer"));
-builder.Services.AddSingleton<IDexaClient, DexaClient>();
+if (builder.Configuration.GetValue<bool>("DexaServer:DirectMode"))
+    builder.Services.AddSingleton<IDexaClient, DexaDirectClient>();  // Akka 직접 통신 (DexaBridge 불필요)
+else
+    builder.Services.AddSingleton<IDexaClient, DexaClient>();        // DexaBridge 프로세스 방식
 builder.Services.AddSingleton<DexaNotificationService>();
 builder.Services.AddScoped<DexaServerClient>();
 
