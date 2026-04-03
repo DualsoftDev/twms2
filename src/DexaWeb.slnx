@@ -1,6 +1,5 @@
 <Solution>
   <Project Path="DeepPingerTest/DeepPingerTest.csproj" />
-  <Project Path="DexaBridge/DexaBridge.csproj" />
   <Project Path="DexaWeb.Dexa/DexaWeb.Dexa.fsproj" />
   <Project Path="DexaWeb.Server/DexaWeb.Server.csproj" />
 </Solution>

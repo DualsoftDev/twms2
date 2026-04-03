@@ -69,7 +69,6 @@
     <Compile Include="Infrastructure/DexaGuardianActor.fs" />
     <Compile Include="Infrastructure/DexaClientGuardian.fs" />
     <Compile Include="IDexaClient.fs" />
-    <Compile Include="DexaClient.fs" />
     <Compile Include="DexaDirectClient.fs" />
   </ItemGroup>
 
