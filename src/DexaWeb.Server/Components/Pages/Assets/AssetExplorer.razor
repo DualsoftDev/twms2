@@ -11,27 +11,7 @@
 
 <PageTitle>TWM - 자산 관리</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
-    <MudText Typo="Typo.h4">자산 관리</MudText>
-    <MudSpacer />
-    <AuthorizeView>
-        <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Backup"
-                   OnClick="ExecuteManualBackup"
-                   Disabled="@(_selectedAsset == null || _backupRunning)">
-            @if (_backupRunning)
-            {
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" Style="width:16px;height:16px;" />
-            }
-            수동 백업작업
-        </MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.TableChart"
-                   Href="/assets/table">
-            테이블 편집
-        </MudButton>
-    </AuthorizeView>
-</MudStack>
+<MudText Typo="Typo.h4" Class="mb-3">자산 관리</MudText>
 
 @if (_loading)
 {
@@ -54,6 +34,26 @@ else
         </MudPaper>
     }
 }
+
+<AuthorizeView>
+    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-3">
+        <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Backup"
+                   OnClick="ExecuteManualBackup"
+                   Disabled="@(_selectedAsset == null || _backupRunning)">
+            @if (_backupRunning)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" Style="width:16px;height:16px;" />
+            }
+            수동 백업작업
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.TableChart"
+                   Href="/assets/table">
+            테이블 편집
+        </MudButton>
+    </MudStack>
+</AuthorizeView>
 
 @code {
     [Parameter] public int? AssetId { get; set; }

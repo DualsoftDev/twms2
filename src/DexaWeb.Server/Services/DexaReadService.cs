@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using DexaWeb.Server.Data;
 using DexaWeb.Server.HOCON;
@@ -349,6 +350,9 @@ public class DexaReadService
         try
         {
             using var conn = _dexaDb.Create();
+            var p = new DynamicParameters();
+            p.Add("From", from, DbType.DateTime2);
+            p.Add("To", to, DbType.DateTime2);
             var result = await conn.QueryAsync<DexaAction>("""
                 SELECT ab.id, acs.assetId, acs.version, ab.started, ab.finished,
                        acs.contentsChanged, acs.nthSucceeded, ab.memo
@@ -356,7 +360,7 @@ public class DexaReadService
                 INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
                 WHERE ab.started >= @From AND ab.started < @To
                 ORDER BY ab.started DESC
-                """, new { From = from, To = to });
+                """, p);
             return result.ToList();
         }
         catch (Exception ex)
