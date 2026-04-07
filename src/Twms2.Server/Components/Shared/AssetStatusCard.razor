@@ -1,0 +1,90 @@
+@using Twms2.Server.Models.Dashboard
+
+<MudCard Elevation="2" Class="@($"asset-status-card {GetBorderClass()}")" Style="cursor: pointer;" @onclick="() => OnClick.InvokeAsync(Asset)">
+    <MudCardContent Class="pa-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            @{ var cardIcon = GetTypeIcon(); }
+            @if (!string.IsNullOrEmpty(cardIcon))
+            {
+                <img src="@cardIcon" class="asset-type-icon" />
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Devices" Size="Size.Medium" Color="@GetHealthColor()" />
+            }
+            <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
+                <MudText Typo="Typo.subtitle2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    @Asset.Name
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(Asset.AssetTypeName ?? "")
+                    @if (!string.IsNullOrEmpty(Asset.Ip))
+                    {
+                        <text> · @Asset.Ip</text>
+                    }
+                </MudText>
+            </MudStack>
+            <PingIndicator Ping="@Asset.LatestPing" />
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+            <BackupStatusBadge Health="@Asset.Health" AgentOnline="@Asset.AgentOnline" />
+            @if (Asset.LastBackupTime != null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @Asset.LastBackupTime.Value.ToString("MM/dd HH:mm")
+                </MudText>
+            }
+            <MudSpacer />
+            @if (Asset.AgentOnline)
+            {
+                <MudTooltip Text="@($"에이전트: {Asset.AgentName ?? "?"}")">
+                    <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Small" Color="Color.Success" />
+                </MudTooltip>
+            }
+            else
+            {
+                <MudTooltip Text="에이전트 오프라인">
+                    <MudIcon Icon="@Icons.Material.Filled.CloudOff" Size="Size.Small" Color="Color.Default" />
+                </MudTooltip>
+            }
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public AssetStatusInfo Asset { get; set; } = null!;
+    [Parameter] public EventCallback<AssetStatusInfo> OnClick { get; set; }
+
+    private Color GetHealthColor() => Asset.Health switch
+    {
+        AssetHealthStatus.BackedUp => Color.Success,
+        AssetHealthStatus.Unchanged => Color.Info,
+        AssetHealthStatus.Failed => Color.Error,
+        _ => Color.Warning,
+    };
+
+    private string GetBorderClass() => Asset.Health switch
+    {
+        AssetHealthStatus.Failed => "border-left-error",
+        AssetHealthStatus.BackedUp => "border-left-success",
+        AssetHealthStatus.Unchanged => "border-left-info",
+        _ => "border-left-warning",
+    };
+
+    private string GetTypeIcon()
+    {
+        var typeName = (Asset.AssetTypeName ?? "").ToLowerInvariant();
+        return typeName switch
+        {
+            _ when typeName.Contains("robot") => "images/icons/robot.png",
+            _ when typeName.Contains("plc") && Asset.AugIsRobotPLC is > 0 => "images/icons/robot.png",
+            _ when typeName.Contains("plc") => "images/icons/plc.png",
+            _ when typeName.Contains("servo") => "images/icons/servo.png",
+            _ when typeName.Contains("drive") => "images/icons/drive.png",
+            _ when typeName.Contains("hmi") => "images/icons/hmi.png",
+            _ when typeName.Contains("ftp") => "images/icons/ftp.png",
+            _ => "",
+        };
+    }
+}

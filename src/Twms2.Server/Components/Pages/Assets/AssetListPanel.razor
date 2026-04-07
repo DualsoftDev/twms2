@@ -1,0 +1,107 @@
+@using static Twms2.Server.Helpers.LayoutHelpers
+@inject TwmDbService TwmDb
+
+<div class="asset-list-panel">
+    @* ── 검색바 ── *@
+    <MudTextField @bind-Value="_searchText" Placeholder="검색 (이름, IP, 사양, 벤더)"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Immediate="true" DebounceInterval="300" />
+
+    @* ── 필터 행 ── *@
+    <MudStack Row="true" Class="mt-2" Style="flex-wrap: wrap; gap: 6px; align-items: center;">
+        <MudSelect T="int?" Value="_filterTypeId" ValueChanged="OnTypeFilterChanged"
+                   Label="유형" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                   Clearable="true" Style="min-width: 120px; max-width: 140px;">
+            <MudSelectItem T="int?" Value="@((int?)3)">FTP</MudSelectItem>
+            <MudSelectItem T="int?" Value="@((int?)4)">드라이브</MudSelectItem>
+            <MudSelectItem T="int?" Value="@((int?)5)">XP Series</MudSelectItem>
+            <MudSelectItem T="int?" Value="@((int?)6)">XGT PLC</MudSelectItem>
+            <MudSelectItem T="int?" Value="@((int?)7)">서보</MudSelectItem>
+        </MudSelect>
+
+        <MudSelect T="int?" Value="_filterLineId" ValueChanged="OnLineFilterChanged"
+                   Label="라인" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                   Clearable="true" Style="min-width: 120px; max-width: 160px;">
+            @foreach (var (id, name) in _lineMap)
+            {
+                <MudSelectItem T="int?" Value="@((int?)id)">@name</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSelect T="AssetHealthStatus?" Value="_filterHealth" ValueChanged="OnHealthFilterChanged"
+                   Label="상태" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                   Clearable="true" Style="min-width: 100px; max-width: 130px;">
+            <MudSelectItem T="AssetHealthStatus?" Value="@((AssetHealthStatus?)AssetHealthStatus.BackedUp)">갱신</MudSelectItem>
+            <MudSelectItem T="AssetHealthStatus?" Value="@((AssetHealthStatus?)AssetHealthStatus.Unchanged)">유지</MudSelectItem>
+            <MudSelectItem T="AssetHealthStatus?" Value="@((AssetHealthStatus?)AssetHealthStatus.Failed)">실패</MudSelectItem>
+            <MudSelectItem T="AssetHealthStatus?" Value="@((AssetHealthStatus?)AssetHealthStatus.Unknown)">내역없음</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+
+    @* ── 결과 카운트 ── *@
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 mb-1">
+        @FilteredAssets.Count / @Assets.Count 자산
+    </MudText>
+
+    @* ── 스크롤 리스트 ── *@
+    <div class="asset-list-scroll">
+        @foreach (var asset in FilteredAssets)
+        {
+            <AssetListItem Asset="asset"
+                           Status="@(StatusMap.GetValueOrDefault(asset.AssetId))"
+                           IsSelected="asset.AssetId == SelectedAssetId"
+                           OnClick="() => OnAssetSelected.InvokeAsync(asset)" />
+        }
+
+        @if (FilteredAssets.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4" Align="Align.Center">
+                검색 결과가 없습니다.
+            </MudText>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<ViewAsset> Assets { get; set; } = [];
+    [Parameter] public Dictionary<int, AssetStatusInfo> StatusMap { get; set; } = [];
+    [Parameter] public int? SelectedAssetId { get; set; }
+    [Parameter] public EventCallback<ViewAsset> OnAssetSelected { get; set; }
+
+    private string _searchText = "";
+    private int? _filterTypeId;
+    private int? _filterLineId;
+    private AssetHealthStatus? _filterHealth;
+    private Dictionary<int, string> _lineMap = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _lineMap = await TwmDb.GetTwmsLayoutLineMapAsync();
+    }
+
+    private List<ViewAsset> FilteredAssets => Assets
+        .Where(MatchesSearch)
+        .Where(a => _filterTypeId == null || a.AssetTypeId == _filterTypeId)
+        .Where(a => _filterLineId == null || a.AugLineId == _filterLineId)
+        .Where(a => _filterHealth == null || GetAssetHealth(a) == _filterHealth)
+        .OrderBy(a => a.DisplayName)
+        .ToList();
+
+    private bool MatchesSearch(ViewAsset a)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText)) return true;
+        var q = _searchText.Trim();
+        return (a.DisplayName?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (a.Ip?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (a.AugSpec?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (a.AugVendor?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private AssetHealthStatus GetAssetHealth(ViewAsset a) =>
+        StatusMap.TryGetValue(a.AssetId, out var s) ? s.Health : AssetHealthStatus.Unknown;
+
+    private void OnTypeFilterChanged(int? value) => _filterTypeId = value;
+    private void OnLineFilterChanged(int? value) => _filterLineId = value;
+    private void OnHealthFilterChanged(AssetHealthStatus? value) => _filterHealth = value;
+}

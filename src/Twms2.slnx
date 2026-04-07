@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="DeepPingerTest/DeepPingerTest.csproj" />
+  <Project Path="Twms2.Dexa/Twms2.Dexa.fsproj" />
+  <Project Path="Twms2.Server/Twms2.Server.csproj" />
+</Solution>

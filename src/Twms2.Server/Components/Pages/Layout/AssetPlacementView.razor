@@ -1,0 +1,300 @@
+@using static Twms2.Server.Helpers.LayoutHelpers
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+@* ── 범례 ── *@
+<MudPaper Class="pa-3 mb-3" Elevation="1">
+    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center" Justify="Justify.Center">
+        @foreach (var (label, color) in _legendItems)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <div class="topology-legend-dot" style="background: @color;"></div>
+                <MudText Typo="Typo.body2">@label</MudText>
+            </MudStack>
+        }
+        <MudSpacer />
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            @VisiblePositions.Count 개 자산 배치됨 · 휠로 확대/축소
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@* ── 배치도 뷰 ── *@
+<MudPaper Class="pa-0 blueprint-container" Elevation="2">
+    <div id="apv-container" class="blueprint-viewport"
+         style="background-color: @(BlueprintConfig?.BgColor ?? "#1a1a2e")">
+        <svg class="drawing-editor-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+            @* ── 도면 이미지 배경 ── *@
+            @if (!string.IsNullOrEmpty(BlueprintConfig?.ImagePath))
+            {
+                <image href="@BlueprintConfig.ImagePath" x="0" y="0" width="1000" height="600"
+                       preserveAspectRatio="xMidYMid meet" opacity="0.85" />
+            }
+
+            @* ── 그룹 clipPath 정의 ── *@
+            <defs>
+                @foreach (var grp in PlacementGroups)
+                {
+                    <clipPath id="grp-clip-@grp.Id">
+                        <rect x="@F(grp.X)" y="@F(grp.Y)"
+                              width="@F(grp.Width)" height="@F(grp.Height)" rx="6" />
+                    </clipPath>
+                }
+            </defs>
+
+            @* ── 그룹 컨테이너 + 내부 자산 아이콘 (동적 배치) ── *@
+            @foreach (var grp in PlacementGroups)
+            {
+                var memberAssets = GetGroupMemberAssets(grp.Id);
+                var grpColor = grp.Color ?? "#4a90d9";
+                <g>
+                    @* 그룹 배경 *@
+                    <rect x="@F(grp.X)" y="@F(grp.Y)"
+                          width="@F(grp.Width)" height="@F(grp.Height)"
+                          rx="6"
+                          fill="@(grpColor)10"
+                          stroke="@grpColor"
+                          stroke-width="0.7" stroke-dasharray="6 3" />
+                    @* 그룹 라벨 (영역 밖 상단) *@
+                    <text x="@F(grp.X + 4)" y="@F(grp.Y - 4)"
+                          font-size="10"
+                          fill="@grpColor"
+                          class="ap-group-label">@FormatGroupLabel(grp)</text>
+
+                    @* 그룹 내 멤버 자산 아이콘 - clipPath로 영역 안에 가둠 *@
+                    <g clip-path="url(#grp-clip-@grp.Id)">
+                        @{
+                            var items = LayoutGroupAssets(grp, memberAssets);
+                        }
+                        @foreach (var item in items)
+                        {
+                            var healthColor = GetHealthColor(item.Asset.Health);
+                            var isOffline = item.Asset.LatestPing is { Reachable: false };
+                            var dr = Math.Max(1.5, item.Size * 0.12);
+                            <g transform="translate(@F(item.X), @F(item.Y))" class="apv-asset-icon"
+                               @onclick="() => NavigateToAsset(item.Asset.AssetId)"
+                               @onclick:stopPropagation="true" style="cursor:pointer">
+                                @(RenderSvgTitle(item.Asset))
+                                <rect width="@F(item.Size)" height="@F(item.Size)" rx="3"
+                                      fill="white" stroke="@healthColor" stroke-width="1" opacity="0.9" />
+                                <image href="@GetAssetIcon(item.Asset.AssetTypeName, item.Asset.AugIsRobotPLC)"
+                                       width="@F(item.Size - 2)" height="@F(item.Size - 2)" x="1" y="1" />
+                                @if (isOffline)
+                                {
+                                    <rect x="@F(item.Size - dr * 3)" y="@F(item.Size - dr * 3)"
+                                          width="@F(dr * 4)" height="@F(dr * 4)"
+                                          rx="1" fill="#333" opacity="0.7" />
+                                }
+                                <circle cx="@F(item.Size - dr)" cy="@F(item.Size - dr)"
+                                        r="@F(dr)" fill="@healthColor" stroke="white" stroke-width="0.5" />
+                            </g>
+                        }
+                    </g>
+                </g>
+            }
+
+            @* ── 배치된 자산 아이콘 (그룹에 속하지 않은 것) ── *@
+            @foreach (var pos in UngroupedVisiblePositions)
+            {
+                var asset = AssetStatuses.FirstOrDefault(a => a.AssetId == pos.AssetId);
+                if (asset == null) continue;
+
+                var healthColor = GetHealthColor(asset.Health);
+                var isOffline = asset.LatestPing is { Reachable: false };
+                var s = pos.Scale;
+                var sz = 36 * s;
+                var imgSz = 28 * s;
+                var imgOff = 4 * s;
+                var dr = Math.Max(1.5, sz * 0.12);
+                <g transform="translate(@F(pos.X), @F(pos.Y))" class="apv-asset-icon"
+                   @onclick="() => NavigateToAsset(asset.AssetId)"
+                   @onclick:stopPropagation="true" style="cursor:pointer">
+                    @(RenderSvgTitle(asset))
+                    <rect width="@F(sz)" height="@F(sz)" rx="@F(Math.Max(1, 4 * s))"
+                          fill="white" stroke="@healthColor" stroke-width="@F(Math.Max(0.5, 1.5 * s))" opacity="0.9" />
+                    <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
+                           width="@F(imgSz)" height="@F(imgSz)" x="@F(imgOff)" y="@F(imgOff)" />
+                    @if (isOffline)
+                    {
+                        <rect x="@F(sz - dr * 3)" y="@F(sz - dr * 3)"
+                              width="@F(dr * 4)" height="@F(dr * 4)"
+                              rx="@F(Math.Max(1, dr))" fill="#333" opacity="0.7" />
+                    }
+                    <circle cx="@F(sz - dr)" cy="@F(sz - dr)" r="@F(dr)"
+                            fill="@healthColor" stroke="white" stroke-width="@F(Math.Max(0.5, dr * 0.4))" />
+                </g>
+            }
+        </svg>
+
+        @* ── 줌 컨트롤 ── *@
+        <div class="blueprint-zoom-controls">
+            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                           OnClick="ZoomIn" Title="확대" />
+            <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small"
+                           OnClick="ZoomOut" Title="축소" />
+            <MudIconButton Icon="@Icons.Material.Filled.CenterFocusWeak" Size="Size.Small"
+                           OnClick="ZoomReset" Title="초기화" />
+            <MudIconButton Icon="@(_isFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)"
+                           Size="Size.Small" OnClick="ToggleFullscreen" Title="전체화면" />
+        </div>
+    </div>
+</MudPaper>
+
+@if (VisiblePositions.Count == 0 && PlacementGroups.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+        배치된 자산이 없습니다. 관리 > 레이아웃 관리에서 자산을 배치해 주세요.
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public TwmsBlueprintConfig? BlueprintConfig { get; set; }
+    [Parameter] public List<TwmsAssetPosition> AssetPositions { get; set; } = [];
+    [Parameter] public List<AssetStatusInfo> AssetStatuses { get; set; } = [];
+    [Parameter] public List<TwmsPlacementGroup> PlacementGroups { get; set; } = [];
+    [Parameter] public List<TwmsPlacementGroupMember> PlacementGroupMembers { get; set; } = [];
+    private bool _jsInitialized;
+    private bool _isFullscreen;
+
+    private void NavigateToAsset(int assetId) => Navigation.NavigateTo($"/assets/{assetId}");
+
+    private List<TwmsAssetPosition> VisiblePositions =>
+        AssetPositions.Where(p => p.Visible).ToList();
+
+    private HashSet<int> GroupedAssetIds =>
+        PlacementGroupMembers.Select(m => m.AssetId).ToHashSet();
+
+    private List<TwmsAssetPosition> UngroupedVisiblePositions =>
+        VisiblePositions.Where(p => !GroupedAssetIds.Contains(p.AssetId)).ToList();
+
+    private static readonly (string Label, string Color)[] _legendItems =
+    [
+        ("갱신", "#65B991"),
+        ("유지", "#6BA0DE"),
+        ("실패", "#E67E7E"),
+        ("내역없음", "#999"),
+    ];
+
+    // ──────────── 그룹 라벨 포맷 (층 → F) ────────────
+
+    private static readonly System.Text.RegularExpressions.Regex _floorRegex = new(@"(-?\d+)\s*층", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static string FormatGroupLabel(TwmsPlacementGroup grp)
+    {
+        if (string.IsNullOrEmpty(grp.Name))
+            return $"그룹 #{grp.Id}";
+        return _floorRegex.Replace(grp.Name, m =>
+        {
+            var num = int.Parse(m.Groups[1].Value);
+            return num < 0 ? $"B{-num}" : $"{num}F";
+        });
+    }
+
+    // ──────────── 그룹 멤버 자산 조회 ────────────
+
+    private List<AssetStatusInfo> GetGroupMemberAssets(int groupId)
+    {
+        var memberIds = PlacementGroupMembers
+            .Where(m => m.GroupId == groupId)
+            .Select(m => m.AssetId)
+            .ToHashSet();
+        return AssetStatuses.Where(a => memberIds.Contains(a.AssetId)).ToList();
+    }
+
+    // ──────────── 그룹 내 동적 그리드 배치 ────────────
+
+    private record struct GroupAssetItem(double X, double Y, double Size, AssetStatusInfo Asset);
+
+    private static List<GroupAssetItem> LayoutGroupAssets(TwmsPlacementGroup grp, List<AssetStatusInfo> members)
+    {
+        var result = new List<GroupAssetItem>();
+        if (members.Count == 0) return result;
+
+        var pad = 2.0;
+        var availW = grp.Width - pad * 2;
+        var availH = grp.Height - pad * 2;
+        if (availW < 4 || availH < 4) return result;
+
+        var count = members.Count;
+        var aspectRatio = availW / availH;
+
+        // 최적 열/행 수: 영역 비율에 맞게
+        var bestCols = Math.Max(1, (int)Math.Round(Math.Sqrt(count * aspectRatio)));
+        var cols = Math.Min(bestCols, count);
+        var rows = (int)Math.Ceiling((double)count / cols);
+
+        // gap은 아이콘 크기에 비례 (최소 1px)
+        var rawSz = Math.Min(availW / cols, availH / rows);
+        var gap = Math.Max(1.0, Math.Min(rawSz * 0.1, 2.0));
+
+        // 아이콘 크기: 영역에 꽉 차게
+        var cellW = (availW - gap * (cols - 1)) / cols;
+        var cellH = (availH - gap * (rows - 1)) / rows;
+        var sz = Math.Max(4, Math.Min(cellW, cellH));
+
+        // 중앙 정렬
+        var totalW = cols * sz + (cols - 1) * gap;
+        var totalH = rows * sz + (rows - 1) * gap;
+        var startX = grp.X + pad + (availW - totalW) / 2;
+        var startY = grp.Y + pad + (availH - totalH) / 2;
+
+        for (var i = 0; i < count; i++)
+        {
+            var col = i % cols;
+            var row = i / cols;
+            var x = startX + col * (sz + gap);
+            var y = startY + row * (sz + gap);
+            result.Add(new(Math.Round(x, 2), Math.Round(y, 2), Math.Round(sz, 1), members[i]));
+        }
+
+        return result;
+    }
+
+    // ──────────── JS 줌 ────────────
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInitialized)
+        {
+            _jsInitialized = true;
+            try { await JS.InvokeVoidAsync("blueprintZoom.init", "apv-container"); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    private async Task ZoomIn()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.zoomIn", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ZoomOut()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.zoomOut", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ZoomReset()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.reset", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ToggleFullscreen()
+    {
+        try
+        {
+            _isFullscreen = !_isFullscreen;
+            await JS.InvokeVoidAsync("blueprintZoom.toggleFullscreen", "apv-container", _isFullscreen);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.dispose", "apv-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+}

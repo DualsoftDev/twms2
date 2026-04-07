@@ -1,0 +1,430 @@
+@page "/admin/config"
+@using DEX.Core.Actor
+@using DEX.Common
+@using Twms2.Server.Models.Dexa
+@using Akka.Actor
+@inject DexaServerClient DexaServer
+@inject DexaReadService DexaRead
+@inject ScheduleService ScheduleService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>TWM - DEXA 설정</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">DEXA 설정</MudText>
+
+<MudGrid>
+    @* 에이전트 목록 *@
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">에이전트 목록</MudText>
+                <MudSpacer />
+                <MudCheckBox @bind-Value="_showOffline" T="bool" Label="오프라인 에이전트도 보기"
+                             Size="Size.Small" Dense="true" Color="Color.Primary" />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadAgents">새로고침</MudButton>
+            </MudStack>
+            @if (_agentsLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (!_agents.Any(a => _showOffline || a.Online))
+            {
+                <MudAlert Severity="Severity.Info">
+                    @(_agents.Count == 0 ? "등록된 에이전트가 없습니다." : "온라인 에이전트가 없습니다. 오프라인 에이전트를 보려면 체크박스를 선택하세요.")
+                </MudAlert>
+            }
+            else
+            {
+                <MudDataGrid Items="_agents.Where(a => _showOffline || a.Online)" Dense="true" Hover="true" Bordered="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Name" Title="이름" />
+                        <PropertyColumn Property="x => x.Ip" Title="IP" />
+                        <PropertyColumn Property="x => x.SwVersion" Title="버전" />
+                        <TemplateColumn Title="상태">
+                            <CellTemplate>
+                                <MudChip T="string"
+                                         Color="@(context.Item.Online ? Color.Success : Color.Default)"
+                                         Size="Size.Small">
+                                    @(context.Item.Online ? "온라인" : "오프라인")
+                                </MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="접속 시간">
+                            <CellTemplate>
+                                <MudText Typo="Typo.body2">@context.Item.Connected.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="작업">
+                            <CellTemplate>
+                                @{ var peer = FindConnectedPeer(context.Item); }
+                                @if (peer != null)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Warning" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.RestartAlt"
+                                               OnClick="() => RestartAgent(context.Item, peer)">
+                                        재시작
+                                    </MudButton>
+                                }
+                                else if (context.Item.Online)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Warning">피어 정보 없음</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Default">오프라인</MudText>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            }
+        </MudPaper>
+    </MudItem>
+
+    @* 스케줄 관리 *@
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudText Typo="Typo.h6">트리거 목록</MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenAddTriggerDialog">
+                    트리거 추가
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadScheduleData">
+                    새로고침
+                </MudButton>
+            </MudStack>
+
+            @if (_scheduleLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else
+            {
+                <MudDataGrid Items="_triggers" Dense="true" Hover="true" Bordered="true">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Id" Title="ID" />
+                        <PropertyColumn Property="x => x.Name" Title="이름" />
+                        <TemplateColumn Title="스케줄">
+                            <CellTemplate>
+                                <MudLink Underline="Underline.Hover" Color="Color.Primary"
+                                         OnClick="() => OpenCronEditor(context.Item)"
+                                         Style="cursor:pointer;">
+                                    @CronToReadable(context.Item.CronExpression)
+                                </MudLink>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="상태">
+                            <CellTemplate>
+                                @if (context.Item.Enabled)
+                                {
+                                    <MudChip T="string" Color="Color.Success" Size="Size.Small">활성</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Color="Color.Default" Size="Size.Small">비활성</MudChip>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn Property="x => x.Description" Title="설명" />
+                        <TemplateColumn Title="자산 매핑">
+                            <CellTemplate>
+                                @{
+                                    var count = GetMappedAssetCount(context.Item.Id);
+                                }
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(count > 0 ? Color.Info : Color.Default)">
+                                    @(count)개
+                                </MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="작업">
+                            <CellTemplate>
+                                <MudStack Row="true" Spacing="1">
+                                    <MudIconButton Icon="@Icons.Material.Filled.AccountTree"
+                                                   Size="Size.Small" Color="Color.Info"
+                                                   Title="자산 매핑"
+                                                   OnClick="() => OpenAssetEditor(context.Item)" />
+                                    @if (_runningTriggerIds.Contains(context.Item.Id))
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Color="Color.Warning" Indeterminate="true" Style="width:24px;height:24px" />
+                                    }
+                                    else
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                                       Size="Size.Small" Color="Color.Success"
+                                                       OnClick="() => ExecuteTrigger(context.Item)" />
+                                    }
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Size="Size.Small" Color="Color.Error"
+                                                   OnClick="() => DeleteTrigger(context.Item)" />
+                                </MudStack>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            }
+        </MudPaper>
+    </MudItem>
+
+</MudGrid>
+
+@code {
+    // Agent state
+    private List<Agent> _agents = [];
+    private List<ActorInfo> _connectedPeers = [];
+    private bool _agentsLoading;
+    private bool _showOffline;
+
+    // Schedule state
+    private List<Trigger> _triggers = [];
+    private List<Schedule> _schedules = [];
+    private bool _scheduleLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadAgents(), LoadScheduleData());
+    }
+
+    // ── Agent methods ──
+
+    private async Task LoadAgents()
+    {
+        _agentsLoading = true;
+        try
+        {
+            _agents = await DexaRead.GetAgentsAsync();
+
+            try
+            {
+                var reply = await DexaServer.AskAsync<AmS2CReplyConnectedPeers>(
+                    new AmC2SRequestConnectedPeers());
+                _connectedPeers = reply?.Peers?
+                    .Where(p => p.ActorType == ActorType.Agent)
+                    .ToList() ?? [];
+            }
+            catch
+            {
+                _connectedPeers = [];
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"에이전트 목록 조회 실패: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _agentsLoading = false;
+        }
+    }
+
+    private ActorInfo? FindConnectedPeer(Agent agent)
+    {
+        return _connectedPeers.FirstOrDefault(p =>
+            string.Equals(p.Name, agent.Name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task RestartAgent(Agent agent, ActorInfo peer)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"에이전트 '{agent.Name}' ({agent.Ip})을(를) 재시작하시겠습니까?" },
+            { x => x.ButtonText, "재시작" },
+            { x => x.ButtonColor, Color.Warning }
+        };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("에이전트 재시작", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                var request = new AmC2SRequestAgentRestart();
+                request.Agent = peer.ActorRef;
+                var reply = await DexaServer.AskAsync<AmS2CAgentShutdown>(request);
+
+                if (reply != null)
+                {
+                    Snackbar.Add($"에이전트 '{agent.Name}' 재시작 완료", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add($"에이전트 '{agent.Name}' 재시작 요청을 보냈습니다.", Severity.Warning);
+                }
+
+                await Task.Delay(2000);
+                await LoadAgents();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"재시작 요청 실패: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // ── Schedule methods ──
+
+    private async Task LoadScheduleData()
+    {
+        _scheduleLoading = true;
+        _triggers = await ScheduleService.GetTriggersAsync();
+        _schedules = await ScheduleService.GetSchedulesAsync();
+        _scheduleLoading = false;
+    }
+
+    private int GetMappedAssetCount(int triggerId)
+        => _schedules.Count(s => s.TriggerId == triggerId);
+
+    private async Task OpenAddTriggerDialog()
+    {
+        var parameters = new DialogParameters<TriggerEditor>();
+        var dialog = await DialogService.ShowAsync<TriggerEditor>("트리거 추가", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadScheduleData();
+            Snackbar.Add("트리거가 추가되었습니다.", Severity.Success);
+        }
+    }
+
+    private async Task OpenAssetEditor(Trigger trigger)
+    {
+        var parameters = new DialogParameters<ScheduleAssetEditor>
+        {
+            { x => x.TriggerId, trigger.Id },
+            { x => x.TriggerName, trigger.Name }
+        };
+        var dialog = await DialogService.ShowAsync<ScheduleAssetEditor>("자산 매핑", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadScheduleData();
+            Snackbar.Add("자산 매핑이 저장되었습니다.", Severity.Success);
+        }
+    }
+
+    private readonly HashSet<int> _runningTriggerIds = new();
+
+    private async Task ExecuteTrigger(Trigger trigger)
+    {
+        _runningTriggerIds.Add(trigger.Id);
+        StateHasChanged();
+
+        var ok = await ScheduleService.ExecuteTriggerAsync(trigger.Id);
+        if (ok)
+        {
+            Snackbar.Add($"트리거 '{trigger.Name}' 백업 실행 요청됨", Severity.Success);
+
+            // 매핑된 자산 수에 비례한 예상 시간 동안 스피너 표시 후 자동 해제
+            var schedules = await ScheduleService.GetSchedulesAsync();
+            var assetCount = schedules.Count(s => s.TriggerId == trigger.Id);
+            var waitSeconds = Math.Max(10, assetCount * 3); // 자산당 3초 예상, 최소 10초
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(waitSeconds));
+                _runningTriggerIds.Remove(trigger.Id);
+                await InvokeAsync(StateHasChanged);
+            });
+        }
+        else
+        {
+            Snackbar.Add("트리거 실행 실패", Severity.Error);
+            _runningTriggerIds.Remove(trigger.Id);
+            StateHasChanged();
+        }
+    }
+
+    private static string CronToReadable(string? cron)
+    {
+        if (string.IsNullOrWhiteSpace(cron)) return cron ?? "";
+        var parts = cron.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 6) return cron;
+
+        var min = parts[1];
+        var hour = parts[2];
+        var dom = parts[3];
+        var dow = parts[5];
+
+        if (!int.TryParse(min, out var m)) return cron;
+
+        if (hour == "*" && dom == "*" && dow == "?")
+            return $"매시간 :{m:D2}";
+
+        if (!int.TryParse(hour, out var h)) return cron;
+
+        if (dom == "*" && dow == "?")
+            return $"매일 {h:D2}:{m:D2}";
+
+        if (dom == "?" && dow != "*" && dow != "?")
+        {
+            var dayName = dow.ToUpper() switch
+            {
+                "MON" => "월", "TUE" => "화", "WED" => "수",
+                "THU" => "목", "FRI" => "금", "SAT" => "토", "SUN" => "일",
+                _ => dow
+            };
+            return $"매주 {dayName} {h:D2}:{m:D2}";
+        }
+
+        return cron;
+    }
+
+    private async Task OpenCronEditor(Trigger trigger)
+    {
+        var parameters = new DialogParameters<CronEditDialog>
+        {
+            { x => x.TriggerId, trigger.Id },
+            { x => x.TriggerName, trigger.Name },
+            { x => x.CurrentCron, trigger.CronExpression }
+        };
+        var dialog = await DialogService.ShowAsync<CronEditDialog>("스케줄 수정", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadScheduleData();
+            Snackbar.Add("스케줄이 수정되었습니다.", Severity.Success);
+        }
+    }
+
+    private async Task DeleteTrigger(Trigger trigger)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, $"트리거 '{trigger.Name}'을(를) 삭제하시겠습니까?" },
+            { x => x.ButtonText, "삭제" },
+            { x => x.ButtonColor, Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("삭제 확인", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            var ok = await ScheduleService.DeleteTriggerAsync(trigger.Id);
+            if (ok)
+            {
+                await LoadScheduleData();
+                Snackbar.Add("트리거가 삭제되었습니다.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("트리거 삭제 실패", Severity.Error);
+            }
+        }
+    }
+
+}

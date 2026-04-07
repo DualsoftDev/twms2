@@ -9,9 +9,9 @@ echo.
 
 set "ROOT=%~dp0"
 set "SRC=%ROOT%src"
-set "SERVER_PROJ=%SRC%\DexaWeb.Server\DexaWeb.Server.csproj"
-set "PUBLISH_DIR=%SRC%\DexaWeb.Server\bin\Release\net10.0\win-x64\publish"
-set "DEEP_PINGER_DLL=%SRC%\DexaWeb.Server\bin\Release\net10.0\DeepPinger.dll"
+set "SERVER_PROJ=%SRC%\Twms2.Server\Twms2.Server.csproj"
+set "PUBLISH_DIR=%SRC%\Twms2.Server\bin\Release\net10.0\win-x64\publish"
+set "DEEP_PINGER_DLL=%SRC%\Twms2.Server\bin\Release\net10.0\DeepPinger.dll"
 set "ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 set "ISS_SCRIPT=%ROOT%installer\twms2.0-setup.iss"
 
@@ -61,8 +61,8 @@ if errorlevel 1 (
 echo       완료.
 echo.
 
-rem ---- Step 3: DexaWeb.Server Publish (self-contained) ----
-echo [3/5] DexaWeb.Server 퍼블리시 중 (self-contained, win-x64)...
+rem ---- Step 3: Twms2.Server Publish (self-contained) ----
+echo [3/5] Twms2.Server 퍼블리시 중 (self-contained, win-x64)...
 dotnet publish "%SERVER_PROJ%" -c Release -r win-x64 --self-contained -o "%PUBLISH_DIR%" /p:SkipDeepPinger=true
 if errorlevel 1 (
     echo [오류] dotnet publish 실패!

@@ -1,0 +1,357 @@
+@using static Twms2.Server.Helpers.LayoutHelpers
+@inject TwmDbService TwmDb
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<MudGrid>
+    @* ── 라인 목록 (좌측) ── *@
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4 neu-card">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                    <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" Style="vertical-align: middle;" />
+                    라인 영역 편집
+                </MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveAllRectsAsync" Disabled="_saving">
+                    @(_saving ? "저장 중..." : "저장")
+                </MudButton>
+            </MudStack>
+
+            @* ── 배치된 라인 목록 ── *@
+            @if (_rects.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mb-1" Style="font-weight: 600;">
+                    배치된 라인 (@_rects.Count)
+                </MudText>
+                <div style="max-height: 300px; overflow-y: auto; margin-bottom: 8px;">
+                    @foreach (var rect in _rects)
+                    {
+                        var line = _lines.FirstOrDefault(l => l.Id == rect.LineId);
+                        var label = line?.Name ?? $"Line {rect.LineId}";
+                        <div class="d-flex align-center gap-2 pa-2" style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+                            <MudIcon Icon="@Icons.Material.Filled.Map" Size="Size.Small" Color="Color.Primary" />
+                            <div class="flex-grow-1">
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@label</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @($"{rect.Width:F0} × {rect.Height:F0}")
+                                </MudText>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* ── 배치되지 않은 라인 ── *@
+            @{ var unplaced = GetUnplacedLines(); }
+            @if (unplaced.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1" Color="Color.Secondary" Style="font-weight: 600;">
+                    미배치 라인 (@unplaced.Count)
+                </MudText>
+                <div style="max-height: 200px; overflow-y: auto;">
+                    @foreach (var line in unplaced)
+                    {
+                        <div class="d-flex align-center gap-2 pa-1" style="border-bottom: 1px solid rgba(0,0,0,0.06);">
+                            <MudIcon Icon="@Icons.Material.Filled.AddBox" Size="Size.Small" Color="Color.Default" />
+                            <MudText Typo="Typo.body2" Class="flex-grow-1">@line.Name</MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                                           Color="Color.Primary"
+                                           OnClick="() => AddRectForSpecificLine(line.Id)" />
+                        </div>
+                    }
+                </div>
+            }
+
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Add" FullWidth="true" Class="mt-3"
+                       OnClick="AddRectForLine" Disabled="_lines.Count == 0">
+                라인 추가
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+
+    @* ── 도면 뷰포트 (우측) ── *@
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4 neu-card">
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                사각형을 드래그하여 이동, 모서리로 크기 조절. 휠로 축소/확대, 빈 영역 드래그로 이동.
+            </MudText>
+
+            @* 줌 컨트롤 *@
+            <MudStack Row="true" Spacing="1" Class="mb-2">
+                <MudIconButton Icon="@Icons.Material.Filled.ZoomIn" Size="Size.Small"
+                               OnClick="ZoomIn" Title="확대" />
+                <MudIconButton Icon="@Icons.Material.Filled.ZoomOut" Size="Size.Small"
+                               OnClick="ZoomOut" Title="축소" />
+                <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" Size="Size.Small"
+                               OnClick="ZoomReset" Title="초기화" />
+            </MudStack>
+
+            <div id="bp-editor-container" class="bp-editor-container">
+                <svg id="bp-editor-svg" class="drawing-editor-svg" viewBox="0 0 1000 600"
+                     preserveAspectRatio="xMidYMid meet">
+                @* 그리드 배경 *@
+                <defs>
+                    <pattern id="bp-grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none"
+                              stroke="@(_config?.GridColor ?? "#e0e0e0")"
+                              stroke-width="0.5" opacity="0.2" />
+                    </pattern>
+                    <pattern id="bp-grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
+                        <rect width="100" height="100" fill="url(#bp-grid-small)" />
+                        <path d="M 100 0 L 0 0 0 100" fill="none"
+                              stroke="@(_config?.GridColor ?? "#e0e0e0")"
+                              stroke-width="0.8" opacity="0.3" />
+                    </pattern>
+                </defs>
+                @* 넓은 배경 (줌아웃 대응) *@
+                <rect x="-2000" y="-2000" width="5000" height="4000" fill="#111122" />
+                @* 배경색 + 그리드 *@
+                <rect width="1000" height="600" fill="@(_config?.BgColor ?? "#1a1a2e")" />
+                <rect width="1000" height="600" fill="url(#bp-grid-large)" />
+                @* 도면 영역 경계선 *@
+                <rect width="1000" height="600" fill="none"
+                      stroke="#ffffff" stroke-width="2" stroke-dasharray="8 4" opacity="0.4" />
+
+                @* ── 도면 이미지 배경 (읽기전용) ── *@
+                @if (!string.IsNullOrEmpty(_config?.ImagePath))
+                {
+                    <image href="@_config.ImagePath" x="0" y="0" width="1000" height="600"
+                           preserveAspectRatio="xMidYMid meet" opacity="0.5" />
+                }
+
+                @* ── 라인 영역 사각형 (편집 가능) ── *@
+                @foreach (var rect in _rects)
+                {
+                    var line = _lines.FirstOrDefault(l => l.Id == rect.LineId);
+                    var label = line?.Name ?? $"Line {rect.LineId}";
+
+                    <g class="bp-edit-rect" data-line-id="@rect.LineId">
+                        <rect class="bp-rect-fill"
+                              x="@F(rect.X)" y="@F(rect.Y)"
+                              width="@F(rect.Width)" height="@F(rect.Height)"
+                              rx="3" ry="3" />
+                        <rect class="bp-rect-border"
+                              x="@F(rect.X)" y="@F(rect.Y)"
+                              width="@F(rect.Width)" height="@F(rect.Height)"
+                              rx="3" ry="3" />
+                        <text x="@F(rect.X + rect.Width / 2)"
+                              y="@F(rect.Y + rect.Height / 2)"
+                              text-anchor="middle" dominant-baseline="central"
+                              class="bp-rect-label">@label</text>
+                        @* 리사이즈 핸들 (우하단) *@
+                        <rect class="bp-resize-handle"
+                              x="@F(rect.X + rect.Width - 15)"
+                              y="@F(rect.Y + rect.Height - 15)"
+                              width="30" height="30" rx="3" />
+                        @* 삭제 버튼 (우상단) *@
+                        <g class="bp-delete-btn" data-delete="@rect.LineId">
+                            <circle cx="@F(rect.X + rect.Width)" cy="@F(rect.Y)"
+                                    r="15" />
+                            <text x="@F(rect.X + rect.Width)" y="@F(rect.Y)"
+                                  text-anchor="middle" dominant-baseline="central"
+                                  class="bp-delete-text">×</text>
+                        </g>
+                    </g>
+                }
+                </svg>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter] public int LayoutId { get; set; }
+
+    private TwmsBlueprintConfig? _config;
+    private List<TwmsBlueprintRect> _rects = [];
+    private List<TwmsLayoutLine> _lines = [];
+
+    private bool _saving;
+    private int _prevLayoutId;
+    private DotNetObjectReference<BlueprintEditor>? _dotNetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dotNetRef = DotNetObjectReference.Create(this);
+        _prevLayoutId = LayoutId;
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (LayoutId != _prevLayoutId && LayoutId > 0)
+        {
+            _prevLayoutId = LayoutId;
+            await LoadDataAsync();
+            StateHasChanged();
+            await Task.Delay(50);
+            await InitEditorJs();
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (LayoutId == 0) return;
+        var configTask = TwmDb.GetBlueprintConfigAsync(LayoutId);
+        var rectsTask  = TwmDb.GetAllBlueprintRectsAsync(LayoutId);
+        var linesTask  = TwmDb.GetAllTwmsLayoutLinesAsync();
+        await Task.WhenAll(configTask, rectsTask, linesTask);
+
+        _config = configTask.Result;
+        _rects  = rectsTask.Result;
+        _lines  = linesTask.Result;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await InitEditorJs();
+    }
+
+    private async Task InitEditorJs()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("blueprintZoom.init", "bp-editor-container",
+                new { clampMargin = 1.0 });
+            await JS.InvokeVoidAsync("blueprintEditor.init", "bp-editor-container", _dotNetRef);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ZoomIn()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.zoomIn", "bp-editor-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ZoomOut()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.zoomOut", "bp-editor-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ZoomReset()
+    {
+        try { await JS.InvokeVoidAsync("blueprintZoom.reset", "bp-editor-container"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public void OnRectMoved(int lineId, double x, double y, double w, double h)
+    {
+        var rect = _rects.FirstOrDefault(r => r.LineId == lineId);
+        if (rect != null)
+        {
+            rect.X = Math.Round(x, 2);
+            rect.Y = Math.Round(y, 2);
+            rect.Width = Math.Round(Math.Max(30, w), 2);
+            rect.Height = Math.Round(Math.Max(20, h), 2);
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnRectDeleted(int lineId)
+    {
+        _rects.RemoveAll(r => r.LineId == lineId);
+        await TwmDb.DeleteBlueprintRectAsync(LayoutId, lineId);
+        Snackbar.Add("라인 영역이 삭제되었습니다.", Severity.Info);
+        await InvokeAsync(StateHasChanged);
+        await InitEditorJs();
+    }
+
+    private async Task AddRectForLine()
+    {
+        var unplaced = GetUnplacedLines();
+        if (unplaced.Count == 0)
+        {
+            Snackbar.Add("모든 라인이 이미 배치되었습니다.", Severity.Info);
+            return;
+        }
+        await AddRectForSpecificLine(unplaced[0].Id);
+    }
+
+    private async Task AddRectForSpecificLine(int lineId)
+    {
+        if (_rects.Any(r => r.LineId == lineId)) return;
+
+        var idx = _rects.Count;
+        var newRect = new TwmsBlueprintRect
+        {
+            LayoutId = LayoutId,
+            LineId = lineId,
+            X = 50 + (idx % 4) * 220,
+            Y = 50 + (idx / 4) * 150,
+            Width = 180,
+            Height = 120,
+        };
+        _rects.Add(newRect);
+        StateHasChanged();
+
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    private List<TwmsLayoutLine> GetUnplacedLines()
+    {
+        var placedIds = _rects.Select(r => r.LineId).ToHashSet();
+        return _lines.Where(l => !placedIds.Contains(l.Id)).ToList();
+    }
+
+    private async Task SaveAllRectsAsync()
+    {
+        _saving = true;
+        try
+        {
+            var positions = await JS.InvokeAsync<List<RectPosition>>("blueprintEditor.getPositions",
+                "bp-editor-container");
+            if (positions != null)
+            {
+                foreach (var pos in positions)
+                {
+                    var rect = _rects.FirstOrDefault(r => r.LineId == pos.LineId);
+                    if (rect != null)
+                    {
+                        rect.X = pos.X; rect.Y = pos.Y;
+                        rect.Width = pos.W; rect.Height = pos.H;
+                    }
+                }
+            }
+
+            foreach (var rect in _rects)
+            {
+                rect.LayoutId = LayoutId;
+                await TwmDb.UpsertBlueprintRectAsync(rect);
+            }
+
+            Snackbar.Add($"{_rects.Count}개 라인 영역이 저장되었습니다.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"저장 중 오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("blueprintEditor.dispose", "bp-editor-container");
+            await JS.InvokeVoidAsync("blueprintZoom.dispose", "bp-editor-container");
+        }
+        catch (JSDisconnectedException) { }
+        _dotNetRef?.Dispose();
+    }
+
+    private record RectPosition(int LineId, double X, double Y, double W, double H);
+}

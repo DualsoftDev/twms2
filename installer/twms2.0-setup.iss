@@ -5,13 +5,13 @@
 #define MyAppName "Twms2.0"
 #define MyAppVersion "2.0.0"
 #define MyAppPublisher "LS"
-#define MyAppExeName "DexaWeb.Server.exe"
+#define MyAppExeName "Twms2.Server.exe"
 #define MyServiceName "twms2.0"
 #define MyServiceDisplayName "TWMS 2.0 Web Server"
 
 ; BAT에서 전달받는 파라미터 (기본값 포함)
 #ifndef PublishDir
-  #define PublishDir "..\src\DexaWeb.Server\bin\Release\net10.0\win-x64\publish"
+  #define PublishDir "..\src\Twms2.Server\bin\Release\net10.0\win-x64\publish"
 #endif
 
 [Setup]
@@ -122,7 +122,7 @@ var
   ResultCode: Integer;
   ExePath: String;
 begin
-  ExePath := ExpandConstant('{app}\DexaWeb.Server.exe');
+  ExePath := ExpandConstant('{app}\Twms2.Server.exe');
 
   // 기존 서비스 삭제 (업그레이드 시 재등록)
   if ServiceExists() then

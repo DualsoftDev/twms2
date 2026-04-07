@@ -1,0 +1,213 @@
+@page "/assets"
+@page "/assets/{AssetId:int}"
+@page "/qr/{AssetId:int}"
+@using Twms2.Server.Models.Dashboard
+@using DEX.Core.Actor
+@inject AssetService AssetService
+@inject AssetStatusService AssetStatusService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject DexaServerClient DexaClient
+
+<PageTitle>TWM - 자산 관리</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-3">자산 관리</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @if (_selectedAsset != null)
+    {
+        <AssetDetail Asset="_selectedAsset" OnSaved="OnAssetSaved" />
+    }
+    else
+    {
+        <MudPaper Class="pa-8 d-flex align-center justify-center" Elevation="2"
+                  Style="height: calc(100vh - 180px);">
+            <MudStack AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">자산을 선택하세요</MudText>
+            </MudStack>
+        </MudPaper>
+    }
+}
+
+<AuthorizeView>
+    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-3">
+        <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Backup"
+                   OnClick="ExecuteManualBackup"
+                   Disabled="@(_selectedAsset == null || _backupRunning)">
+            @if (_backupRunning)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" Style="width:16px;height:16px;" />
+            }
+            수동 백업작업
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.TableChart"
+                   Href="/assets/table">
+            테이블 편집
+        </MudButton>
+    </MudStack>
+</AuthorizeView>
+
+@code {
+    [Parameter] public int? AssetId { get; set; }
+
+    private ViewAsset? _selectedAsset;
+    private List<ViewAsset> _allAssets = [];
+    private Dictionary<int, AssetStatusInfo> _statusMap = [];
+    private bool _loading = true;
+    private bool _backupRunning;
+    private CancellationTokenSource? _pollCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllAsync();
+        SelectAssetFromRoute();
+        _loading = false;
+    }
+
+    protected override void OnParametersSet()
+    {
+        SelectAssetFromRoute();
+    }
+
+    private void SelectAssetFromRoute()
+    {
+        if (AssetId.HasValue)
+            _selectedAsset = _allAssets.FirstOrDefault(a => a.AssetId == AssetId.Value);
+    }
+
+    private void HandleAssetSelected(ViewAsset asset)
+    {
+        _selectedAsset = asset;
+        Navigation.NavigateTo($"/assets/{asset.AssetId}", replace: true);
+    }
+
+    private async Task LoadAllAsync()
+    {
+        var assetsTask = AssetService.GetAllAssetsAsync();
+        var statusTask = AssetStatusService.GetAssetStatusesAsync();
+        await Task.WhenAll(assetsTask, statusTask);
+
+        _allAssets = assetsTask.Result.Where(a => a.IsRealAsset).ToList();
+        _statusMap = statusTask.Result.ToDictionary(s => s.AssetId);
+    }
+
+    private async Task OnAssetSaved()
+    {
+        Snackbar.Add("자산 정보가 저장되었습니다.", Severity.Success);
+        await LoadAllAsync();
+        SelectAssetFromRoute();
+    }
+
+    private async Task ExecuteManualBackup()
+    {
+        if (_selectedAsset == null) return;
+
+        if (!DexaClient.IsConnected)
+        {
+            Snackbar.Add("DEXA 서버에 연결되어 있지 않습니다.", Severity.Error);
+            return;
+        }
+
+        _backupRunning = true;
+        StateHasChanged();
+
+        try
+        {
+            var msg = new AmC2SRequestExecuteBackupOnce(_selectedAsset.AssetId);
+            DexaClient.Tell(msg);
+            Snackbar.Add($"'{_selectedAsset.DisplayName}' 백업 작업을 시작했습니다.", Severity.Info);
+
+            // Poll status updates for up to 5 minutes
+            _pollCts?.Cancel();
+            _pollCts = new CancellationTokenSource();
+            _ = PollBackupStatusAsync(_selectedAsset.AssetId, _pollCts.Token);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"백업 요청 실패: {ex.Message}", Severity.Error);
+            _backupRunning = false;
+        }
+    }
+
+    private async Task PollBackupStatusAsync(int assetId, CancellationToken ct)
+    {
+        var prevHealth = _statusMap.GetValueOrDefault(assetId)?.Health;
+
+        try
+        {
+            // Phase 1: Wait for status to change from the pre-backup state (up to 30s)
+            var sawChange = false;
+            for (var i = 0; i < 10; i++)
+            {
+                await Task.Delay(3000, ct);
+                if (ct.IsCancellationRequested) break;
+
+                await LoadAllAsync();
+                await InvokeAsync(StateHasChanged);
+
+                var status = _statusMap.GetValueOrDefault(assetId);
+                if (status != null && status.Health != prevHealth)
+                {
+                    sawChange = true;
+                    if (status.Health != AssetHealthStatus.InProgress)
+                    {
+                        // Already finished
+                        ShowBackupResult(status.Health);
+                        return;
+                    }
+                    break;
+                }
+            }
+
+            if (!sawChange)
+            {
+                // Status never changed - backup may have been rejected or instant
+                Snackbar.Add("백업 상태 변화를 감지하지 못했습니다.", Severity.Warning);
+                return;
+            }
+
+            // Phase 2: Wait for InProgress to complete (up to 5 min)
+            for (var i = 0; i < 60; i++)
+            {
+                await Task.Delay(5000, ct);
+                if (ct.IsCancellationRequested) break;
+
+                await LoadAllAsync();
+                await InvokeAsync(StateHasChanged);
+
+                var status = _statusMap.GetValueOrDefault(assetId);
+                if (status != null && status.Health != AssetHealthStatus.InProgress)
+                {
+                    ShowBackupResult(status.Health);
+                    return;
+                }
+            }
+        }
+        catch (TaskCanceledException) { }
+        finally
+        {
+            _backupRunning = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ShowBackupResult(AssetHealthStatus health)
+    {
+        var (message, severity) = health switch
+        {
+            AssetHealthStatus.BackedUp => ("백업이 완료되었습니다. (변경 갱신)", Severity.Success),
+            AssetHealthStatus.Unchanged => ("백업이 완료되었습니다. (변경 없음)", Severity.Info),
+            AssetHealthStatus.Failed => ("백업 작업이 실패했습니다.", Severity.Error),
+            _ => ("백업 작업이 완료되었습니다.", Severity.Success)
+        };
+        Snackbar.Add($"'{_selectedAsset?.DisplayName}' {message}", severity);
+    }
+}
