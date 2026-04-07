@@ -13,24 +13,21 @@ var builder = WebApplication.CreateBuilder(args);
 TwmsDataPath.EnsureDirectories();
 
 // 런타임 로컬 설정 파일 (ProgramData — appsettings.json 위의 오버라이드 레이어)
-// Development에서는 Kestrel 엔드포인트 오버라이드 방지 (launchSettings 우선)
 if (builder.Environment.IsDevelopment())
 {
-    // ProgramData 설정은 로드하되 Kestrel 섹션은 제외
+    // Development: ProgramData 설정 로드하되 Kestrel 섹션 제외 → launchSettings 포트 사용
     var localConfig = new ConfigurationBuilder()
         .AddJsonFile(TwmsDataPath.LocalConfig, optional: true)
         .Build();
-    foreach (var section in localConfig.GetChildren())
-    {
-        if (!string.Equals(section.Key, "Kestrel", StringComparison.OrdinalIgnoreCase))
-            builder.Configuration.AddInMemoryCollection(
-                section.AsEnumerable().Select(kv => new KeyValuePair<string, string?>(kv.Key, kv.Value)));
-    }
+    builder.Configuration.AddInMemoryCollection(
+        localConfig.AsEnumerable()
+            .Where(kv => !kv.Key.StartsWith("Kestrel", StringComparison.OrdinalIgnoreCase))
+            .Select(kv => new KeyValuePair<string, string?>(kv.Key, kv.Value)));
 }
 else
 {
     builder.Configuration.AddJsonFile(TwmsDataPath.LocalConfig, optional: true, reloadOnChange: true);
-    // 프로덕션 기본 바인딩 (Kestrel:Endpoints 미설정 시 적용)
+    // 프로덕션 기본 바인딩 (Kestrel:Endpoints 미설정 시)
     if (!builder.Configuration.GetSection("Kestrel:Endpoints").Exists())
         builder.WebHost.UseUrls("http://0.0.0.0:80");
 }
@@ -65,6 +62,7 @@ builder.Services.AddScoped<AuthStateProvider>();
 builder.Services.Configure<DexaClientOptions>(builder.Configuration.GetSection("DexaServer"));
 builder.Services.AddSingleton<IDexaClient, DexaDirectClient>();
 builder.Services.AddSingleton<DexaNotificationService>();
+builder.Services.AddSingleton<LayoutNotificationService>();
 builder.Services.AddScoped<DexaServerClient>();
 
 // DB 연결 팩토리

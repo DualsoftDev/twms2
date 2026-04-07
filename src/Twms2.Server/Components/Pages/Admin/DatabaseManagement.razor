@@ -7,6 +7,7 @@
 @inject IJSRuntime JS
 @inject IWebHostEnvironment WebHostEnv
 @attribute [Authorize(Roles = "Admin")]
+@implements IDisposable
 
 <PageTitle>TWM - DB 관리</PageTitle>
 
@@ -135,6 +136,96 @@
     }
 </MudPaper>
 
+@* ── 배치 가져오기 (라인→레이아웃 매핑) ── *@
+@if (_linePreviews is { Count: > 0 })
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-1">
+            <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-1" Style="vertical-align: middle;" />
+            배치 가져오기
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            TWM1 라인을 TWM2 레이아웃(도면)에 매핑하면 자산 위치와 그룹이 자동 배치됩니다.
+            같은 도면 이미지를 사용해야 좌표가 정확히 맞습니다.
+        </MudText>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+            <MudSelect T="int?" @bind-Value="_bulkLayoutId"
+                       Margin="Margin.Dense" Dense="true" Variant="Variant.Outlined"
+                       Placeholder="일괄 선택" Style="max-width:220px;">
+                <MudSelectItem T="int?" Value="@((int?)null)">-- 건너뛰기 --</MudSelectItem>
+                @foreach (var lo in _layouts)
+                {
+                    <MudSelectItem T="int?" Value="@lo.Id">@lo.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.SelectAll"
+                       OnClick="ApplyBulkSelection">
+                일괄 적용
+            </MudButton>
+        </MudStack>
+
+        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Class="mb-3">
+            <thead>
+                <tr>
+                    <th>TWM1 라인</th>
+                    <th>이미지 크기</th>
+                    <th style="min-width:220px;">TWM2 레이아웃</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var lp in _linePreviews)
+                {
+                    <tr>
+                        <td>@lp.Name</td>
+                        <td>@($"{lp.SelfW:0} × {lp.SelfH:0}")</td>
+                        <td>
+                            <MudSelect T="int?" @bind-Value="lp.MappedLayoutId"
+                                       Margin="Margin.Dense" Dense="true" Variant="Variant.Outlined"
+                                       Placeholder="선택 안 함" Clearable="true">
+                                @foreach (var lo in _layouts)
+                                {
+                                    <MudSelectItem T="int?" Value="@lo.Id">@lo.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.PlayArrow"
+                       OnClick="RunPositionImportAsync"
+                       Disabled="@(_posImporting || !_linePreviews.Any(l => l.MappedLayoutId.HasValue))">
+                @(_posImporting ? "배치 중..." : "배치 가져오기")
+            </MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default"
+                       OnClick="CancelPositionImport">
+                닫기
+            </MudButton>
+        </MudStack>
+
+        @if (_posResult != null)
+        {
+            <MudDivider Class="my-3" />
+            @if (_posResult.HasFatalError)
+            {
+                <MudAlert Severity="Severity.Error">오류: @_posResult.FatalError</MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Success">
+                    자산 @(_posResult.AssetPositionsImported)건, 그룹 @(_posResult.GroupsImported)건 배치 완료
+                    @if (_posResult.Skipped > 0) { <text> (건너뜀 @(_posResult.Skipped)건)</text> }
+                </MudAlert>
+            }
+        }
+    </MudPaper>
+}
+
 @* 마이그레이션 이력 *@
 <MudPaper Class="pa-4" Elevation="1">
     <MudText Typo="Typo.h6" Class="mb-2">마이그레이션 이력</MudText>
@@ -168,10 +259,19 @@
     private bool _importing;
     private DexaImportResult? _importResult;
 
+    // ── 배치 가져오기 ──
+    private string? _tempFilePath;                        // 기본 import 후에도 유지
+    private List<LinePreviewVM>? _linePreviews;
+    private List<TwmsLayout> _layouts = [];
+    private bool _posImporting;
+    private DexaPositionImportResult? _posResult;
+    private int? _bulkLayoutId;
+
     protected override async Task OnInitializedAsync()
     {
         _stats = await TwmDb.GetStatsAsync();
         _migrations = await TwmDb.GetMigrationsAsync();
+        _layouts = await TwmDb.GetAllLayoutsAsync();
     }
 
     private void OnImportFileSelected(InputFileChangeEventArgs e)
@@ -179,6 +279,9 @@
         _selectedFile = e.File;
         _selectedFileName = e.File.Name;
         _importResult = null;
+        CleanupTempFile();
+        _linePreviews = null;
+        _posResult = null;
     }
 
     private async Task ClickImportInput() =>
@@ -190,20 +293,24 @@
 
         _importing = true;
         _importResult = null;
+        CleanupTempFile();
+        _linePreviews = null;
+        _posResult = null;
 
-        var tempPath = Path.Combine(Path.GetTempPath(), $"dexa_import_{Guid.NewGuid():N}.sqlite3");
+        _tempFilePath = Path.Combine(Path.GetTempPath(), $"dexa_import_{Guid.NewGuid():N}.sqlite3");
         try
         {
             // 임시 파일에 저장 (최대 500MB)
-            await using var fs = File.Create(tempPath);
+            await using var fs = File.Create(_tempFilePath);
             await _selectedFile.OpenReadStream(maxAllowedSize: 500 * 1024 * 1024).CopyToAsync(fs);
             fs.Close();
 
-            _importResult = await ImportService.ImportFromFileAsync(tempPath);
+            _importResult = await ImportService.ImportFromFileAsync(_tempFilePath);
 
             if (_importResult.HasFatalError)
             {
                 Snackbar.Add($"가져오기 실패: {_importResult.FatalError}", Severity.Error);
+                CleanupTempFile();
             }
             else
             {
@@ -211,6 +318,14 @@
                     $"완료 — 확장정보 {_importResult.AugImported}건, 연결정보 {_importResult.ConnImported}건 저장",
                     Severity.Success);
                 _stats = await TwmDb.GetStatsAsync();
+
+                // 라인 프리뷰 로드 → 배치 매핑 UI 표시
+                var previews = await ImportService.PreviewLinesFromFileAsync(_tempFilePath);
+                _layouts = await TwmDb.GetAllLayoutsAsync();
+                _linePreviews = previews.Select(p => new LinePreviewVM
+                {
+                    Id = p.Id, Name = p.Name, SelfW = p.SelfW, SelfH = p.SelfH,
+                }).ToList();
             }
 
             _selectedFile = null;
@@ -219,12 +334,80 @@
         catch (Exception ex)
         {
             Snackbar.Add($"오류: {ex.Message}", Severity.Error);
+            CleanupTempFile();
         }
         finally
         {
             _importing = false;
-            if (File.Exists(tempPath))
-                File.Delete(tempPath);
+            // 배치 가져오기 단계가 있으므로 tempFile은 아직 삭제하지 않음
         }
+    }
+
+    // ── 배치 가져오기 ──
+
+    private async Task RunPositionImportAsync()
+    {
+        if (_tempFilePath == null || _linePreviews == null) return;
+
+        _posImporting = true;
+        _posResult = null;
+
+        try
+        {
+            var lineLayoutMap = _linePreviews
+                .Where(l => l.MappedLayoutId.HasValue)
+                .ToDictionary(l => l.Id, l => l.MappedLayoutId!.Value);
+
+            _posResult = await ImportService.ImportPositionsFromFileAsync(_tempFilePath, lineLayoutMap);
+
+            if (_posResult.HasFatalError)
+                Snackbar.Add($"배치 오류: {_posResult.FatalError}", Severity.Error);
+            else
+                Snackbar.Add(
+                    $"배치 완료 — 자산 {_posResult.AssetPositionsImported}건, 그룹 {_posResult.GroupsImported}건",
+                    Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _posImporting = false;
+        }
+    }
+
+    private void ApplyBulkSelection()
+    {
+        if (_linePreviews == null) return;
+        foreach (var lp in _linePreviews)
+            lp.MappedLayoutId = _bulkLayoutId;
+    }
+
+    private void CancelPositionImport()
+    {
+        _linePreviews = null;
+        _posResult = null;
+        CleanupTempFile();
+    }
+
+    private void CleanupTempFile()
+    {
+        if (_tempFilePath != null && File.Exists(_tempFilePath))
+            File.Delete(_tempFilePath);
+        _tempFilePath = null;
+    }
+
+    public void Dispose() => CleanupTempFile();
+
+    // ── VM ──
+
+    private class LinePreviewVM
+    {
+        public int    Id    { get; set; }
+        public string Name  { get; set; } = "";
+        public double SelfW { get; set; }
+        public double SelfH { get; set; }
+        public int?   MappedLayoutId { get; set; }
     }
 }

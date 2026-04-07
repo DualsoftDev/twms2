@@ -11,7 +11,7 @@ namespace Twms2.Server.Services;
 /// - layoutLine: id, name
 /// - layoutGroup: id, assetId, floor, assets
 /// </summary>
-public class DexaFileImportService(TwmDbService twmDb, ILogger<DexaFileImportService> logger)
+public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEnv, ILogger<DexaFileImportService> logger)
 {
     private const int AssetTypeXgtPlc = 6;
     private const int AssetTypeServo  = 7;
@@ -210,9 +210,12 @@ public class DexaFileImportService(TwmDbService twmDb, ILogger<DexaFileImportSer
             }
             SqliteConnection.ClearAllPools();
 
-            // 매핑된 라인만 처리, lineId → (layoutId, scaleX, scaleY)
-            // 라인 영역(BlueprintRect)은 건드리지 않음 — 별도 관리 기능
-            var lineMap = new Dictionary<int, (int layoutId, double scaleX, double scaleY)>();
+            // 매핑된 라인만 처리
+            // DEXA 좌표는 SelfW×SelfH 논리 공간 → 정규화 후 실제 이미지 영역에 매핑
+            // SVG viewBox 0 0 1000 600 + preserveAspectRatio="xMidYMid meet"
+            var lineMap = new Dictionary<int, (int layoutId, double selfW, double selfH,
+                                               double imgAreaW, double imgAreaH,
+                                               double offsetX, double offsetY)>();
 
             foreach (var line in lineRows)
             {
@@ -223,9 +226,38 @@ public class DexaFileImportService(TwmDbService twmDb, ILogger<DexaFileImportSer
                 }
                 if (line.SelfW <= 0 || line.SelfH <= 0) { result.Skipped++; continue; }
 
-                var scaleX = VB_W / line.SelfW;
-                var scaleY = VB_H / line.SelfH;
-                lineMap[line.Id] = (layoutId, scaleX, scaleY);
+                // 실제 업로드된 이미지 크기를 읽어서 viewBox 내 영역 계산
+                var (imgW, imgH) = await GetActualImageSizeAsync(layoutId);
+                if (imgW <= 0 || imgH <= 0)
+                {
+                    // 이미지 정보 없으면 SelfW/SelfH를 이미지 크기로 사용 (fallback)
+                    (imgW, imgH) = (line.SelfW, line.SelfH);
+                }
+
+                // xMidYMid meet: 실제 이미지가 viewBox 안에서 차지하는 영역
+                var imgRatio = imgW / imgH;
+                var vbRatio  = VB_W / VB_H;
+                double imgAreaW, imgAreaH, offsetX, offsetY;
+
+                if (imgRatio > vbRatio)
+                {
+                    // 이미지가 더 넓음 → 가로에 맞춤
+                    imgAreaW = VB_W;
+                    imgAreaH = VB_W / imgRatio;
+                    offsetX  = 0;
+                    offsetY  = (VB_H - imgAreaH) / 2;
+                }
+                else
+                {
+                    // 이미지가 더 좁음 → 세로에 맞춤
+                    imgAreaH = VB_H;
+                    imgAreaW = VB_H * imgRatio;
+                    offsetX  = (VB_W - imgAreaW) / 2;
+                    offsetY  = 0;
+                }
+
+                lineMap[line.Id] = (layoutId, line.SelfW, line.SelfH,
+                                    imgAreaW, imgAreaH, offsetX, offsetY);
             }
 
             // assetPosRows 전용 lineId lookup (자산 배치용)
@@ -243,8 +275,9 @@ public class DexaFileImportService(TwmDbService twmDb, ILogger<DexaFileImportSer
                     continue;
                 }
 
-                var cx = asset.AugLX * lr.scaleX;
-                var cy = asset.AugLY * lr.scaleY;
+                // 정규화 변환: DEXA좌표/SelfW → [0,1] → 이미지 영역 in viewBox
+                var cx = (asset.AugLX / lr.selfW) * lr.imgAreaW + lr.offsetX;
+                var cy = (asset.AugLY / lr.selfH) * lr.imgAreaH + lr.offsetY;
                 var px = Math.Clamp(cx - ICON_HALF, 0, VB_W - ICON_SIZE);
                 var py = Math.Clamp(cy - ICON_HALF, 0, VB_H - ICON_SIZE);
 
@@ -269,18 +302,36 @@ public class DexaFileImportService(TwmDbService twmDb, ILogger<DexaFileImportSer
 
             foreach (var grp in groupRows)
             {
-                // assetId(PLC)의 augLineId로 소속 라인 역추적 (좌표 유무 무관)
-                if (!allAssetLineMap.TryGetValue(grp.AssetId, out var lineId)
-                    || !lineMap.TryGetValue(lineId, out var glr))
+                // 멤버 자산들의 lineId로 소속 라인 역추적
+                // (마스터 assetId는 "레이아웃" 라인에 있어 실제 소속과 다름)
+                int? memberLineId = null;
+                if (!string.IsNullOrWhiteSpace(grp.Assets))
+                {
+                    foreach (var s in grp.Assets.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (int.TryParse(s.Trim(), out var mid) && allAssetLineMap.TryGetValue(mid, out var lid))
+                        {
+                            memberLineId = lid;
+                            break;
+                        }
+                    }
+                }
+                // 멤버가 없으면 마스터 assetId의 lineId로 fallback
+                if (!memberLineId.HasValue && allAssetLineMap.TryGetValue(grp.AssetId, out var fallbackId))
+                    memberLineId = fallbackId;
+
+                if (!memberLineId.HasValue
+                    || !lineMap.TryGetValue(memberLineId.Value, out var glr))
                 {
                     result.Skipped++;
                     continue;
                 }
 
-                var gx = grp.X * glr.scaleX;
-                var gy = grp.Y * glr.scaleY;
-                var gw = grp.W * glr.scaleX;
-                var gh = grp.H * glr.scaleY;
+                // 정규화 변환: DEXA좌표/SelfW → [0,1] → 이미지 영역 in viewBox
+                var gx = (grp.X / glr.selfW) * glr.imgAreaW + glr.offsetX;
+                var gy = (grp.Y / glr.selfH) * glr.imgAreaH + glr.offsetY;
+                var gw = (grp.W / glr.selfW) * glr.imgAreaW;
+                var gh = (grp.H / glr.selfH) * glr.imgAreaH;
 
                 var floorLabel = grp.Floor.HasValue ? $"{grp.Floor}층" : "";
                 var newGroup = new TwmsPlacementGroup
@@ -317,6 +368,36 @@ public class DexaFileImportService(TwmDbService twmDb, ILogger<DexaFileImportSer
     }
 
     // ──────────────── 공통 ────────────────
+
+    /// <summary>레이아웃에 연결된 실제 도면 이미지의 크기를 읽는다.</summary>
+    private async Task<(double w, double h)> GetActualImageSizeAsync(int layoutId)
+    {
+        var config = await twmDb.GetBlueprintConfigAsync(layoutId);
+        if (config == null || string.IsNullOrEmpty(config.ImagePath))
+            return (0, 0);
+
+        // DB에 저장된 크기가 있으면 사용
+        if (config.ImageWidth is > 0 && config.ImageHeight is > 0)
+            return (config.ImageWidth.Value, config.ImageHeight.Value);
+
+        // 없으면 파일에서 PNG 헤더 읽기
+        var filePath = Path.Combine(webEnv.WebRootPath, config.ImagePath);
+        if (!File.Exists(filePath)) return (0, 0);
+
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(filePath);
+            // PNG: width at offset 16 (4 bytes BE), height at offset 20 (4 bytes BE)
+            if (bytes.Length > 24 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                int w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+                int h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+                return (w, h);
+            }
+        }
+        catch { /* ignore */ }
+        return (0, 0);
+    }
 
     /// <summary>테이블이 없는 경우 빈 목록을 반환하는 방어적 쿼리</summary>
     private static async Task<List<T>> SafeQueryAsync<T>(SqliteConnection conn, string sql)

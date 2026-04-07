@@ -332,7 +332,7 @@ window.statDonutChart = {
 
         // 클릭 → 필터 페이지 네비게이션 (서버 왕복 없음)
         chart.on('click', (params) => {
-            if (chart.getDom().closest('.grid-stack.edit-mode')) return;
+            if (!chart.getDom() || chart.getDom().closest('.grid-stack.edit-mode')) return;
             const item = dataArray[params.seriesIndex];
             if (!item) return;
             const name = encodeURIComponent(item.name);
@@ -416,6 +416,7 @@ window.statDonutChart = {
 
         // 컨테이너 실제 크기(px) 기반 계산
         const dom = chart.getDom();
+        if (!dom) return;
         const W = dom.clientWidth || 300;
         const H = dom.clientHeight || 200;
 
@@ -561,7 +562,7 @@ window.statDonutChart = {
                 onclick: (() => {
                     const itemName = item.name;
                     return () => {
-                        if (chart.getDom().closest('.grid-stack.edit-mode')) return;
+                        if (!chart.getDom() || chart.getDom().closest('.grid-stack.edit-mode')) return;
                         const name = encodeURIComponent(itemName);
                         let url = '/history?tab=1';
                         if (chart._navParam) url += '&' + chart._navParam + '=' + name;

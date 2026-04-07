@@ -2260,21 +2260,131 @@ h1:focus {
 }
 
 /* =========================================================
-   Asset Placement (자산 배치)
+   Asset Placement Editor v2 (자산 배치 에디터)
    ========================================================= */
 
+/* ── 레이아웃 ── */
+.ap-editor-layout {
+    display: flex;
+    gap: 8px;
+    height: calc(100vh - 260px);
+    min-height: 400px;
+}
+
+.ap-left-panel {
+    width: 300px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    padding: 8px;
+    background: var(--mud-palette-surface);
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.08);
+}
+
+.ap-canvas-area {
+    flex: 1;
+    min-width: 0;
+}
+
+.ap-canvas-container {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    background: #1a1a2e;
+}
+
+.ap-canvas-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* ── 좌측 패널 섹션 ── */
+.ap-panel-section {
+    margin-bottom: 4px;
+}
+
+.ap-asset-list, .ap-group-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 6px;
+}
+
+.ap-list-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.ap-list-item:hover { background: rgba(0,0,0,0.03); }
+.ap-list-item.checked { background: rgba(76,175,80,0.06); }
+.ap-list-item.selected { background: rgba(33,150,243,0.08); }
+.ap-list-item.small { padding: 2px 6px 2px 16px; }
+
+.ap-list-name {
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ap-list-sub {
+    font-size: 0.7rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ap-line-tag {
+    color: #4caf50;
+    margin-left: 4px;
+    font-weight: 500;
+}
+
+/* ── 그룹 패널 ── */
+.ap-group-item { border-bottom: 1px solid rgba(0,0,0,0.06); }
+.ap-group-item.selected { background: rgba(33,150,243,0.08); }
+
+.ap-group-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    cursor: pointer;
+}
+.ap-group-header:hover { background: rgba(0,0,0,0.03); }
+
+.ap-group-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.ap-group-members {
+    background: rgba(0,0,0,0.02);
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+/* ── SVG 자산 아이콘 ── */
 .ap-asset-icon {
     cursor: grab;
     transition: filter 0.15s ease;
 }
-
 .ap-asset-icon:hover {
     filter: brightness(1.08) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-}
-
-.ap-asset-icon.dragging {
-    cursor: grabbing;
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
 }
 
 .ap-icon-label {
@@ -2284,19 +2394,13 @@ h1:focus {
     user-select: none;
 }
 
-/* ── 다중 선택 ── */
 .ap-asset-icon.ap-selected rect:first-of-type {
     stroke: #2196F3;
     stroke-width: 2;
     stroke-dasharray: 4 2;
 }
 
-.ap-asset-icon.ap-multi-dragging {
-    opacity: 0.85;
-    filter: drop-shadow(0 4px 12px rgba(33, 150, 243, 0.3));
-}
-
-/* ── 올가미 선택 ── */
+/* ── 올가미 ── */
 .ap-lasso-rect {
     fill: rgba(33, 150, 243, 0.08);
     stroke: #2196F3;
@@ -2305,19 +2409,9 @@ h1:focus {
     pointer-events: none;
 }
 
-/* ── 배치 그룹 컨테이너 ── */
-.ap-group-container {
-    cursor: grab;
-}
-
-.ap-group-container:hover rect:first-of-type {
-    stroke-opacity: 0.9;
-    fill-opacity: 0.15;
-}
-
-.ap-group-container.dragging {
-    cursor: grabbing;
-}
+/* ── 그룹 컨테이너 ── */
+.ap-group-container { cursor: grab; }
+.ap-group-container:hover rect:first-of-type { stroke-opacity: 0.9; fill-opacity: 0.15; }
 
 .ap-group-label {
     font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -2331,10 +2425,7 @@ h1:focus {
     opacity: 0;
     transition: opacity 0.15s;
 }
-
-.ap-group-container:hover .ap-group-resize {
-    opacity: 1;
-}
+.ap-group-container:hover .ap-group-resize { opacity: 1; }
 
 /* 레이아웃 뷰 자산 아이콘 호버 효과 */
 .blueprint-asset-icon,
@@ -3029,13 +3120,29 @@ a.dash-link-row:hover { text-decoration: underline; }
     pointer-events: none;
 }
 
-/* 그룹 선택 시각적 피드백 */
+/* ── 그룹 선택 ── */
 .ap-group-selected > rect:first-of-type {
     stroke-width: 2.5 !important;
     stroke-dasharray: none !important;
     filter: drop-shadow(0 0 4px rgba(33, 150, 243, 0.6));
 }
+.ap-group-selected .ap-group-label { font-weight: bold; }
 
-.ap-group-selected .ap-group-label {
-    font-weight: bold;
+/* ── 그룹 드롭 타겟 ── */
+.ap-group-drop-target > rect:first-of-type {
+    stroke-width: 3 !important;
+    stroke-dasharray: none !important;
+    fill-opacity: 0.25 !important;
+    filter: drop-shadow(0 0 6px rgba(76, 175, 80, 0.7));
+    transition: all 0.15s ease;
+}
+.ap-group-drop-target .ap-group-label { font-weight: bold; fill: #4caf50 !important; }
+
+/* ── 격자 배치 프리뷰 ── */
+.ap-grid-preview {
+    cursor: move;
+    opacity: 0.85;
+}
+.ap-grid-preview:hover {
+    opacity: 1;
 }

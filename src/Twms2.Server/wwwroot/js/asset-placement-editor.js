@@ -1,519 +1,543 @@
 /**
- * Asset Placement Editor - 자산 아이콘 드래그 배치 모듈
- * SVG viewBox 0 0 1000 600 좌표계
- * 기능: 단일/다중 선택, 올가미, 일괄 이동, 그룹 드래그/리사이즈
+ * Asset Placement Editor v2 — 전면 재작성
+ * 파워포인트형 SVG 에디터: 줌/팬, 올가미, 드래그, 스냅, 그룹, 격자 배치
+ * C#이 상태의 단일 진실 원천, JS는 인터랙션 레이어.
  */
 window.assetPlacementEditor = (() => {
     const _inst = {};
-    const VB_W = 1000, VB_H = 600;
-    const ICON_SIZE = 32;
-
-    // ── 유틸 ──
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const ORIG_W = 1000, ORIG_H = 600;
+    const MIN_ZOOM = 0.3, MAX_ZOOM = 8;
     const r2 = v => Math.round(v * 100) / 100;
-    function getIconSize(el) {
-        return ICON_SIZE * (parseFloat(el.dataset.scale) || 1.0);
-    }
-    function clientToSvg(inst, clientX, clientY) {
-        const r = inst.svg.getBoundingClientRect();
-        return { x: ((clientX - r.left) / r.width) * VB_W, y: ((clientY - r.top) / r.height) * VB_H };
-    }
-    function clientDelta(inst, dx, dy) {
-        const r = inst.svg.getBoundingClientRect();
-        return { dx: (dx / r.width) * VB_W, dy: (dy / r.height) * VB_H };
-    }
 
-    // ── Init ──
+    // ════════════════ Init / Dispose ════════════════
+
     function init(containerId, dotNetRef) {
         dispose(containerId);
-
         const container = document.getElementById(containerId);
         if (!container) return;
         const svg = container.querySelector('svg');
         if (!svg) return;
 
         const inst = {
-            container, svg, dotNetRef, handlers: [],
-            selectedIds: new Set(),
-            selectedGroupIds: new Set(),
-            mode: 'single', // 'single' | 'multi'
+            container, svg, dotNetRef,
+            viewBox: { x: 0, y: 0, w: ORIG_W, h: ORIG_H },
+            zoom: 1,
+            tool: 'select',        // 'select' | 'pan'
             snap: { enabled: true, gridSize: 20, neighborThreshold: 8 },
-            guideLines: [], // 현재 표시 중인 가이드 라인 SVG 요소
+            // Transient state
+            _handlers: [],
+            _observer: null,
+            _gridPreview: null,
+            _guideLines: [],
         };
         _inst[containerId] = inst;
 
-        // 자산 아이콘 드래그 바인딩
-        svg.querySelectorAll('.ap-asset-icon').forEach(g => {
-            const assetId = parseInt(g.dataset.assetId);
-            if (!isNaN(assetId)) bindAssetDrag(inst, g, assetId);
-        });
-
-        // 그룹 컨테이너 드래그/리사이즈 바인딩
-        svg.querySelectorAll('.ap-group-container').forEach(g => {
-            const groupId = parseInt(g.dataset.groupId);
-            if (!isNaN(groupId)) {
-                bindGroupDrag(inst, g, groupId);
-                const resizeHandle = g.querySelector('.ap-group-resize');
-                if (resizeHandle) bindGroupResize(inst, g, resizeHandle, groupId);
-            }
-        });
-
-        // 올가미 선택 (SVG 빈 영역 클릭/드래그)
-        bindLasso(inst);
+        // 이벤트 바인딩
+        bindZoomPan(inst);
+        bindSvgPointer(inst);
+        bindExistingElements(inst);
+        startObserver(inst);
     }
 
-    // ── 자산 드래그 (단일 + 다중 이동, 자산만) ──
-    function bindAssetDrag(inst, group, assetId) {
-        let startPt = null;
-        let startPos = null;
-        let moved = false;
-        let bulkStarts = null;
+    function dispose(containerId) {
+        const inst = _inst[containerId];
+        if (!inst) return;
+        if (inst._observer) inst._observer.disconnect();
+        inst._handlers.forEach(([el, type, fn, opts]) => el.removeEventListener(type, fn, opts));
+        clearGuideLines(inst);
+        hideGridPreview(containerId);
+        delete _inst[containerId];
+    }
 
-        const onDown = (e) => {
+    function on(inst, el, type, fn, opts) {
+        el.addEventListener(type, fn, opts);
+        inst._handlers.push([el, type, fn, opts]);
+    }
+
+    // ════════════════ Coordinate Transform ════════════════
+
+    function clientToSvg(inst, cx, cy) {
+        const r = inst.svg.getBoundingClientRect();
+        const vb = inst.viewBox;
+        return {
+            x: vb.x + ((cx - r.left) / r.width) * vb.w,
+            y: vb.y + ((cy - r.top) / r.height) * vb.h
+        };
+    }
+
+    function clientDelta(inst, dx, dy) {
+        const r = inst.svg.getBoundingClientRect();
+        const vb = inst.viewBox;
+        return { dx: (dx / r.width) * vb.w, dy: (dy / r.height) * vb.h };
+    }
+
+    // ════════════════ ViewBox Zoom / Pan ════════════════
+
+    function bindZoomPan(inst) {
+        // Wheel zoom
+        on(inst, inst.svg, 'wheel', (e) => {
             e.preventDefault();
-            e.stopPropagation();
+            const factor = Math.pow(1.002, -e.deltaY);
+            zoomByFactor(inst, factor, e.clientX, e.clientY);
+        }, { passive: false });
+    }
 
-            // Ctrl+클릭: 자산 선택 토글
-            if (inst.mode === 'multi' && (e.ctrlKey || e.metaKey)) {
-                toggleSelect(inst, assetId, group);
+    function zoomByFactor(inst, factor, cx, cy) {
+        const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, inst.zoom * factor));
+        if (Math.abs(newZoom - inst.zoom) < 0.001) return;
+        const r = inst.svg.getBoundingClientRect();
+        const vb = inst.viewBox;
+        const mx = vb.x + ((cx - r.left) / r.width) * vb.w;
+        const my = vb.y + ((cy - r.top) / r.height) * vb.h;
+        const newW = ORIG_W / newZoom, newH = ORIG_H / newZoom;
+        const ratioX = (cx - r.left) / r.width;
+        const ratioY = (cy - r.top) / r.height;
+        inst.viewBox = {
+            x: clampVBX(mx - newW * ratioX, newW),
+            y: clampVBY(my - newH * ratioY, newH),
+            w: newW, h: newH
+        };
+        inst.zoom = newZoom;
+        applyViewBox(inst);
+    }
+
+    function clampVBX(x, w) { const m = w * 0.3; return Math.max(-m, Math.min(ORIG_W - w + m, x)); }
+    function clampVBY(y, h) { const m = h * 0.3; return Math.max(-m, Math.min(ORIG_H - h + m, y)); }
+
+    function applyViewBox(inst) {
+        const vb = inst.viewBox;
+        inst.svg.setAttribute('viewBox', `${vb.x.toFixed(2)} ${vb.y.toFixed(2)} ${vb.w.toFixed(2)} ${vb.h.toFixed(2)}`);
+    }
+
+    function getViewCenter(inst) {
+        return { x: inst.viewBox.x + inst.viewBox.w / 2, y: inst.viewBox.y + inst.viewBox.h / 2 };
+    }
+
+    // ════════════════ SVG Pointer Dispatch ════════════════
+
+    function bindSvgPointer(inst) {
+        let action = null; // { type: 'pan'|'lasso'|'move'|'groupMove'|'groupResize', ... }
+
+        on(inst, inst.svg, 'pointerdown', (e) => {
+            if (e.button === 1) { // Middle button = always pan
+                e.preventDefault();
+                action = startPan(inst, e);
+                return;
+            }
+            if (e.button !== 0) return;
+
+            // Resize handle?
+            const resizeHandle = e.target.closest('.ap-group-resize');
+            if (resizeHandle) {
+                e.preventDefault(); e.stopPropagation();
+                const groupEl = resizeHandle.closest('.ap-group-container');
+                action = startGroupResize(inst, e, groupEl);
                 return;
             }
 
-            // 다중 모드에서 선택된 자산 클릭 → 자산끼리만 일괄 이동
-            const isSelected = inst.selectedIds.has(assetId);
-            if (inst.mode === 'multi' && isSelected && inst.selectedIds.size > 1) {
-                bulkStarts = collectBulkStarts(inst);
+            // Group container (rect background)?
+            const groupEl = e.target.closest('.ap-group-container');
+            const assetEl = e.target.closest('.ap-asset-icon');
+
+            if (inst.tool === 'pan') {
+                e.preventDefault();
+                action = startPan(inst, e);
+            } else if (assetEl) {
+                e.preventDefault(); e.stopPropagation();
+                action = startAssetInteraction(inst, e, assetEl);
+            } else if (groupEl && !assetEl) {
+                e.preventDefault(); e.stopPropagation();
+                action = startGroupInteraction(inst, e, groupEl);
             } else {
-                bulkStarts = null;
+                // Empty area → lasso
+                e.preventDefault();
+                action = startLasso(inst, e);
             }
+        });
 
-            startPt = { clientX: e.clientX, clientY: e.clientY };
-            startPos = { x: parseFloat(group.dataset.x) || 0, y: parseFloat(group.dataset.y) || 0 };
-            moved = false;
+        on(inst, document, 'pointermove', (e) => {
+            if (!action) return;
+            action.onMove(e);
+        });
 
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', onUp);
-            group.setPointerCapture(e.pointerId);
+        on(inst, document, 'pointerup', (e) => {
+            if (!action) return;
+            action.onUp(e);
+            action = null;
+        });
+    }
+
+    // ════════════════ Pan ════════════════
+
+    function startPan(inst, e) {
+        const startPt = { x: e.clientX, y: e.clientY };
+        const startVB = { ...inst.viewBox };
+        inst.svg.style.cursor = 'grabbing';
+        return {
+            onMove(e) {
+                const r = inst.svg.getBoundingClientRect();
+                const dx = ((e.clientX - startPt.x) / r.width) * inst.viewBox.w;
+                const dy = ((e.clientY - startPt.y) / r.height) * inst.viewBox.h;
+                inst.viewBox.x = clampVBX(startVB.x - dx, inst.viewBox.w);
+                inst.viewBox.y = clampVBY(startVB.y - dy, inst.viewBox.h);
+                applyViewBox(inst);
+            },
+            onUp() { inst.svg.style.cursor = ''; }
         };
+    }
 
-        const onMove = (e) => {
-            if (!startPt) return;
-            moved = true;
-            const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
+    // ════════════════ Lasso Selection ════════════════
 
-            if (bulkStarts) {
-                const refSz = getIconSize(group);
-                const rawX = clampX(startPos.x + d.dx, refSz);
-                const rawY = clampY(startPos.y + d.dy, refSz);
-                const snapped = applySnap(inst, rawX, rawY, refSz, inst.selectedIds);
-                renderGuideLines(inst, snapped.guides);
-                const snapDx = snapped.x - (startPos.x + d.dx);
-                const snapDy = snapped.y - (startPos.y + d.dy);
+    function startLasso(inst, e) {
+        const start = clientToSvg(inst, e.clientX, e.clientY);
+        let lassoRect = null;
+        let moved = false;
 
-                for (const [aid, sp] of bulkStarts) {
+        return {
+            onMove(ev) {
+                const cur = clientToSvg(inst, ev.clientX, ev.clientY);
+                if (!moved && Math.abs(cur.x - start.x) + Math.abs(cur.y - start.y) < 3) return;
+                moved = true;
+                if (!lassoRect) {
+                    lassoRect = document.createElementNS(SVG_NS, 'rect');
+                    lassoRect.classList.add('ap-lasso-rect');
+                    inst.svg.appendChild(lassoRect);
+                }
+                const x = Math.min(start.x, cur.x), y = Math.min(start.y, cur.y);
+                const w = Math.abs(cur.x - start.x), h = Math.abs(cur.y - start.y);
+                lassoRect.setAttribute('x', x); lassoRect.setAttribute('y', y);
+                lassoRect.setAttribute('width', w); lassoRect.setAttribute('height', h);
+            },
+            onUp(ev) {
+                if (lassoRect) {
+                    const cur = clientToSvg(inst, ev.clientX, ev.clientY);
+                    const lx1 = Math.min(start.x, cur.x), ly1 = Math.min(start.y, cur.y);
+                    const lx2 = Math.max(start.x, cur.x), ly2 = Math.max(start.y, cur.y);
+
+                    if (lx2 - lx1 > 3 || ly2 - ly1 > 3) {
+                        const assetIds = [], groupIds = [];
+                        inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
+                            const ax = parseFloat(g.dataset.x) || 0;
+                            const ay = parseFloat(g.dataset.y) || 0;
+                            const sz = getIconSize(g);
+                            const cx = ax + sz / 2, cy = ay + sz / 2;
+                            if (cx >= lx1 && cx <= lx2 && cy >= ly1 && cy <= ly2)
+                                assetIds.push(parseInt(g.dataset.assetId));
+                        });
+                        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+                            const gx = parseFloat(g.dataset.x) || 0, gy = parseFloat(g.dataset.y) || 0;
+                            const gw = parseFloat(g.dataset.w) || 0, gh = parseFloat(g.dataset.h) || 0;
+                            const cx = gx + gw / 2, cy = gy + gh / 2;
+                            if (cx >= lx1 && cx <= lx2 && cy >= ly1 && cy <= ly2)
+                                groupIds.push(parseInt(g.dataset.groupId));
+                        });
+                        notifySelection(inst, assetIds, groupIds);
+                    }
+                    lassoRect.remove();
+                } else if (!moved) {
+                    // Click on empty → deselect all
+                    notifySelection(inst, [], []);
+                }
+            }
+        };
+    }
+
+    // ════════════════ Unified Bulk State ════════════════
+
+    function collectAllSelectedStarts(inst) {
+        const assets = new Map();  // assetId → { x, y }
+        const groups = new Map();  // groupId → { x, y, w, h, el, members: Map }
+        const movedAssetIds = new Set(); // track assets moved as part of groups
+
+        // Selected groups + their members
+        inst.svg.querySelectorAll('.ap-group-container.ap-group-selected').forEach(gel => {
+            const gid = parseInt(gel.dataset.groupId);
+            const memberStarts = collectGroupMemberStarts(inst, gel);
+            groups.set(gid, {
+                x: parseFloat(gel.dataset.x) || 0, y: parseFloat(gel.dataset.y) || 0,
+                w: parseFloat(gel.dataset.w) || 0, h: parseFloat(gel.dataset.h) || 0,
+                el: gel, members: memberStarts
+            });
+            for (const aid of memberStarts.keys()) movedAssetIds.add(aid);
+        });
+
+        // Selected assets (not already in a selected group)
+        inst.svg.querySelectorAll('.ap-asset-icon.ap-selected').forEach(g => {
+            const aid = parseInt(g.dataset.assetId);
+            if (!movedAssetIds.has(aid)) {
+                assets.set(aid, { x: parseFloat(g.dataset.x) || 0, y: parseFloat(g.dataset.y) || 0 });
+            }
+        });
+
+        return { assets, groups, totalCount: assets.size + groups.size };
+    }
+
+    // ════════════════ Asset Interaction ════════════════
+
+    function startAssetInteraction(inst, e, assetEl) {
+        const assetId = parseInt(assetEl.dataset.assetId);
+        const startClient = { x: e.clientX, y: e.clientY };
+        const startPos = { x: parseFloat(assetEl.dataset.x) || 0, y: parseFloat(assetEl.dataset.y) || 0 };
+        let moved = false;
+        const isSelected = assetEl.classList.contains('ap-selected');
+
+        // Ctrl+Click = toggle selection
+        if (e.ctrlKey || e.metaKey) {
+            inst.dotNetRef.invokeMethodAsync('OnToggleAssetSelection', assetId);
+            return { onMove() {}, onUp() {} };
+        }
+
+        // Collect all selected items for bulk move (if this asset is part of selection)
+        let bulk = null;
+        if (isSelected) {
+            bulk = collectAllSelectedStarts(inst);
+            // Also include this asset if not already there
+            if (!bulk.assets.has(assetId)) {
+                let inGroup = false;
+                for (const [, gs] of bulk.groups) { if (gs.members.has(assetId)) { inGroup = true; break; } }
+                if (!inGroup) bulk.assets.set(assetId, { ...startPos });
+            }
+        }
+
+        const isBulk = bulk && (bulk.assets.size + bulk.groups.size > 1 ||
+            (bulk.groups.size === 1 && bulk.assets.size >= 0) ||
+            bulk.assets.size > 1);
+
+        return {
+            onMove(ev) {
+                const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
+                if (!moved && Math.abs(d.dx) + Math.abs(d.dy) < 2) return;
+                moved = true;
+
+                // Snap based on reference point
+                let snapDx = 0, snapDy = 0;
+                if (inst.snap.enabled) {
+                    const rawX = startPos.x + d.dx, rawY = startPos.y + d.dy;
+                    const sz = getIconSize(assetEl);
+                    const allMovingIds = new Set(isBulk ? bulk.assets.keys() : [assetId]);
+                    if (isBulk) { for (const [,gs] of bulk.groups) { for (const aid of gs.members.keys()) allMovingIds.add(aid); } }
+                    const snapped = applySnap(inst, rawX, rawY, sz, allMovingIds);
+                    renderGuideLines(inst, snapped.guides);
+                    snapDx = snapped.x - rawX;
+                    snapDy = snapped.y - rawY;
+                }
+
+                if (isBulk) {
+                    // Move all selected assets
+                    for (const [aid, sp] of bulk.assets) {
+                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                        if (!el) continue;
+                        const nx = r2(sp.x + d.dx + snapDx), ny = r2(sp.y + d.dy + snapDy);
+                        el.setAttribute('transform', `translate(${nx},${ny})`);
+                        el.dataset.x = nx; el.dataset.y = ny;
+                    }
+                    // Move all selected groups + their members
+                    for (const [, gs] of bulk.groups) {
+                        const gnx = r2(gs.x + d.dx + snapDx), gny = r2(gs.y + d.dy + snapDy);
+                        updateGroupPos(gs.el, gnx, gny);
+                        for (const [aid, sp] of gs.members) {
+                            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                            if (!el) continue;
+                            const ax = r2(sp.x + d.dx + snapDx), ay = r2(sp.y + d.dy + snapDy);
+                            el.setAttribute('transform', `translate(${ax},${ay})`);
+                            el.dataset.x = ax; el.dataset.y = ay;
+                        }
+                    }
+                } else {
+                    // Single asset move
+                    const sz = getIconSize(assetEl);
+                    const snapped = applySnap(inst, startPos.x + d.dx, startPos.y + d.dy, sz, new Set([assetId]));
+                    renderGuideLines(inst, snapped.guides);
+                    assetEl.setAttribute('transform', `translate(${snapped.x},${snapped.y})`);
+                    assetEl.dataset.x = snapped.x; assetEl.dataset.y = snapped.y;
+                    highlightGroupUnderPoint(inst, snapped.x + sz / 2, snapped.y + sz / 2);
+                }
+            },
+            onUp() {
+                clearGuideLines(inst);
+                clearGroupHighlight(inst);
+
+                if (!moved) {
+                    // Click without move → select only this (unless already in multi-select)
+                    if (!isSelected) notifySelection(inst, [assetId], []);
+                    return;
+                }
+
+                // Report moved positions
+                const positions = [];
+                if (isBulk) {
+                    for (const [aid] of bulk.assets) {
+                        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                        if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                    }
+                    for (const [gid, gs] of bulk.groups) {
+                        inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
+                            r2(parseFloat(gs.el.dataset.x)), r2(parseFloat(gs.el.dataset.y)),
+                            r2(parseFloat(gs.el.dataset.w)), r2(parseFloat(gs.el.dataset.h)));
+                        for (const [aid] of gs.members) {
+                            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                            if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                        }
+                    }
+                } else {
+                    positions.push({ assetId, x: r2(parseFloat(assetEl.dataset.x)), y: r2(parseFloat(assetEl.dataset.y)) });
+                    const sz = getIconSize(assetEl);
+                    handleGroupDrop(inst, assetId, parseFloat(assetEl.dataset.x) + sz / 2, parseFloat(assetEl.dataset.y) + sz / 2);
+                }
+                if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
+            }
+        };
+    }
+
+    // ════════════════ Group Interaction ════════════════
+
+    function startGroupInteraction(inst, e, groupEl) {
+        const groupId = parseInt(groupEl.dataset.groupId);
+        const startClient = { x: e.clientX, y: e.clientY };
+        const startGrp = { x: parseFloat(groupEl.dataset.x) || 0, y: parseFloat(groupEl.dataset.y) || 0 };
+        let moved = false;
+        const isSelected = groupEl.classList.contains('ap-group-selected');
+
+        if (e.ctrlKey || e.metaKey) {
+            inst.dotNetRef.invokeMethodAsync('OnToggleGroupSelection', groupId);
+            return { onMove() {}, onUp() {} };
+        }
+
+        // Collect all selected items for bulk move
+        let bulk = null;
+        if (isSelected) {
+            bulk = collectAllSelectedStarts(inst);
+        }
+        // If not part of selection, just move this group + members
+        if (!bulk || bulk.groups.size === 0) {
+            const memberStarts = collectGroupMemberStarts(inst, groupEl);
+            bulk = {
+                assets: new Map(),
+                groups: new Map([[groupId, { x: startGrp.x, y: startGrp.y,
+                    w: parseFloat(groupEl.dataset.w) || 0, h: parseFloat(groupEl.dataset.h) || 0,
+                    el: groupEl, members: memberStarts }]]),
+                totalCount: 1
+            };
+        }
+
+        return {
+            onMove(ev) {
+                const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
+                if (!moved && Math.abs(d.dx) + Math.abs(d.dy) < 2) return;
+                moved = true;
+
+                let snapDx = 0, snapDy = 0;
+                if (inst.snap.enabled) {
+                    const nx = snapToGrid(startGrp.x + d.dx, inst.snap.gridSize);
+                    const ny = snapToGrid(startGrp.y + d.dy, inst.snap.gridSize);
+                    snapDx = nx - (startGrp.x + d.dx);
+                    snapDy = ny - (startGrp.y + d.dy);
+                }
+
+                // Move all selected assets
+                for (const [aid, sp] of bulk.assets) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (!el) continue;
-                    const sz = getIconSize(el);
-                    const nx = clampX(sp.x + d.dx + snapDx, sz);
-                    const ny = clampY(sp.y + d.dy + snapDy, sz);
-                    el.setAttribute('transform', `translate(${nx}, ${ny})`);
-                    el.dataset.x = nx;
-                    el.dataset.y = ny;
+                    const ax = r2(sp.x + d.dx + snapDx), ay = r2(sp.y + d.dy + snapDy);
+                    el.setAttribute('transform', `translate(${ax},${ay})`);
+                    el.dataset.x = ax; el.dataset.y = ay;
                 }
-            } else {
-                const sz = getIconSize(group);
-                const rawX = clampX(startPos.x + d.dx, sz);
-                const rawY = clampY(startPos.y + d.dy, sz);
-                const snapped = applySnap(inst, rawX, rawY, sz, new Set([assetId]));
-                renderGuideLines(inst, snapped.guides);
-                const nx = clampX(snapped.x, sz);
-                const ny = clampY(snapped.y, sz);
-                group.setAttribute('transform', `translate(${nx}, ${ny})`);
-                group.dataset.x = nx;
-                group.dataset.y = ny;
-            }
-        };
-
-        const onUp = (e) => {
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
-            clearGuideLines(inst);
-
-            if (!moved && inst.mode === 'multi' && !e.ctrlKey && !e.metaKey) {
-                selectOnly(inst, assetId);
-            }
-
-            if (moved && inst.dotNetRef) {
-                if (bulkStarts) {
-                    const positions = [];
-                    for (const [aid] of bulkStarts) {
+                // Move all selected groups + members
+                for (const [, gs] of bulk.groups) {
+                    const gnx = r2(gs.x + d.dx + snapDx), gny = r2(gs.y + d.dy + snapDy);
+                    updateGroupPos(gs.el, gnx, gny);
+                    for (const [aid, sp] of gs.members) {
                         const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                         if (!el) continue;
-                        positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                        const ax = r2(sp.x + d.dx + snapDx), ay = r2(sp.y + d.dy + snapDy);
+                        el.setAttribute('transform', `translate(${ax},${ay})`);
+                        el.dataset.x = ax; el.dataset.y = ay;
                     }
-                    inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
-                } else {
-                    inst.dotNetRef.invokeMethodAsync('OnAssetMoved', assetId,
-                        r2(parseFloat(group.dataset.x)), r2(parseFloat(group.dataset.y)));
                 }
-            }
-
-            startPt = null;
-            startPos = null;
-            bulkStarts = null;
-        };
-
-        group.addEventListener('pointerdown', onDown);
-        inst.handlers.push({ el: group, type: 'pointerdown', fn: onDown });
-    }
-
-    // ── 그룹 드래그 (단일 + 다중 그룹 이동) ──
-    function bindGroupDrag(inst, groupEl, groupId) {
-        const rect = groupEl.querySelector('rect:first-of-type');
-        if (!rect) return;
-
-        let startPt = null;
-        let startGrp = null;
-        let moved = false;
-        let memberStarts = null;
-        let bulkGroupStarts = null;
-
-        const onDown = (e) => {
-            if (e.target.classList.contains('ap-group-resize')) return;
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Ctrl+클릭: 그룹 선택 토글
-            if (inst.mode === 'multi' && (e.ctrlKey || e.metaKey)) {
-                toggleGroupSelect(inst, groupId, groupEl);
-                return;
-            }
-
-            startPt = { clientX: e.clientX, clientY: e.clientY };
-            startGrp = {
-                x: parseFloat(groupEl.dataset.x) || 0,
-                y: parseFloat(groupEl.dataset.y) || 0,
-            };
-            moved = false;
-
-            // 다중 모드에서 선택된 그룹 드래그 → 그룹끼리만 일괄 이동
-            const isSelected = inst.selectedGroupIds.has(groupId);
-            if (inst.mode === 'multi' && isSelected && inst.selectedGroupIds.size > 1) {
-                bulkGroupStarts = collectBulkGroupStarts(inst);
-            } else {
-                bulkGroupStarts = null;
-                memberStarts = collectGroupMemberStarts(inst, groupEl);
-            }
-
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', onUp);
-            groupEl.classList.add('dragging');
-            groupEl.setPointerCapture(e.pointerId);
-        };
-
-        const onMove = (e) => {
-            if (!startPt) return;
-            moved = true;
-            const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
-
-            // 기준 그룹 스냅
-            let nx = Math.max(0, startGrp.x + d.dx);
-            let ny = Math.max(0, startGrp.y + d.dy);
-            if (inst.snap.enabled) {
-                nx = snapToGrid(nx, inst.snap.gridSize);
-                ny = snapToGrid(ny, inst.snap.gridSize);
-            }
-            const snapDx = nx - (startGrp.x + d.dx);
-            const snapDy = ny - (startGrp.y + d.dy);
-
-            if (bulkGroupStarts) {
-                // 선택된 모든 그룹 + 멤버 일괄 이동
-                moveBulkGroups(inst, bulkGroupStarts, d, snapDx, snapDy);
-            } else {
-                // 단일 그룹 드래그
-                updateGroupPosition(groupEl, nx, ny);
-                if (memberStarts) {
-                    for (const [aid, sp] of memberStarts) {
+            },
+            onUp() {
+                if (!moved) {
+                    if (!isSelected) notifySelection(inst, [], [groupId]);
+                    return;
+                }
+                // Report all moved positions
+                const positions = [];
+                for (const [aid] of bulk.assets) {
+                    const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                    if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                }
+                for (const [gid, gs] of bulk.groups) {
+                    inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
+                        r2(parseFloat(gs.el.dataset.x)), r2(parseFloat(gs.el.dataset.y)),
+                        r2(parseFloat(gs.el.dataset.w)), r2(parseFloat(gs.el.dataset.h)));
+                    for (const [aid] of gs.members) {
                         const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                        if (!el) continue;
-                        const sz = getIconSize(el);
-                        const ax = clampX(sp.x + d.dx + snapDx, sz);
-                        const ay = clampY(sp.y + d.dy + snapDy, sz);
-                        el.setAttribute('transform', `translate(${ax}, ${ay})`);
-                        el.dataset.x = ax;
-                        el.dataset.y = ay;
+                        if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
                     }
                 }
+                if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
             }
         };
+    }
 
-        const onUp = () => {
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
-            groupEl.classList.remove('dragging');
+    // ════════════════ Group Resize ════════════════
 
-            if (!moved && inst.mode === 'multi') {
-                selectGroupOnly(inst, groupId);
-            }
+    function startGroupResize(inst, e, groupEl) {
+        const groupId = parseInt(groupEl.dataset.groupId);
+        const startClient = { x: e.clientX, y: e.clientY };
+        const startSize = { w: parseFloat(groupEl.dataset.w) || 150, h: parseFloat(groupEl.dataset.h) || 100 };
 
-            if (moved && startPt && inst.dotNetRef) {
-                if (bulkGroupStarts) {
-                    // 모든 선택된 그룹 위치 보고
-                    const positions = [];
-                    for (const [gid, gsp] of bulkGroupStarts) {
-                        inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
-                            r2(parseFloat(gsp.el.dataset.x)),
-                            r2(parseFloat(gsp.el.dataset.y)),
-                            r2(parseFloat(gsp.el.dataset.w)),
-                            r2(parseFloat(gsp.el.dataset.h)));
-                        for (const [aid] of gsp.members) {
-                            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                            if (!el) continue;
-                            positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
-                        }
-                    }
-                    if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
-                } else {
-                    inst.dotNetRef.invokeMethodAsync('OnGroupMoved', groupId,
-                        r2(parseFloat(groupEl.dataset.x)),
-                        r2(parseFloat(groupEl.dataset.y)),
-                        r2(parseFloat(groupEl.dataset.w)),
-                        r2(parseFloat(groupEl.dataset.h)));
-                    if (memberStarts) {
-                        const positions = [];
-                        for (const [aid] of memberStarts) {
-                            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                            if (!el) continue;
-                            positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
-                        }
-                        if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions);
-                    }
+        return {
+            onMove(ev) {
+                const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
+                let nw = Math.max(40, startSize.w + d.dx);
+                let nh = Math.max(30, startSize.h + d.dy);
+                if (inst.snap.enabled) {
+                    nw = snapToGrid(nw, inst.snap.gridSize);
+                    nh = snapToGrid(nh, inst.snap.gridSize);
                 }
+                updateGroupSize(groupEl, nw, nh);
+            },
+            onUp() {
+                const gx = r2(parseFloat(groupEl.dataset.x));
+                const gy = r2(parseFloat(groupEl.dataset.y));
+                const gw = r2(parseFloat(groupEl.dataset.w));
+                const gh = r2(parseFloat(groupEl.dataset.h));
+                inst.dotNetRef.invokeMethodAsync('OnGroupMoved', groupId, gx, gy, gw, gh);
             }
-
-            startPt = null;
-            startGrp = null;
-            moved = false;
-            memberStarts = null;
-            bulkGroupStarts = null;
         };
-
-        rect.addEventListener('pointerdown', onDown);
-        inst.handlers.push({ el: rect, type: 'pointerdown', fn: onDown });
     }
 
-    // ── 그룹 리사이즈 ──
-    function bindGroupResize(inst, groupEl, handle, groupId) {
-        let startPt = null;
-        let startSize = null;
+    // ════════════════ Group helpers ════════════════
 
-        const onDown = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            startPt = { clientX: e.clientX, clientY: e.clientY };
-            startSize = {
-                w: parseFloat(groupEl.dataset.w) || 150,
-                h: parseFloat(groupEl.dataset.h) || 100,
-            };
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', onUp);
-            handle.setPointerCapture(e.pointerId);
-        };
-
-        const onMove = (e) => {
-            if (!startPt) return;
-            const d = clientDelta(inst, e.clientX - startPt.clientX, e.clientY - startPt.clientY);
-            let nw = Math.max(30, startSize.w + d.dx);
-            let nh = Math.max(20, startSize.h + d.dy);
-
-            // 크기에 그리드 스냅 적용
-            if (inst.snap.enabled) {
-                nw = snapToGrid(nw, inst.snap.gridSize);
-                nh = snapToGrid(nh, inst.snap.gridSize);
-                nw = Math.max(30, nw);
-                nh = Math.max(20, nh);
-            }
-
-            updateGroupSize(groupEl, nw, nh);
-        };
-
-        const onUp = () => {
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
-            if (startPt && inst.dotNetRef) {
-                inst.dotNetRef.invokeMethodAsync('OnGroupMoved', groupId,
-                    r2(parseFloat(groupEl.dataset.x)),
-                    r2(parseFloat(groupEl.dataset.y)),
-                    r2(parseFloat(groupEl.dataset.w)),
-                    r2(parseFloat(groupEl.dataset.h)));
-            }
-            startPt = null;
-        };
-
-        handle.addEventListener('pointerdown', onDown);
-        inst.handlers.push({ el: handle, type: 'pointerdown', fn: onDown });
-    }
-
-    // ── 올가미 선택 ──
-    function bindLasso(inst) {
-        let startSvg = null;
-        let lassoRect = null;
-
-        const onDown = (e) => {
-            // 자산이나 그룹 위에서 시작하면 무시
-            if (inst.mode !== 'multi') return;
-            if (e.target.closest('.ap-asset-icon') || e.target.closest('.ap-group-container')) return;
-
-            e.preventDefault();
-            startSvg = clientToSvg(inst, e.clientX, e.clientY);
-
-            // 올가미 rect 생성
-            lassoRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            lassoRect.classList.add('ap-lasso-rect');
-            lassoRect.setAttribute('x', startSvg.x);
-            lassoRect.setAttribute('y', startSvg.y);
-            lassoRect.setAttribute('width', 0);
-            lassoRect.setAttribute('height', 0);
-            inst.svg.appendChild(lassoRect);
-
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', onUp);
-        };
-
-        const onMove = (e) => {
-            if (!startSvg || !lassoRect) return;
-            const cur = clientToSvg(inst, e.clientX, e.clientY);
-            const x = Math.min(startSvg.x, cur.x);
-            const y = Math.min(startSvg.y, cur.y);
-            const w = Math.abs(cur.x - startSvg.x);
-            const h = Math.abs(cur.y - startSvg.y);
-            lassoRect.setAttribute('x', x);
-            lassoRect.setAttribute('y', y);
-            lassoRect.setAttribute('width', w);
-            lassoRect.setAttribute('height', h);
-        };
-
-        const onUp = (e) => {
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
-
-            if (startSvg && lassoRect) {
-                const cur = clientToSvg(inst, e.clientX, e.clientY);
-                const lx1 = Math.min(startSvg.x, cur.x);
-                const ly1 = Math.min(startSvg.y, cur.y);
-                const lx2 = Math.max(startSvg.x, cur.x);
-                const ly2 = Math.max(startSvg.y, cur.y);
-
-                // 올가미 범위에 중심이 포함된 자산 선택 (그룹은 Ctrl+클릭으로만)
-                if (lx2 - lx1 > 5 || ly2 - ly1 > 5) {
-                    inst.selectedIds.clear();
-                    inst.selectedGroupIds.clear();
-                    inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
-                        const sz = getIconSize(g);
-                        const ax = (parseFloat(g.dataset.x) || 0) + sz / 2;
-                        const ay = (parseFloat(g.dataset.y) || 0) + sz / 2;
-                        if (ax >= lx1 && ax <= lx2 && ay >= ly1 && ay <= ly2) {
-                            inst.selectedIds.add(parseInt(g.dataset.assetId));
-                        }
-                    });
-                    updateSelectionVisual(inst);
-                    updateGroupSelectionVisual(inst);
-                    notifySelection(inst);
-                }
-
-                lassoRect.remove();
-            }
-            startSvg = null;
-            lassoRect = null;
-        };
-
-        inst.svg.addEventListener('pointerdown', onDown);
-        inst.handlers.push({ el: inst.svg, type: 'pointerdown', fn: onDown });
-    }
-
-    // ── 선택 헬퍼 (자산과 그룹은 상호 배타) ──
-    function toggleSelect(inst, assetId, el) {
-        // 자산 선택 시 그룹 선택 해제
-        if (inst.selectedGroupIds.size > 0) {
-            inst.selectedGroupIds.clear();
-            updateGroupSelectionVisual(inst);
+    function updateGroupPos(el, x, y) {
+        el.dataset.x = x; el.dataset.y = y;
+        const rect = el.querySelector('rect:first-of-type');
+        if (rect) { rect.setAttribute('x', x); rect.setAttribute('y', y); }
+        const label = el.querySelector('.ap-group-label');
+        if (label) { label.setAttribute('x', x + 4); label.setAttribute('y', y - 4); }
+        const resize = el.querySelector('.ap-group-resize');
+        if (resize) {
+            const w = parseFloat(el.dataset.w) || 150, h = parseFloat(el.dataset.h) || 100;
+            resize.setAttribute('x', x + w - 8); resize.setAttribute('y', y + h - 8);
         }
-        if (inst.selectedIds.has(assetId)) {
-            inst.selectedIds.delete(assetId);
-            el.classList.remove('ap-selected');
-        } else {
-            inst.selectedIds.add(assetId);
-            el.classList.add('ap-selected');
+    }
+
+    function updateGroupSize(el, w, h) {
+        el.dataset.w = w; el.dataset.h = h;
+        const rect = el.querySelector('rect:first-of-type');
+        if (rect) { rect.setAttribute('width', w); rect.setAttribute('height', h); }
+        const resize = el.querySelector('.ap-group-resize');
+        if (resize) {
+            const x = parseFloat(el.dataset.x) || 0, y = parseFloat(el.dataset.y) || 0;
+            resize.setAttribute('x', x + w - 8); resize.setAttribute('y', y + h - 8);
         }
-        notifySelection(inst);
-    }
-
-    function toggleGroupSelect(inst, groupId, groupEl) {
-        // 그룹 선택 시 자산 선택 해제
-        if (inst.selectedIds.size > 0) {
-            inst.selectedIds.clear();
-            updateSelectionVisual(inst);
-        }
-        if (inst.selectedGroupIds.has(groupId)) {
-            inst.selectedGroupIds.delete(groupId);
-            groupEl.classList.remove('ap-group-selected');
-        } else {
-            inst.selectedGroupIds.add(groupId);
-            groupEl.classList.add('ap-group-selected');
-        }
-        notifySelection(inst);
-    }
-
-    function selectOnly(inst, assetId) {
-        inst.selectedIds.clear();
-        inst.selectedIds.add(assetId);
-        inst.selectedGroupIds.clear();
-        updateSelectionVisual(inst);
-        updateGroupSelectionVisual(inst);
-        notifySelection(inst);
-    }
-
-    function selectGroupOnly(inst, groupId) {
-        inst.selectedIds.clear();
-        inst.selectedGroupIds.clear();
-        inst.selectedGroupIds.add(groupId);
-        updateSelectionVisual(inst);
-        updateGroupSelectionVisual(inst);
-        notifySelection(inst);
-    }
-
-    function notifySelection(inst) {
-        if (!inst.dotNetRef) return;
-        inst.dotNetRef.invokeMethodAsync('OnSelectionChanged', [...inst.selectedIds]);
-        inst.dotNetRef.invokeMethodAsync('OnGroupSelectionChanged', [...inst.selectedGroupIds]);
-    }
-
-    function updateSelectionVisual(inst) {
-        inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
-            const aid = parseInt(g.dataset.assetId);
-            g.classList.toggle('ap-selected', inst.selectedIds.has(aid));
-        });
-    }
-
-    function updateGroupSelectionVisual(inst) {
-        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
-            const gid = parseInt(g.dataset.groupId);
-            g.classList.toggle('ap-group-selected', inst.selectedGroupIds.has(gid));
-        });
-    }
-
-    function collectBulkStarts(inst) {
-        const map = new Map();
-        for (const aid of inst.selectedIds) {
-            const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-            if (el) map.set(aid, { x: parseFloat(el.dataset.x) || 0, y: parseFloat(el.dataset.y) || 0 });
-        }
-        return map;
     }
 
     function collectGroupMemberStarts(inst, groupEl) {
         const map = new Map();
-        const members = groupEl.dataset.members;
-        if (!members) return map;
+        const members = groupEl.dataset.members || '';
         members.split(',').forEach(s => {
             const aid = parseInt(s);
             if (isNaN(aid)) return;
@@ -523,249 +547,358 @@ window.assetPlacementEditor = (() => {
         return map;
     }
 
-    // ── 그룹 포함 벌크 이동 헬퍼 ──
-    function collectBulkGroupStarts(inst) {
+    // ════════════════ Group drop detection ════════════════
+
+    function highlightGroupUnderPoint(inst, px, py) {
+        clearGroupHighlight(inst);
+        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            const gx = parseFloat(g.dataset.x) || 0, gy = parseFloat(g.dataset.y) || 0;
+            const gw = parseFloat(g.dataset.w) || 0, gh = parseFloat(g.dataset.h) || 0;
+            if (px >= gx && px <= gx + gw && py >= gy && py <= gy + gh)
+                g.classList.add('ap-group-drop-target');
+        });
+    }
+
+    function clearGroupHighlight(inst) {
+        inst.svg.querySelectorAll('.ap-group-drop-target').forEach(g => g.classList.remove('ap-group-drop-target'));
+    }
+
+    function handleGroupDrop(inst, assetId, cx, cy) {
+        // Find current group
+        let prevGroupId = null;
+        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            const members = (g.dataset.members || '').split(',').map(Number);
+            if (members.includes(assetId)) prevGroupId = parseInt(g.dataset.groupId);
+        });
+
+        let droppedGroupId = null;
+        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            const gx = parseFloat(g.dataset.x) || 0, gy = parseFloat(g.dataset.y) || 0;
+            const gw = parseFloat(g.dataset.w) || 0, gh = parseFloat(g.dataset.h) || 0;
+            if (cx >= gx && cx <= gx + gw && cy >= gy && cy <= gy + gh)
+                droppedGroupId = parseInt(g.dataset.groupId);
+        });
+
+        if (droppedGroupId !== null && droppedGroupId !== prevGroupId)
+            inst.dotNetRef.invokeMethodAsync('OnAssetDroppedOnGroup', assetId, droppedGroupId);
+        else if (droppedGroupId === null && prevGroupId !== null)
+            inst.dotNetRef.invokeMethodAsync('OnAssetRemovedFromGroup', assetId, prevGroupId);
+    }
+
+    // ════════════════ Selection ════════════════
+
+    function notifySelection(inst, assetIds, groupIds) {
+        inst.dotNetRef.invokeMethodAsync('OnSelectionChanged', assetIds, groupIds);
+    }
+
+    function collectBulkStarts(inst) {
         const map = new Map();
-        for (const gid of inst.selectedGroupIds) {
-            const gel = inst.svg.querySelector(`.ap-group-container[data-group-id="${gid}"]`);
-            if (!gel) continue;
-            map.set(gid, {
-                x: parseFloat(gel.dataset.x) || 0,
-                y: parseFloat(gel.dataset.y) || 0,
-                el: gel,
-                members: collectGroupMemberStarts(inst, gel),
-            });
-        }
+        inst.svg.querySelectorAll('.ap-asset-icon.ap-selected').forEach(g => {
+            const aid = parseInt(g.dataset.assetId);
+            map.set(aid, { x: parseFloat(g.dataset.x) || 0, y: parseFloat(g.dataset.y) || 0 });
+        });
         return map;
     }
 
-    // 선택된 그룹들과 멤버 자산 일괄 이동
-    function moveBulkGroups(inst, groupStarts, d, snapDx, snapDy) {
-        if (!groupStarts) return;
-        for (const [, gsp] of groupStarts) {
-            const gnx = Math.max(0, gsp.x + d.dx + snapDx);
-            const gny = Math.max(0, gsp.y + d.dy + snapDy);
-            updateGroupPosition(gsp.el, gnx, gny);
-            for (const [aid, asp] of gsp.members) {
-                const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
-                if (!el) continue;
-                const sz = getIconSize(el);
-                const ax = clampX(asp.x + d.dx + snapDx, sz);
-                const ay = clampY(asp.y + d.dy + snapDy, sz);
-                el.setAttribute('transform', `translate(${ax}, ${ay})`);
-                el.dataset.x = ax;
-                el.dataset.y = ay;
-            }
-        }
-    }
+    // ════════════════ Snap ════════════════
 
-    // ── 그룹 위치/크기 업데이트 ──
-    function updateGroupPosition(groupEl, x, y) {
-        groupEl.dataset.x = x;
-        groupEl.dataset.y = y;
-        const rect = groupEl.querySelector('rect:first-of-type');
-        if (rect) { rect.setAttribute('x', x); rect.setAttribute('y', y); }
-        const label = groupEl.querySelector('.ap-group-label');
-        if (label) { label.setAttribute('x', x + 4); label.setAttribute('y', y - 4); }
-        const resize = groupEl.querySelector('.ap-group-resize');
-        if (resize) {
-            const w = parseFloat(groupEl.dataset.w) || 150;
-            const h = parseFloat(groupEl.dataset.h) || 100;
-            resize.setAttribute('x', x + w - 8);
-            resize.setAttribute('y', y + h - 8);
-        }
-    }
+    function getIconSize(el) { return 32 * (parseFloat(el.dataset.scale) || 1.0); }
 
-    function updateGroupSize(groupEl, w, h) {
-        groupEl.dataset.w = w;
-        groupEl.dataset.h = h;
-        const rect = groupEl.querySelector('rect:first-of-type');
-        if (rect) { rect.setAttribute('width', w); rect.setAttribute('height', h); }
-        const resize = groupEl.querySelector('.ap-group-resize');
-        if (resize) {
-            const x = parseFloat(groupEl.dataset.x) || 0;
-            const y = parseFloat(groupEl.dataset.y) || 0;
-            resize.setAttribute('x', x + w - 8);
-            resize.setAttribute('y', y + h - 8);
-        }
-    }
-
-    function clampX(v, sz) { return Math.max(0, Math.min(VB_W - (sz || ICON_SIZE), v)); }
-    function clampY(v, sz) { return Math.max(0, Math.min(VB_H - (sz || ICON_SIZE), v)); }
-
-    // ── 스냅 유틸 ──
-    function snapToGrid(v, gridSize) {
-        return Math.round(v / gridSize) * gridSize;
-    }
-
-    function collectNeighborEdges(inst, excludeIds) {
-        const edges = [];
-        inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
-            const aid = parseInt(g.dataset.assetId);
-            if (excludeIds.has(aid)) return;
-            const x = parseFloat(g.dataset.x) || 0;
-            const y = parseFloat(g.dataset.y) || 0;
-            const sz = getIconSize(g);
-            edges.push({ x, y, w: sz, h: sz });
-        });
-        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
-            const x = parseFloat(g.dataset.x) || 0;
-            const y = parseFloat(g.dataset.y) || 0;
-            const w = parseFloat(g.dataset.w) || 150;
-            const h = parseFloat(g.dataset.h) || 100;
-            edges.push({ x, y, w, h });
-        });
-        return edges;
-    }
+    function snapToGrid(v, gs) { return Math.round(v / gs) * gs; }
 
     function applySnap(inst, x, y, sz, excludeIds) {
         if (!inst.snap.enabled) return { x, y, guides: [] };
-        const gs = inst.snap.gridSize;
-        const thr = inst.snap.neighborThreshold;
-        let sx = snapToGrid(x, gs);
-        let sy = snapToGrid(y, gs);
+        const gs = inst.snap.gridSize, thr = inst.snap.neighborThreshold;
+        let sx = snapToGrid(x, gs), sy = snapToGrid(y, gs);
         const guides = [];
 
-        // 이웃 스냅 (그리드 스냅보다 우선)
-        const neighbors = collectNeighborEdges(inst, excludeIds);
-        const myEdges = { left: x, right: x + sz, cx: x + sz / 2, top: y, bottom: y + sz, cy: y + sz / 2 };
+        // Neighbor snap
+        const neighbors = [];
+        inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
+            const aid = parseInt(g.dataset.assetId);
+            if (excludeIds instanceof Set ? excludeIds.has(aid) : excludeIds.has?.(aid)) return;
+            const nx = parseFloat(g.dataset.x) || 0, ny = parseFloat(g.dataset.y) || 0;
+            const nsz = getIconSize(g);
+            neighbors.push({ x: nx, y: ny, w: nsz, h: nsz });
+        });
+        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            neighbors.push({
+                x: parseFloat(g.dataset.x) || 0, y: parseFloat(g.dataset.y) || 0,
+                w: parseFloat(g.dataset.w) || 0, h: parseFloat(g.dataset.h) || 0
+            });
+        });
 
         let bestDx = thr + 1, bestDy = thr + 1;
-        let snapX = null, snapY = null;
-        let guideX = null, guideY = null;
+        let snapX = null, snapY = null, guideX = null, guideY = null;
+        const myEdges = { left: x, right: x + sz, cx: x + sz / 2, top: y, bottom: y + sz, cy: y + sz / 2 };
 
         for (const n of neighbors) {
-            const nEdges = [n.x, n.x + n.w, n.x + n.w / 2]; // left, right, center
-            const nYEdges = [n.y, n.y + n.h, n.y + n.h / 2];
-
-            // X축 스냅
-            for (const ne of nEdges) {
+            for (const ne of [n.x, n.x + n.w, n.x + n.w / 2]) {
                 for (const me of [myEdges.left, myEdges.right, myEdges.cx]) {
                     const diff = Math.abs(me - ne);
-                    if (diff < bestDx) {
-                        bestDx = diff;
-                        snapX = x + (ne - me);
-                        guideX = ne;
-                    }
+                    if (diff < bestDx) { bestDx = diff; snapX = x + (ne - me); guideX = ne; }
                 }
             }
-            // Y축 스냅
-            for (const ne of nYEdges) {
+            for (const ne of [n.y, n.y + n.h, n.y + n.h / 2]) {
                 for (const me of [myEdges.top, myEdges.bottom, myEdges.cy]) {
                     const diff = Math.abs(me - ne);
-                    if (diff < bestDy) {
-                        bestDy = diff;
-                        snapY = y + (ne - me);
-                        guideY = ne;
-                    }
+                    if (diff < bestDy) { bestDy = diff; snapY = y + (ne - me); guideY = ne; }
                 }
             }
         }
 
         if (bestDx <= thr && snapX !== null) {
             sx = snapX;
-            guides.push({ x1: guideX, y1: 0, x2: guideX, y2: VB_H });
+            guides.push({ x1: guideX, y1: 0, x2: guideX, y2: ORIG_H });
         }
         if (bestDy <= thr && snapY !== null) {
             sy = snapY;
-            guides.push({ x1: 0, y1: guideY, x2: VB_W, y2: guideY });
+            guides.push({ x1: 0, y1: guideY, x2: ORIG_W, y2: guideY });
         }
 
-        return { x: sx, y: sy, guides };
+        return { x: r2(sx), y: r2(sy), guides };
     }
 
     function renderGuideLines(inst, guides) {
         clearGuideLines(inst);
         for (const g of guides) {
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            const line = document.createElementNS(SVG_NS, 'line');
             line.classList.add('ap-snap-guide');
-            line.setAttribute('x1', g.x1);
-            line.setAttribute('y1', g.y1);
-            line.setAttribute('x2', g.x2);
-            line.setAttribute('y2', g.y2);
+            line.setAttribute('x1', g.x1); line.setAttribute('y1', g.y1);
+            line.setAttribute('x2', g.x2); line.setAttribute('y2', g.y2);
             inst.svg.appendChild(line);
-            inst.guideLines.push(line);
+            inst._guideLines.push(line);
         }
     }
 
     function clearGuideLines(inst) {
-        for (const l of inst.guideLines) l.remove();
-        inst.guideLines.length = 0;
+        inst._guideLines.forEach(l => l.remove());
+        inst._guideLines.length = 0;
     }
 
-    // ── 외부 API ──
-    function setMode(containerId, mode) {
+    // ════════════════ MutationObserver ════════════════
+
+    function bindExistingElements(inst) {
+        // No per-element binding needed — all handled via delegation in bindSvgPointer
+    }
+
+    function startObserver(inst) {
+        // The event delegation model means no per-element binding is needed.
+        // The observer is kept minimal — only used to ensure consistency.
+        inst._observer = new MutationObserver(() => {
+            // Future: could update spatial index here
+        });
+        inst._observer.observe(inst.svg, { childList: true, subtree: false });
+    }
+
+    // ════════════════ Grid Preview ════════════════
+
+    function showGridPreview(containerId, cols, rows, cellW, cellH, names) {
         const inst = _inst[containerId];
-        if (inst) {
-            inst.mode = mode;
-            if (mode === 'single') {
-                inst.selectedIds.clear();
-                inst.selectedGroupIds.clear();
-                updateSelectionVisual(inst);
-                updateGroupSelectionVisual(inst);
+        if (!inst) return;
+        hideGridPreview(containerId);
+
+        const center = getViewCenter(inst);
+        const totalW = cols * cellW, totalH = rows * cellH;
+        let ox = r2(center.x - totalW / 2), oy = r2(center.y - totalH / 2);
+
+        const g = document.createElementNS(SVG_NS, 'g');
+        g.classList.add('ap-grid-preview');
+
+        // Background
+        const bg = document.createElementNS(SVG_NS, 'rect');
+        bg.setAttribute('x', ox); bg.setAttribute('y', oy);
+        bg.setAttribute('width', totalW); bg.setAttribute('height', totalH);
+        bg.setAttribute('rx', 6);
+        bg.setAttribute('fill', 'rgba(76,175,80,0.08)');
+        bg.setAttribute('stroke', '#4caf50');
+        bg.setAttribute('stroke-width', 1.5);
+        bg.setAttribute('stroke-dasharray', '6 3');
+        g.appendChild(bg);
+
+        // Cells
+        const count = names.length;
+        for (let i = 0; i < count; i++) {
+            const col = i % cols, row = Math.floor(i / cols);
+            const cx = ox + col * cellW, cy = oy + row * cellH;
+            const cell = document.createElementNS(SVG_NS, 'rect');
+            cell.setAttribute('x', cx + 2); cell.setAttribute('y', cy + 2);
+            cell.setAttribute('width', cellW - 4); cell.setAttribute('height', cellH - 4);
+            cell.setAttribute('rx', 3); cell.setAttribute('fill', 'rgba(255,255,255,0.6)');
+            cell.setAttribute('stroke', '#ccc'); cell.setAttribute('stroke-width', 0.5);
+            g.appendChild(cell);
+            const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('x', cx + cellW / 2); label.setAttribute('y', cy + cellH / 2 + 3);
+            label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', 7);
+            label.setAttribute('fill', '#666');
+            label.textContent = names[i] || '';
+            g.appendChild(label);
+        }
+
+        inst.svg.appendChild(g);
+        inst._gridPreview = { g, ox, oy, totalW, totalH };
+
+        // Drag the preview
+        let dragStart = null, dragOx, dragOy;
+        const onDown = (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault(); e.stopPropagation();
+            dragStart = clientToSvg(inst, e.clientX, e.clientY);
+            dragOx = inst._gridPreview.ox; dragOy = inst._gridPreview.oy;
+            document.addEventListener('pointermove', onDragMove);
+            document.addEventListener('pointerup', onDragUp);
+        };
+        const onDragMove = (e) => {
+            if (!dragStart) return;
+            const cur = clientToSvg(inst, e.clientX, e.clientY);
+            let nx = r2(dragOx + cur.x - dragStart.x);
+            let ny = r2(dragOy + cur.y - dragStart.y);
+            if (inst.snap.enabled) { nx = snapToGrid(nx, inst.snap.gridSize); ny = snapToGrid(ny, inst.snap.gridSize); }
+            inst._gridPreview.ox = nx; inst._gridPreview.oy = ny;
+            repositionGridPreview(inst);
+        };
+        const onDragUp = () => {
+            dragStart = null;
+            document.removeEventListener('pointermove', onDragMove);
+            document.removeEventListener('pointerup', onDragUp);
+        };
+        g.addEventListener('pointerdown', onDown);
+
+        // Double-click or Enter to confirm
+        const onDblClick = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            confirmGridPreview(inst, containerId);
+        };
+        g.addEventListener('dblclick', onDblClick);
+
+        inst._gridKeyHandler = (e) => {
+            if (e.key === 'Enter') confirmGridPreview(inst, containerId);
+            else if (e.key === 'Escape') hideGridPreview(containerId);
+        };
+        document.addEventListener('keydown', inst._gridKeyHandler);
+    }
+
+    function repositionGridPreview(inst) {
+        if (!inst._gridPreview) return;
+        const { g, ox, oy, totalW, totalH } = inst._gridPreview;
+        const bg = g.querySelector('rect');
+        if (bg) { bg.setAttribute('x', ox); bg.setAttribute('y', oy); }
+
+        const rects = g.querySelectorAll('rect');
+        const texts = g.querySelectorAll('text');
+        // Recompute from ox/oy — count cells from child elements
+        const cellCount = texts.length;
+        if (cellCount === 0) return;
+        const cols = Math.round(totalW / ((rects.length > 1 ? parseFloat(rects[1].getAttribute('width')) + 4 : totalW)));
+        // Simpler: just reposition all children relative to ox/oy
+        let idx = 0;
+        for (let i = 1; i < rects.length; i++) { // skip background rect
+            const cellW = parseFloat(rects[i].getAttribute('width')) + 4;
+            const cellH = parseFloat(rects[i].getAttribute('height')) + 4;
+            const realCols = Math.round(totalW / cellW);
+            const col = (i - 1) % realCols, row = Math.floor((i - 1) / realCols);
+            rects[i].setAttribute('x', ox + col * cellW + 2);
+            rects[i].setAttribute('y', oy + row * cellH + 2);
+            if (texts[i - 1]) {
+                texts[i - 1].setAttribute('x', ox + col * cellW + cellW / 2);
+                texts[i - 1].setAttribute('y', oy + row * cellH + cellH / 2 + 3);
             }
         }
     }
 
-    function clearSelection(containerId) {
+    function confirmGridPreview(inst, containerId) {
+        if (!inst._gridPreview) return;
+        const { ox, oy } = inst._gridPreview;
+        inst.dotNetRef.invokeMethodAsync('OnGridPlaceConfirmed', r2(ox), r2(oy));
+        hideGridPreview(containerId);
+    }
+
+    function hideGridPreview(containerId) {
         const inst = _inst[containerId];
-        if (inst) {
-            inst.selectedIds.clear();
-            inst.selectedGroupIds.clear();
-            updateSelectionVisual(inst);
-            updateGroupSelectionVisual(inst);
+        if (!inst) return;
+        if (inst._gridPreview) {
+            inst._gridPreview.g.remove();
+            inst._gridPreview = null;
+        }
+        if (inst._gridKeyHandler) {
+            document.removeEventListener('keydown', inst._gridKeyHandler);
+            inst._gridKeyHandler = null;
         }
     }
 
-    function getPositions(containerId) {
-        const container = document.getElementById(containerId);
-        if (!container) return [];
-        const svg = container.querySelector('svg');
-        if (!svg) return [];
+    // ════════════════ Public API ════════════════
 
-        const result = [];
-        svg.querySelectorAll('.ap-asset-icon').forEach(g => {
-            const assetId = parseInt(g.dataset.assetId);
-            if (isNaN(assetId)) return;
-            result.push({ assetId, x: r2(parseFloat(g.dataset.x || 0)), y: r2(parseFloat(g.dataset.y || 0)) });
-        });
-        return result;
-    }
-
-    function getGroupPositions(containerId) {
-        const container = document.getElementById(containerId);
-        if (!container) return [];
-        const svg = container.querySelector('svg');
-        if (!svg) return [];
-
-        const result = [];
-        svg.querySelectorAll('.ap-group-container').forEach(g => {
-            const groupId = parseInt(g.dataset.groupId);
-            if (isNaN(groupId)) return;
-            result.push({
-                groupId,
-                x: r2(parseFloat(g.dataset.x || 0)),
-                y: r2(parseFloat(g.dataset.y || 0)),
-                w: r2(parseFloat(g.dataset.w || 150)),
-                h: r2(parseFloat(g.dataset.h || 100)),
-            });
-        });
-        return result;
-    }
-
-    function setSnapEnabled(containerId, enabled) {
+    function setTool(containerId, tool) {
         const inst = _inst[containerId];
-        if (inst) inst.snap.enabled = !!enabled;
+        if (inst) {
+            inst.tool = tool;
+            inst.svg.style.cursor = tool === 'pan' ? 'grab' : '';
+        }
     }
 
-    function dispose(containerId) {
+    function setSnapConfig(containerId, enabled, gridSize) {
+        const inst = _inst[containerId];
+        if (inst) {
+            inst.snap.enabled = !!enabled;
+            if (gridSize > 0) inst.snap.gridSize = gridSize;
+        }
+    }
+
+    function zoomIn(containerId) {
         const inst = _inst[containerId];
         if (!inst) return;
-        clearGuideLines(inst);
-        inst.handlers.forEach(({ el, type, fn }) => el.removeEventListener(type, fn));
-        inst.handlers.length = 0;
-        delete _inst[containerId];
+        const r = inst.svg.getBoundingClientRect();
+        zoomByFactor(inst, 1.2, r.left + r.width / 2, r.top + r.height / 2);
     }
 
-    return { init, getPositions, getGroupPositions, dispose, setMode, clearSelection, setSnapEnabled };
+    function zoomOut(containerId) {
+        const inst = _inst[containerId];
+        if (!inst) return;
+        const r = inst.svg.getBoundingClientRect();
+        zoomByFactor(inst, 1 / 1.2, r.left + r.width / 2, r.top + r.height / 2);
+    }
+
+    function resetZoom(containerId) {
+        const inst = _inst[containerId];
+        if (!inst) return;
+        inst.viewBox = { x: 0, y: 0, w: ORIG_W, h: ORIG_H };
+        inst.zoom = 1;
+        applyViewBox(inst);
+    }
+
+    function fitAll(containerId) {
+        const inst = _inst[containerId];
+        if (!inst) return;
+        // Compute bounding box of all elements
+        let minX = ORIG_W, minY = ORIG_H, maxX = 0, maxY = 0;
+        inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
+            const x = parseFloat(g.dataset.x) || 0, y = parseFloat(g.dataset.y) || 0;
+            const sz = getIconSize(g);
+            minX = Math.min(minX, x); minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + sz); maxY = Math.max(maxY, y + sz);
+        });
+        inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            const x = parseFloat(g.dataset.x) || 0, y = parseFloat(g.dataset.y) || 0;
+            const w = parseFloat(g.dataset.w) || 0, h = parseFloat(g.dataset.h) || 0;
+            minX = Math.min(minX, x); minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+        });
+        if (maxX <= minX || maxY <= minY) { resetZoom(containerId); return; }
+        const pad = 40;
+        inst.viewBox = { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
+        inst.zoom = ORIG_W / inst.viewBox.w;
+        applyViewBox(inst);
+    }
+
+    function getZoomLevel(containerId) {
+        const inst = _inst[containerId];
+        return inst ? Math.round(inst.zoom * 100) : 100;
+    }
+
+    return {
+        init, dispose,
+        setTool, setSnapConfig,
+        zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel,
+        showGridPreview, hideGridPreview,
+    };
 })();
