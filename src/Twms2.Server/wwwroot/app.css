@@ -3146,3 +3146,28 @@ a.dash-link-row:hover { text-decoration: underline; }
 .ap-grid-preview:hover {
     opacity: 1;
 }
+
+/* ── 선택 바운딩박스 + 리사이즈 핸들 ── */
+.ap-sel-bbox {
+    pointer-events: none;
+}
+.ap-sel-outline {
+    pointer-events: none;
+}
+.ap-sel-handle {
+    pointer-events: all;
+    transition: fill 0.1s;
+}
+.ap-sel-handle:hover {
+    fill: #2196F3;
+    stroke: white;
+}
+
+/* ── 검색 하이라이트 깜빡임 ── */
+@keyframes ap-flash-anim {
+    0%, 100% { filter: none; }
+    25%, 75% { filter: drop-shadow(0 0 8px #2196F3) drop-shadow(0 0 16px #2196F3); }
+}
+.ap-flash {
+    animation: ap-flash-anim 0.6s ease 2;
+}

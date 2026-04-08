@@ -235,6 +235,23 @@
                     필요하면 먼저 레이아웃을 복제하세요.
                 </MudAlert>
 
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudSelect T="int" @bind-Value="_bulkLayoutId"
+                               Margin="Margin.Dense" Dense="true" Variant="Variant.Outlined"
+                               Style="max-width:220px;">
+                        <MudSelectItem T="int" Value="0">— 건너뛰기 —</MudSelectItem>
+                        @foreach (var lay in _layouts)
+                        {
+                            <MudSelectItem T="int" Value="lay.Id">@lay.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.SelectAll"
+                               OnClick="ApplyBulkMapping">
+                        일괄 적용
+                    </MudButton>
+                </MudStack>
+
                 <MudTable Items="_previewLines" Dense="true" Hover="true" Class="mb-4"
                           Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default);">
                     <HeaderContent>
@@ -318,6 +335,7 @@
     private bool _posImporting;
     private List<DexaLinePreview>? _previewLines;
     private Dictionary<int, int> _lineMappings = new();
+    private int _bulkLayoutId;
     private DexaPositionImportResult? _posImportResult;
 
     protected override async Task OnInitializedAsync()
@@ -573,6 +591,12 @@
         {
             _posImporting = false;
         }
+    }
+
+    private void ApplyBulkMapping()
+    {
+        foreach (var key in _lineMappings.Keys.ToList())
+            _lineMappings[key] = _bulkLayoutId;
     }
 
     private async Task RunPositionImportAsync()

@@ -107,7 +107,7 @@
                 var imgSz = 28 * s;
                 var imgOff = 4 * s;
                 var dr = Math.Max(1.5, sz * 0.12);
-                <g transform="translate(@F(pos.X), @F(pos.Y))" class="apv-asset-icon"
+                <g transform="translate(@F(pos.X - sz / 2), @F(pos.Y - sz / 2))" class="apv-asset-icon"
                    @onclick="() => NavigateToAsset(asset.AssetId)"
                    @onclick:stopPropagation="true" style="cursor:pointer">
                     @(RenderSvgTitle(asset))

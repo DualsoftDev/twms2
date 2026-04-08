@@ -171,9 +171,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
         string sqliteFilePath, Dictionary<int, int> lineLayoutMap)
     {
         var result = new DexaPositionImportResult();
-        const double ICON_HALF = 16;
         const double VB_W = 1000, VB_H = 600;
-        const double ICON_SIZE = 32;
 
         try
         {
@@ -210,27 +208,28 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
             }
             SqliteConnection.ClearAllPools();
 
-            // 매핑된 라인만 처리
-            // DEXA 좌표는 SelfW×SelfH 논리 공간 → 정규화 후 실제 이미지 영역에 매핑
-            // SVG viewBox 0 0 1000 600 + preserveAspectRatio="xMidYMid meet"
-            var lineMap = new Dictionary<int, (int layoutId, double selfW, double selfH,
-                                               double imgAreaW, double imgAreaH,
-                                               double offsetX, double offsetY)>();
+            // ── 레이아웃별 변환 파라미터 계산 ──
+            // TWM1에서는 자산 좌표가 도면 이미지 픽셀 기준으로 기록됨.
+            // 각 라인의 SelfW/SelfH는 무시하고, 실제 도면 이미지 크기를 기준으로 변환.
+            // (도면 라인의 SelfW/SelfH == 이미지 크기, 나머지 라인은 다를 수 있음)
+            var layoutTransform = new Dictionary<int, (double imgW, double imgH,
+                                                       double imgAreaW, double imgAreaH,
+                                                       double offsetX, double offsetY)>();
 
+            // 매핑된 라인 → layoutId 역매핑 (어떤 라인이든 같은 layoutId면 같은 변환)
+            var lineToLayoutId = new Dictionary<int, int>();
             foreach (var line in lineRows)
             {
-                if (!lineLayoutMap.TryGetValue(line.Id, out var layoutId))
-                {
-                    result.Skipped++;
-                    continue;
-                }
-                if (line.SelfW <= 0 || line.SelfH <= 0) { result.Skipped++; continue; }
+                if (!lineLayoutMap.TryGetValue(line.Id, out var layoutId)) continue;
+                lineToLayoutId[line.Id] = layoutId;
 
-                // 실제 업로드된 이미지 크기를 읽어서 viewBox 내 영역 계산
+                if (layoutTransform.ContainsKey(layoutId)) continue;
+
+                // 실제 업로드된 이미지 크기 = 좌표 공간 기준
                 var (imgW, imgH) = await GetActualImageSizeAsync(layoutId);
                 if (imgW <= 0 || imgH <= 0)
                 {
-                    // 이미지 정보 없으면 SelfW/SelfH를 이미지 크기로 사용 (fallback)
+                    // fallback: 이 layoutId에 매핑된 라인 중 SelfW가 이미지와 일치하는 것 사용
                     (imgW, imgH) = (line.SelfW, line.SelfH);
                 }
 
@@ -241,7 +240,6 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
 
                 if (imgRatio > vbRatio)
                 {
-                    // 이미지가 더 넓음 → 가로에 맞춤
                     imgAreaW = VB_W;
                     imgAreaH = VB_W / imgRatio;
                     offsetX  = 0;
@@ -249,15 +247,13 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                 }
                 else
                 {
-                    // 이미지가 더 좁음 → 세로에 맞춤
                     imgAreaH = VB_H;
                     imgAreaW = VB_H * imgRatio;
                     offsetX  = (VB_W - imgAreaW) / 2;
                     offsetY  = 0;
                 }
 
-                lineMap[line.Id] = (layoutId, line.SelfW, line.SelfH,
-                                    imgAreaW, imgAreaH, offsetX, offsetY);
+                layoutTransform[layoutId] = (imgW, imgH, imgAreaW, imgAreaH, offsetX, offsetY);
             }
 
             // assetPosRows 전용 lineId lookup (자산 배치용)
@@ -265,28 +261,29 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                 .Where(a => a.AugLineId.HasValue)
                 .ToDictionary(a => a.Id, a => a.AugLineId!.Value);
 
-            // ── 자산 위치 → TwmsAssetPosition (라인별 도면에 배치) ──
+            // ── 자산 위치 → TwmsAssetPosition (도면에 배치) ──
             var assetPositions = new List<TwmsAssetPosition>();
             foreach (var asset in assetPosRows)
             {
-                if (!asset.AugLineId.HasValue || !lineMap.TryGetValue(asset.AugLineId.Value, out var lr))
+                if (!asset.AugLineId.HasValue
+                    || !lineToLayoutId.TryGetValue(asset.AugLineId.Value, out var layoutId)
+                    || !layoutTransform.TryGetValue(layoutId, out var lt))
                 {
                     result.Skipped++;
                     continue;
                 }
 
-                // 정규화 변환: DEXA좌표/SelfW → [0,1] → 이미지 영역 in viewBox
-                var cx = (asset.AugLX / lr.selfW) * lr.imgAreaW + lr.offsetX;
-                var cy = (asset.AugLY / lr.selfH) * lr.imgAreaH + lr.offsetY;
-                var px = Math.Clamp(cx - ICON_HALF, 0, VB_W - ICON_SIZE);
-                var py = Math.Clamp(cy - ICON_HALF, 0, VB_H - ICON_SIZE);
+                // 좌표는 도면 이미지 픽셀 기준 → 이미지 크기로 정규화 → viewBox 매핑
+                // 중심 좌표를 그대로 저장 (앵커 = 중심)
+                var cx = (asset.AugLX / lt.imgW) * lt.imgAreaW + lt.offsetX;
+                var cy = (asset.AugLY / lt.imgH) * lt.imgAreaH + lt.offsetY;
 
                 assetPositions.Add(new TwmsAssetPosition
                 {
-                    LayoutId = lr.layoutId,
+                    LayoutId = layoutId,
                     AssetId  = asset.Id,
-                    X        = Math.Round(px, 2),
-                    Y        = Math.Round(py, 2),
+                    X        = Math.Round(cx, 2),
+                    Y        = Math.Round(cy, 2),
                     Scale    = 1.0,
                     Visible  = true,
                 });
@@ -297,7 +294,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
 
             // ── 그룹 → TwmsPlacementGroup + 멤버 ──
             // 매핑된 레이아웃들의 기존 그룹 삭제
-            foreach (var layoutId in lineLayoutMap.Values.Distinct())
+            foreach (var layoutId in lineToLayoutId.Values.Distinct())
                 await twmDb.DeleteAllPlacementGroupsAsync(layoutId);
 
             foreach (var grp in groupRows)
@@ -321,22 +318,23 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                     memberLineId = fallbackId;
 
                 if (!memberLineId.HasValue
-                    || !lineMap.TryGetValue(memberLineId.Value, out var glr))
+                    || !lineToLayoutId.TryGetValue(memberLineId.Value, out var grpLayoutId)
+                    || !layoutTransform.TryGetValue(grpLayoutId, out var glt))
                 {
                     result.Skipped++;
                     continue;
                 }
 
-                // 정규화 변환: DEXA좌표/SelfW → [0,1] → 이미지 영역 in viewBox
-                var gx = (grp.X / glr.selfW) * glr.imgAreaW + glr.offsetX;
-                var gy = (grp.Y / glr.selfH) * glr.imgAreaH + glr.offsetY;
-                var gw = (grp.W / glr.selfW) * glr.imgAreaW;
-                var gh = (grp.H / glr.selfH) * glr.imgAreaH;
+                // 좌표는 도면 이미지 픽셀 기준 → 이미지 크기로 정규화 → viewBox 매핑
+                var gx = (grp.X / glt.imgW) * glt.imgAreaW + glt.offsetX;
+                var gy = (grp.Y / glt.imgH) * glt.imgAreaH + glt.offsetY;
+                var gw = (grp.W / glt.imgW) * glt.imgAreaW;
+                var gh = (grp.H / glt.imgH) * glt.imgAreaH;
 
                 var floorLabel = grp.Floor.HasValue ? $"{grp.Floor}층" : "";
                 var newGroup = new TwmsPlacementGroup
                 {
-                    LayoutId = glr.layoutId,
+                    LayoutId = grpLayoutId,
                     Name     = floorLabel,
                     X        = Math.Round(Math.Clamp(gx, 0, VB_W), 2),
                     Y        = Math.Round(Math.Clamp(gy, 0, VB_H), 2),

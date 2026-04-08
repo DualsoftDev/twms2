@@ -35,6 +35,11 @@ else
         <MudIconButton Icon="@Icons.Material.Filled.CenterFocusWeak" Size="Size.Small" OnClick="ZoomReset" />
         <MudIconButton Icon="@Icons.Material.Filled.FitScreen" Size="Size.Small" OnClick="ZoomFit" />
         <MudDivider Vertical="true" FlexItem="true" />
+        <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
+                       Disabled="@(_undoStack.Count == 0)" OnClick="@(() => { Undo(); })" />
+        <MudIconButton Icon="@Icons.Material.Filled.Redo" Size="Size.Small"
+                       Disabled="@(_redoStack.Count == 0)" OnClick="@(() => { Redo(); })" />
+        <MudDivider Vertical="true" FlexItem="true" />
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="ml-2" Spacing="1">
             <MudIcon Icon="@Icons.Material.Filled.AspectRatio" Size="Size.Small" />
             <MudText Typo="Typo.caption">@($"{_globalScale:F1}x")</MudText>
@@ -60,9 +65,32 @@ else
                     <MudMenuItem OnClick="@(() => AlignSelected("grid"))">그리드 정렬</MudMenuItem>
                     <MudMenuItem OnClick="@(() => AlignSelected("row"))">가로 정렬</MudMenuItem>
                     <MudMenuItem OnClick="@(() => AlignSelected("col"))">세로 정렬</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem OnClick="@(() => DistributeSelected("h"))">가로 균등 분배</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => DistributeSelected("v"))">세로 균등 분배</MudMenuItem>
                 </MudMenu>
             }
+            <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small"
+                           Color="Color.Error" OnClick="UnplaceSelected" />
         }
+        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+            <MudMenuItem OnClick="ExportCsvAsync">CSV 내보내기</MudMenuItem>
+            <MudMenuItem OnClick="@(() => JS.InvokeVoidAsync("eval", "document.getElementById('ap-csv-import').click()"))">
+                CSV 가져오기
+            </MudMenuItem>
+            @if (_snapshots.Count > 0)
+            {
+                <MudDivider />
+                @foreach (var snap in _snapshots.Take(5))
+                {
+                    var s = snap;
+                    <MudMenuItem OnClick="@(() => RestoreLayoutSnapshot(s))">
+                        복원: @s.CreatedAt.ToString("MM/dd HH:mm")
+                    </MudMenuItem>
+                }
+            }
+        </MudMenu>
+        <InputFile id="ap-csv-import" OnChange="ImportCsvAsync" accept=".csv" style="display:none;" />
         @if (_hasChanges)
         {
             <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Text">변경됨</MudChip>
@@ -93,6 +121,28 @@ else
                 <MudSelectItem T="int?" Value="@((int?)-1)">미지정</MudSelectItem>
             </MudSelect>
 
+            @* 자동 그룹 + 캔버스 필터 *@
+            <MudStack Row="true" Spacing="1" Class="mb-2">
+                <MudMenu Label="자동 그룹" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
+                         StartIcon="@Icons.Material.Filled.AutoAwesome" Dense="true">
+                    <MudMenuItem OnClick="@(() => AutoGroupBy("line"))">라인별 자동 그룹</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => AutoGroupBy("type"))">타입별 자동 그룹</MudMenuItem>
+                </MudMenu>
+                <MudMenu Label="표시" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                         StartIcon="@Icons.Material.Filled.FilterAlt" Dense="true">
+                    <MudMenuItem OnClick="@(() => SetDisplayFilter(null))">
+                        @(_displayFilter == null ? "● " : "")전체 표시
+                    </MudMenuItem>
+                    @foreach (var typeName in _allAssets.Select(a => a.AssetTypeName).Where(t => t != null).Distinct().OrderBy(t => t))
+                    {
+                        var t = typeName!;
+                        <MudMenuItem OnClick="@(() => SetDisplayFilter(t))">
+                            @(_displayFilter == t ? "● " : "")@t 만
+                        </MudMenuItem>
+                    }
+                </MudMenu>
+            </MudStack>
+
             @* 미배치 자산 목록 *@
             <div class="ap-panel-section">
                 <div class="d-flex align-center gap-1 mb-1">
@@ -100,6 +150,12 @@ else
                         미배치 (@UnplacedAssets.Count)
                     </MudText>
                     <MudSpacer />
+                    @if (UnplacedAssets.Count > 0)
+                    {
+                        <MudCheckBox T="bool" Value="@(_checkedAssetIds.Count > 0 && _checkedAssetIds.Count >= UnplacedAssets.Count)"
+                                     ValueChanged="ToggleCheckAll" Size="Size.Small" Color="Color.Success"
+                                     Label="전체" />
+                    }
                     @if (_checkedAssetIds.Count > 0)
                     {
                         <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Success"
@@ -197,7 +253,9 @@ else
                     @foreach (var asset in PlacedUngroupedAssets)
                     {
                         var isSel = _selectedAssetIds.Contains(asset.AssetId);
-                        <div class="ap-list-item @(isSel ? "selected" : "")">
+                        var a = asset;
+                        <div class="ap-list-item @(isSel ? "selected" : "")"
+                             @onclick="() => FocusAssetOnCanvas(a.AssetId)">
                             <img src="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
                                  class="asset-type-icon-sm" />
                             <div class="flex-grow-1" style="min-width: 0;">
@@ -270,6 +328,7 @@ else
                     {
                         var pos = GetPosition(asset.AssetId);
                         if (!pos.Visible) continue;
+                        if (_displayFilter != null && asset.AssetTypeName != _displayFilter) continue;
                         var s = pos.Scale;
                         var sz = 32 * s;
                         var imgSz = 24 * s;
@@ -280,7 +339,7 @@ else
                            data-asset-id="@asset.AssetId"
                            data-x="@F(pos.X)" data-y="@F(pos.Y)"
                            data-scale="@F(s)"
-                           transform="translate(@F(pos.X), @F(pos.Y))"
+                           transform="translate(@F(pos.X - sz / 2), @F(pos.Y - sz / 2))"
                            style="cursor: grab;">
                             <rect width="@F(sz)" height="@F(sz)" rx="4" fill="white" stroke="#ccc"
                                   stroke-width="1" opacity="0.9" />
@@ -324,6 +383,11 @@ else
     private HashSet<int> _expandedGroupIds = new();
     private string? _searchText;
     private int? _selectedLineId;
+    private string? _displayFilter; // null=전체, "PLC"/"HMI" 등
+
+    // ═══ Snapshots (in-memory, 적용 시 자동 저장) ═══
+    private readonly List<LayoutSnapshot> _snapshots = [];
+    private record LayoutSnapshot(DateTime CreatedAt, EditorSnapshot Data);
 
     // ═══ Editor config ═══
     private double _globalScale = 1.0;
@@ -336,6 +400,16 @@ else
     private bool _hasChanges;
     private bool _saving;
     private int _nextTempGroupId = -1;
+
+    // ═══ Undo / Redo ═══
+    private readonly List<EditorSnapshot> _undoStack = [];
+    private readonly List<EditorSnapshot> _redoStack = [];
+    private const int MaxUndoSteps = 30;
+
+    private record EditorSnapshot(
+        Dictionary<int, (double X, double Y, double Scale, bool Visible)> Positions,
+        List<(int Id, string? Name, double X, double Y, double W, double H, string? Color)> Groups,
+        Dictionary<int, List<int>> Members);
 
     // ═══ Grid placement ═══
     private GridPlaceState? _gridPlaceState;
@@ -544,6 +618,7 @@ else
     [JSInvokable]
     public void OnItemsMoved(List<JsAssetPos> positions)
     {
+        PushUndo();
         foreach (var jp in positions)
         {
             var pos = GetPosition(jp.AssetId);
@@ -616,6 +691,7 @@ else
     public void OnGridPlaceConfirmed(double x, double y)
     {
         if (_gridPlaceState == null) return;
+        PushUndo();
         var state = _gridPlaceState;
 
         for (int i = 0; i < state.AssetIds.Count; i++)
@@ -624,8 +700,8 @@ else
             var pos = GetPosition(state.AssetIds[i]);
             pos.Visible = true;
             pos.Scale = _globalScale;
-            pos.X = Math.Round(x + col * state.CellW, 2);
-            pos.Y = Math.Round(y + row * state.CellH, 2);
+            pos.X = Math.Round(x + col * state.CellW + state.CellW / 2, 2);
+            pos.Y = Math.Round(y + row * state.CellH + state.CellH / 2, 2);
         }
 
         // Create group
@@ -717,6 +793,7 @@ else
     private void CreateGroupFromSelection()
     {
         if (_selectedAssetIds.Count < 2) return;
+        PushUndo();
         var memberIds = _selectedAssetIds.ToList();
 
         // Bounding box from positions
@@ -793,21 +870,259 @@ else
                 var baseX = Math.Max(0, cx - totalW / 2);
                 var baseY = Math.Max(0, cy - totalRows * cellH / 2);
                 for (int i = 0; i < count; i++)
-                { var pos = GetPosition(ids[i]); pos.X = Math.Round(baseX + (i % cols) * cellW, 2); pos.Y = Math.Round(baseY + (i / cols) * cellH, 2); }
+                { var pos = GetPosition(ids[i]); pos.X = Math.Round(baseX + (i % cols) * cellW + cellW / 2, 2); pos.Y = Math.Round(baseY + (i / cols) * cellH + cellH / 2, 2); }
                 break;
             case "row":
                 var bx = Math.Max(0, cx - count * cellW / 2);
                 for (int i = 0; i < count; i++)
-                { var pos = GetPosition(ids[i]); pos.X = Math.Round(bx + i * cellW, 2); pos.Y = Math.Round(cy, 2); }
+                { var pos = GetPosition(ids[i]); pos.X = Math.Round(bx + i * cellW + cellW / 2, 2); pos.Y = Math.Round(cy, 2); }
                 break;
             case "col":
                 var by = Math.Max(0, cy - count * cellH / 2);
                 for (int i = 0; i < count; i++)
-                { var pos = GetPosition(ids[i]); pos.X = Math.Round(cx, 2); pos.Y = Math.Round(by + i * cellH, 2); }
+                { var pos = GetPosition(ids[i]); pos.X = Math.Round(cx, 2); pos.Y = Math.Round(by + i * cellH + cellH / 2, 2); }
                 break;
         }
         _hasChanges = true;
         Snackbar.Add($"{count}개 정렬됨", Severity.Success);
+    }
+
+    // ═══════════════ Undo / Redo ═══════════════
+
+    private void PushUndo()
+    {
+        var snap = new EditorSnapshot(
+            _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
+            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+            _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
+        _undoStack.Add(snap);
+        if (_undoStack.Count > MaxUndoSteps) _undoStack.RemoveAt(0);
+        _redoStack.Clear();
+    }
+
+    private void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        // Save current state to redo
+        var current = new EditorSnapshot(
+            _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
+            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+            _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
+        _redoStack.Add(current);
+
+        var snap = _undoStack[^1];
+        _undoStack.RemoveAt(_undoStack.Count - 1);
+        RestoreSnapshot(snap);
+    }
+
+    private void Redo()
+    {
+        if (_redoStack.Count == 0) return;
+        var current = new EditorSnapshot(
+            _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
+            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+            _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
+        _undoStack.Add(current);
+
+        var snap = _redoStack[^1];
+        _redoStack.RemoveAt(_redoStack.Count - 1);
+        RestoreSnapshot(snap);
+    }
+
+    private void RestoreSnapshot(EditorSnapshot snap)
+    {
+        foreach (var (aid, (x, y, scale, vis)) in snap.Positions)
+        {
+            var pos = GetPosition(aid);
+            pos.X = x; pos.Y = y; pos.Scale = scale; pos.Visible = vis;
+        }
+        _groups = snap.Groups.Select(g => new TwmsPlacementGroup
+        {
+            Id = g.Id, LayoutId = LayoutId, Name = g.Name,
+            X = g.X, Y = g.Y, Width = g.W, Height = g.H, Color = g.Color
+        }).ToList();
+        _groupMembers = snap.Members.ToDictionary(kv => kv.Key, kv => kv.Value.ToList());
+        RebuildIndexes();
+        _selectedAssetIds.Clear();
+        _selectedGroupIds.Clear();
+        _hasChanges = true;
+    }
+
+    // ═══════════════ 키보드 콜백 ═══════════════
+
+    [JSInvokable]
+    public void OnKeyAction(string action)
+    {
+        switch (action)
+        {
+            case "delete":
+                PushUndo();
+                UnplaceSelected();
+                break;
+            case "undo":
+                Undo();
+                break;
+            case "redo":
+                Redo();
+                break;
+            case "escape":
+                _selectedAssetIds.Clear();
+                _selectedGroupIds.Clear();
+                _gridPlaceState = null;
+                break;
+            case "selectAll":
+                _selectedAssetIds = new HashSet<int>(
+                    _allAssets.Where(a => GetPosition(a.AssetId).Visible).Select(a => a.AssetId));
+                break;
+            case "group":
+                if (_selectedAssetIds.Count > 1)
+                {
+                    PushUndo();
+                    CreateGroupFromSelection();
+                }
+                break;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    // ═══════════════ 균등 분배 ═══════════════
+
+    private void DistributeSelected(string axis)
+    {
+        if (_selectedAssetIds.Count < 3) return;
+        var ids = _selectedAssetIds.ToList();
+
+        if (axis == "h")
+        {
+            ids = ids.OrderBy(id => GetPosition(id).X).ToList();
+            var first = GetPosition(ids[0]).X;
+            var last = GetPosition(ids[^1]).X;
+            var step = (last - first) / (ids.Count - 1);
+            for (int i = 1; i < ids.Count - 1; i++)
+                GetPosition(ids[i]).X = Math.Round(first + i * step, 2);
+        }
+        else
+        {
+            ids = ids.OrderBy(id => GetPosition(id).Y).ToList();
+            var first = GetPosition(ids[0]).Y;
+            var last = GetPosition(ids[^1]).Y;
+            var step = (last - first) / (ids.Count - 1);
+            for (int i = 1; i < ids.Count - 1; i++)
+                GetPosition(ids[i]).Y = Math.Round(first + i * step, 2);
+        }
+        _hasChanges = true;
+        Snackbar.Add($"{ids.Count}개 균등 분배됨", Severity.Success);
+    }
+
+    // ═══════════════ 일괄 미배치 ═══════════════
+
+    private void UnplaceSelected()
+    {
+        var count = 0;
+        foreach (var aid in _selectedAssetIds)
+        {
+            var pos = GetPosition(aid);
+            if (pos.Visible) { pos.Visible = false; count++; }
+            foreach (var (gid, members) in _groupMembers)
+            {
+                if (members.Remove(aid) && members.Count == 0)
+                {
+                    _groups.RemoveAll(g => g.Id == gid);
+                    _groupMembers.Remove(gid);
+                }
+            }
+        }
+        _selectedAssetIds.Clear();
+        RebuildIndexes();
+        _hasChanges = true;
+        if (count > 0) Snackbar.Add($"{count}개 미배치됨", Severity.Success);
+    }
+
+    // ═══════════════ 자동 그룹핑 ═══════════════
+
+    private void AutoGroupBy(string criteria)
+    {
+        PushUndo();
+        var unplaced = _allAssets.Where(a => !GetPosition(a.AssetId).Visible).ToList();
+        if (unplaced.Count == 0) { Snackbar.Add("미배치 자산이 없습니다.", Severity.Warning); return; }
+
+        IEnumerable<IGrouping<string, AssetStatusInfo>> groups;
+        if (criteria == "line")
+            groups = unplaced.Where(a => a.AugLineId.HasValue)
+                .GroupBy(a => a.LayoutLineName ?? $"라인 {a.AugLineId}");
+        else
+            groups = unplaced.Where(a => a.AssetTypeName != null)
+                .GroupBy(a => a.AssetTypeName!);
+
+        double offsetY = 10;
+        int created = 0;
+        foreach (var grp in groups.OrderBy(g => g.Key))
+        {
+            var assetIds = grp.OrderBy(a => a.Name).Select(a => a.AssetId).ToList();
+            var count = assetIds.Count;
+            if (count == 0) continue;
+
+            var cols = (int)Math.Ceiling(Math.Sqrt(count));
+            var rows = (int)Math.Ceiling((double)count / cols);
+            var cellW = 32.0 * _globalScale + 16;
+            var cellH = 32.0 * _globalScale + 28;
+            var grpW = cols * cellW + 24;
+            var grpH = rows * cellH + 32;
+
+            for (int i = 0; i < count; i++)
+            {
+                var pos = GetPosition(assetIds[i]);
+                pos.Visible = true;
+                pos.Scale = _globalScale;
+                pos.X = Math.Round(22 + (i % cols) * cellW + cellW / 2, 2);
+                pos.Y = Math.Round(offsetY + 16 + (i / cols) * cellH + cellH / 2, 2);
+            }
+
+            var tempId = _nextTempGroupId--;
+            _groups.Add(new TwmsPlacementGroup
+            {
+                Id = tempId, LayoutId = LayoutId, Name = grp.Key,
+                X = 10, Y = Math.Round(offsetY, 2),
+                Width = Math.Round(grpW, 2), Height = Math.Round(grpH, 2),
+            });
+            _groupMembers[tempId] = assetIds;
+            offsetY += grpH + 20;
+            created++;
+        }
+
+        RebuildIndexes();
+        _checkedAssetIds.Clear();
+        _hasChanges = true;
+        Snackbar.Add($"{created}개 그룹 자동 생성됨", Severity.Success);
+    }
+
+    // ═══════════════ 캔버스 필터 ═══════════════
+
+    private void SetDisplayFilter(string? filter) { _displayFilter = filter; }
+
+    // ═══════════════ 캔버스 포커스 ═══════════════
+
+    private async Task FocusAssetOnCanvas(int assetId)
+    {
+        _selectedAssetIds = [assetId];
+        _selectedGroupIds.Clear();
+        try { await JS.InvokeVoidAsync("assetPlacementEditor.scrollToAsset", "ap-editor-container", assetId); }
+        catch (JSDisconnectedException) { }
+    }
+
+    // ═══════════════ 전체 선택/해제 ═══════════════
+
+    private void ToggleCheckAll(bool check)
+    {
+        if (check)
+        {
+            foreach (var a in UnplacedAssets)
+                _checkedAssetIds.Add(a.AssetId);
+        }
+        else
+        {
+            _checkedAssetIds.Clear();
+        }
     }
 
     // ═══════════════ Apply ═══════════════
@@ -817,6 +1132,14 @@ else
         _saving = true;
         try
         {
+            // 적용 전 스냅샷 저장
+            var snapData = new EditorSnapshot(
+                _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
+                _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+                _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
+            _snapshots.Insert(0, new LayoutSnapshot(DateTime.Now, snapData));
+            if (_snapshots.Count > 10) _snapshots.RemoveRange(10, _snapshots.Count - 10);
+
             var toSave = _positions.Values.Where(p => p.Visible).ToList();
             foreach (var p in toSave) p.LayoutId = LayoutId;
             if (toSave.Count > 0)
@@ -848,6 +1171,111 @@ else
             Snackbar.Add($"적용 오류: {ex.Message}", Severity.Error);
         }
         finally { _saving = false; }
+    }
+
+    // ═══════════════ CSV 내보내기/가져오기 ═══════════════
+
+    private async Task ExportCsvAsync()
+    {
+        var lines = new List<string> { "AssetId,Name,IP,Type,Line,X,Y,Scale,GroupName" };
+        foreach (var asset in _allAssets)
+        {
+            var pos = GetPosition(asset.AssetId);
+            if (!pos.Visible) continue;
+            var groupName = "";
+            foreach (var (gid, members) in _groupMembers)
+            {
+                if (members.Contains(asset.AssetId))
+                {
+                    groupName = _groups.FirstOrDefault(g => g.Id == gid)?.Name ?? "";
+                    break;
+                }
+            }
+            lines.Add($"{asset.AssetId},{Esc(asset.Name)},{Esc(asset.Ip)},{Esc(asset.AssetTypeName)},{Esc(asset.LayoutLineName)},{pos.X},{pos.Y},{pos.Scale},{Esc(groupName)}");
+        }
+        var csv = string.Join("\n", lines);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("eval", $"{{const a=document.createElement('a');a.href='data:text/csv;base64,{base64}';a.download='layout-{LayoutId}.csv';a.click();}}");
+        Snackbar.Add("CSV 내보내기 완료", Severity.Success);
+
+        static string Esc(string? v) => v?.Replace(",", " ") ?? "";
+    }
+
+    private async Task ImportCsvAsync(InputFileChangeEventArgs e)
+    {
+        PushUndo();
+        try
+        {
+            using var reader = new System.IO.StreamReader(e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+            var content = await reader.ReadToEndAsync();
+            var csvLines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1); // skip header
+            int imported = 0;
+            var groupMap = new Dictionary<string, List<int>>(); // groupName → assetIds
+            foreach (var line in csvLines)
+            {
+                var parts = line.Split(',');
+                if (parts.Length < 8) continue;
+                if (!int.TryParse(parts[0].Trim(), out var assetId)) continue;
+                if (!double.TryParse(parts[5].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var x)) continue;
+                if (!double.TryParse(parts[6].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var y)) continue;
+                double.TryParse(parts[7].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var scale);
+                if (scale <= 0) scale = _globalScale;
+
+                var pos = GetPosition(assetId);
+                pos.Visible = true;
+                pos.X = x; pos.Y = y; pos.Scale = scale;
+                imported++;
+
+                if (parts.Length > 8)
+                {
+                    var gname = parts[8].Trim();
+                    if (!string.IsNullOrEmpty(gname))
+                    {
+                        if (!groupMap.ContainsKey(gname)) groupMap[gname] = [];
+                        groupMap[gname].Add(assetId);
+                    }
+                }
+            }
+
+            // Create groups from CSV
+            foreach (var (gname, members) in groupMap)
+            {
+                if (members.Count == 0) continue;
+                var tempId = _nextTempGroupId--;
+                double gMinX = double.MaxValue, gMinY = double.MaxValue, gMaxX = 0, gMaxY = 0;
+                foreach (var aid in members)
+                {
+                    var p = GetPosition(aid);
+                    gMinX = Math.Min(gMinX, p.X); gMinY = Math.Min(gMinY, p.Y);
+                    gMaxX = Math.Max(gMaxX, p.X + 32); gMaxY = Math.Max(gMaxY, p.Y + 32);
+                }
+                _groups.Add(new TwmsPlacementGroup
+                {
+                    Id = tempId, LayoutId = LayoutId, Name = gname,
+                    X = Math.Round(gMinX - 10, 2), Y = Math.Round(gMinY - 20, 2),
+                    Width = Math.Round(gMaxX - gMinX + 20, 2), Height = Math.Round(gMaxY - gMinY + 40, 2),
+                });
+                _groupMembers[tempId] = members;
+            }
+
+            RebuildIndexes();
+            _hasChanges = true;
+            Snackbar.Add($"CSV 가져오기: {imported}개 자산 반영됨", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"CSV 오류: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ═══════════════ 스냅샷 복원 ═══════════════
+
+    private void RestoreLayoutSnapshot(LayoutSnapshot snapshot)
+    {
+        PushUndo();
+        RestoreSnapshot(snapshot.Data);
+        Snackbar.Add($"{snapshot.CreatedAt:HH:mm} 시점으로 복원됨", Severity.Success);
     }
 
     // ═══════════════ Dispose ═══════════════

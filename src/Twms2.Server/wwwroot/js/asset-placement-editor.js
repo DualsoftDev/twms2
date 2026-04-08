@@ -37,6 +37,7 @@ window.assetPlacementEditor = (() => {
         bindZoomPan(inst);
         bindSvgPointer(inst);
         bindExistingElements(inst);
+        bindKeyboard(inst);
         startObserver(inst);
     }
 
@@ -329,8 +330,8 @@ window.assetPlacementEditor = (() => {
                         const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                         if (!el) continue;
                         const nx = r2(sp.x + d.dx + snapDx), ny = r2(sp.y + d.dy + snapDy);
-                        el.setAttribute('transform', `translate(${nx},${ny})`);
                         el.dataset.x = nx; el.dataset.y = ny;
+                        applyAssetTranslate(el);
                     }
                     // Move all selected groups + their members
                     for (const [, gs] of bulk.groups) {
@@ -349,9 +350,9 @@ window.assetPlacementEditor = (() => {
                     const sz = getIconSize(assetEl);
                     const snapped = applySnap(inst, startPos.x + d.dx, startPos.y + d.dy, sz, new Set([assetId]));
                     renderGuideLines(inst, snapped.guides);
-                    assetEl.setAttribute('transform', `translate(${snapped.x},${snapped.y})`);
                     assetEl.dataset.x = snapped.x; assetEl.dataset.y = snapped.y;
-                    highlightGroupUnderPoint(inst, snapped.x + sz / 2, snapped.y + sz / 2);
+                    applyAssetTranslate(assetEl);
+                    highlightGroupUnderPoint(inst, snapped.x, snapped.y);
                 }
             },
             onUp() {
@@ -383,9 +384,10 @@ window.assetPlacementEditor = (() => {
                 } else {
                     positions.push({ assetId, x: r2(parseFloat(assetEl.dataset.x)), y: r2(parseFloat(assetEl.dataset.y)) });
                     const sz = getIconSize(assetEl);
-                    handleGroupDrop(inst, assetId, parseFloat(assetEl.dataset.x) + sz / 2, parseFloat(assetEl.dataset.y) + sz / 2);
+                    handleGroupDrop(inst, assetId, parseFloat(assetEl.dataset.x), parseFloat(assetEl.dataset.y));
                 }
                 if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
+                if (isBulk) setTimeout(() => updateSelectionBBox(inst), 50);
             }
         };
     }
@@ -477,6 +479,7 @@ window.assetPlacementEditor = (() => {
                     }
                 }
                 if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
+                setTimeout(() => updateSelectionBBox(inst), 50);
             }
         };
     }
@@ -589,6 +592,8 @@ window.assetPlacementEditor = (() => {
 
     function notifySelection(inst, assetIds, groupIds) {
         inst.dotNetRef.invokeMethodAsync('OnSelectionChanged', assetIds, groupIds);
+        // Update bounding box after Blazor applies ap-selected classes
+        setTimeout(() => updateSelectionBBox(inst), 80);
     }
 
     function collectBulkStarts(inst) {
@@ -600,9 +605,201 @@ window.assetPlacementEditor = (() => {
         return map;
     }
 
+    // ════════════════ Selection Bounding Box + Resize ════════════════
+
+    function computeSelectionBBox(inst) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let count = 0;
+        inst.svg.querySelectorAll('.ap-asset-icon.ap-selected').forEach(g => {
+            const cx = parseFloat(g.dataset.x) || 0, cy = parseFloat(g.dataset.y) || 0;
+            const sz = getIconSize(g), half = sz / 2;
+            minX = Math.min(minX, cx - half); minY = Math.min(minY, cy - half);
+            maxX = Math.max(maxX, cx + half); maxY = Math.max(maxY, cy + half + 14);
+            count++;
+        });
+        inst.svg.querySelectorAll('.ap-group-container.ap-group-selected').forEach(g => {
+            const x = parseFloat(g.dataset.x) || 0, y = parseFloat(g.dataset.y) || 0;
+            const w = parseFloat(g.dataset.w) || 0, h = parseFloat(g.dataset.h) || 0;
+            minX = Math.min(minX, x); minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+            count++;
+        });
+        if (count < 2) return null;
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    }
+
+    function updateSelectionBBox(inst) {
+        removeSelectionBBox(inst);
+        const bbox = computeSelectionBBox(inst);
+        if (!bbox) return;
+
+        const g = document.createElementNS(SVG_NS, 'g');
+        g.classList.add('ap-sel-bbox');
+        g.setAttribute('data-ox', bbox.x); g.setAttribute('data-oy', bbox.y);
+        g.setAttribute('data-ow', bbox.w); g.setAttribute('data-oh', bbox.h);
+
+        // Dashed outline
+        const outline = document.createElementNS(SVG_NS, 'rect');
+        outline.setAttribute('x', bbox.x - 4); outline.setAttribute('y', bbox.y - 4);
+        outline.setAttribute('width', bbox.w + 8); outline.setAttribute('height', bbox.h + 8);
+        outline.setAttribute('fill', 'none'); outline.setAttribute('stroke', '#2196F3');
+        outline.setAttribute('stroke-width', 1); outline.setAttribute('stroke-dasharray', '4 2');
+        outline.setAttribute('rx', 3);
+        outline.classList.add('ap-sel-outline');
+        g.appendChild(outline);
+
+        // 8 resize handles: N, S, E, W, NE, NW, SE, SW
+        const pad = 4, hsz = 7;
+        const cx = bbox.x + bbox.w / 2 - pad, cy = bbox.y + bbox.h / 2 - pad;
+        const handles = [
+            { id: 'nw', x: bbox.x - pad - hsz, y: bbox.y - pad - hsz, cursor: 'nwse-resize' },
+            { id: 'n',  x: cx - hsz/2,          y: bbox.y - pad - hsz, cursor: 'ns-resize' },
+            { id: 'ne', x: bbox.x + bbox.w + pad, y: bbox.y - pad - hsz, cursor: 'nesw-resize' },
+            { id: 'w',  x: bbox.x - pad - hsz, y: cy - hsz/2,          cursor: 'ew-resize' },
+            { id: 'e',  x: bbox.x + bbox.w + pad, y: cy - hsz/2,       cursor: 'ew-resize' },
+            { id: 'sw', x: bbox.x - pad - hsz, y: bbox.y + bbox.h + pad, cursor: 'nesw-resize' },
+            { id: 's',  x: cx - hsz/2,          y: bbox.y + bbox.h + pad, cursor: 'ns-resize' },
+            { id: 'se', x: bbox.x + bbox.w + pad, y: bbox.y + bbox.h + pad, cursor: 'nwse-resize' },
+        ];
+        for (const h of handles) {
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.setAttribute('x', h.x); rect.setAttribute('y', h.y);
+            rect.setAttribute('width', hsz); rect.setAttribute('height', hsz);
+            rect.setAttribute('rx', 1.5);
+            rect.setAttribute('fill', 'white'); rect.setAttribute('stroke', '#2196F3');
+            rect.setAttribute('stroke-width', 1.5);
+            rect.style.cursor = h.cursor;
+            rect.classList.add('ap-sel-handle');
+            rect.dataset.handle = h.id;
+            g.appendChild(rect);
+        }
+
+        inst.svg.appendChild(g);
+        inst._selBBox = { g, bbox };
+
+        // Bind resize on handles
+        g.querySelectorAll('.ap-sel-handle').forEach(handle => {
+            handle.addEventListener('pointerdown', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                startBBoxResize(inst, handle.dataset.handle, e);
+            });
+        });
+    }
+
+    function removeSelectionBBox(inst) {
+        if (inst._selBBox) {
+            inst._selBBox.g.remove();
+            inst._selBBox = null;
+        }
+    }
+
+    function startBBoxResize(inst, handleId, e) {
+        const origBBox = { ...inst._selBBox.bbox };
+        const startClient = { x: e.clientX, y: e.clientY };
+        const minW = 20, minH = 20;
+
+        // Snapshot all selected items' positions
+        const assetSnaps = [];
+        inst.svg.querySelectorAll('.ap-asset-icon.ap-selected').forEach(g => {
+            assetSnaps.push({
+                el: g, aid: parseInt(g.dataset.assetId),
+                x: parseFloat(g.dataset.x) || 0, y: parseFloat(g.dataset.y) || 0
+            });
+        });
+        const groupSnaps = [];
+        inst.svg.querySelectorAll('.ap-group-container.ap-group-selected').forEach(g => {
+            groupSnaps.push({
+                el: g, gid: parseInt(g.dataset.groupId),
+                x: parseFloat(g.dataset.x) || 0, y: parseFloat(g.dataset.y) || 0,
+                w: parseFloat(g.dataset.w) || 0, h: parseFloat(g.dataset.h) || 0,
+                members: collectGroupMemberStarts(inst, g)
+            });
+        });
+
+        removeSelectionBBox(inst);
+
+        const onMove = (ev) => {
+            const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
+            let newBBox = { ...origBBox };
+
+            // Adjust bbox based on which handle
+            const affectsLeft = handleId.includes('w');
+            const affectsRight = handleId.includes('e');
+            const affectsTop = handleId.includes('n');
+            const affectsBottom = handleId.includes('s');
+
+            if (affectsRight) newBBox.w = Math.max(minW, origBBox.w + d.dx);
+            if (affectsLeft) { newBBox.x = origBBox.x + d.dx; newBBox.w = Math.max(minW, origBBox.w - d.dx); }
+            if (affectsBottom) newBBox.h = Math.max(minH, origBBox.h + d.dy);
+            if (affectsTop) { newBBox.y = origBBox.y + d.dy; newBBox.h = Math.max(minH, origBBox.h - d.dy); }
+
+            // Proportional rescale
+            const scaleX = origBBox.w > 1 ? newBBox.w / origBBox.w : 1;
+            const scaleY = origBBox.h > 1 ? newBBox.h / origBBox.h : 1;
+
+            for (const a of assetSnaps) {
+                const nx = r2(newBBox.x + (a.x - origBBox.x) * scaleX);
+                const ny = r2(newBBox.y + (a.y - origBBox.y) * scaleY);
+                a.el.dataset.x = nx; a.el.dataset.y = ny;
+                applyAssetTranslate(a.el);
+            }
+            for (const gs of groupSnaps) {
+                const gnx = r2(newBBox.x + (gs.x - origBBox.x) * scaleX);
+                const gny = r2(newBBox.y + (gs.y - origBBox.y) * scaleY);
+                const gnw = r2(gs.w * scaleX);
+                const gnh = r2(gs.h * scaleY);
+                updateGroupPos(gs.el, gnx, gny);
+                updateGroupSize(gs.el, Math.max(30, gnw), Math.max(20, gnh));
+                for (const [aid, sp] of gs.members) {
+                    const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                    if (!el) continue;
+                    const ax = r2(newBBox.x + (sp.x - origBBox.x) * scaleX);
+                    const ay = r2(newBBox.y + (sp.y - origBBox.y) * scaleY);
+                    el.setAttribute('transform', `translate(${ax},${ay})`);
+                    el.dataset.x = ax; el.dataset.y = ay;
+                }
+            }
+        };
+
+        const onUp = () => {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+
+            // Report all moved items to C#
+            const positions = [];
+            for (const a of assetSnaps) {
+                positions.push({ assetId: a.aid, x: r2(parseFloat(a.el.dataset.x)), y: r2(parseFloat(a.el.dataset.y)) });
+            }
+            for (const gs of groupSnaps) {
+                inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gs.gid,
+                    r2(parseFloat(gs.el.dataset.x)), r2(parseFloat(gs.el.dataset.y)),
+                    r2(parseFloat(gs.el.dataset.w)), r2(parseFloat(gs.el.dataset.h)));
+                for (const [aid] of gs.members) {
+                    const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                    if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
+                }
+            }
+            if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
+
+            // Rebuild bbox
+            setTimeout(() => updateSelectionBBox(inst), 50);
+        };
+
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+    }
+
     // ════════════════ Snap ════════════════
 
     function getIconSize(el) { return 32 * (parseFloat(el.dataset.scale) || 1.0); }
+
+    /** dataset.x/y = 중심 좌표. translate에는 sz/2를 빼서 왼쪽 위로 렌더링 */
+    function applyAssetTranslate(el) {
+        const cx = parseFloat(el.dataset.x) || 0;
+        const cy = parseFloat(el.dataset.y) || 0;
+        const sz = getIconSize(el);
+        el.setAttribute('transform', `translate(${r2(cx - sz / 2)},${r2(cy - sz / 2)})`);
+    }
 
     function snapToGrid(v, gs) { return Math.round(v / gs) * gs; }
 
@@ -619,7 +816,8 @@ window.assetPlacementEditor = (() => {
             if (excludeIds instanceof Set ? excludeIds.has(aid) : excludeIds.has?.(aid)) return;
             const nx = parseFloat(g.dataset.x) || 0, ny = parseFloat(g.dataset.y) || 0;
             const nsz = getIconSize(g);
-            neighbors.push({ x: nx, y: ny, w: nsz, h: nsz });
+            // 중심 좌표를 바운딩박스로 변환
+            neighbors.push({ x: nx - nsz / 2, y: ny - nsz / 2, w: nsz, h: nsz });
         });
         inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
             neighbors.push({
@@ -630,7 +828,9 @@ window.assetPlacementEditor = (() => {
 
         let bestDx = thr + 1, bestDy = thr + 1;
         let snapX = null, snapY = null, guideX = null, guideY = null;
-        const myEdges = { left: x, right: x + sz, cx: x + sz / 2, top: y, bottom: y + sz, cy: y + sz / 2 };
+        // x,y = 중심 좌표, 바운딩박스는 중심에서 sz/2 떨어짐
+        const half = sz / 2;
+        const myEdges = { left: x - half, right: x + half, cx: x, top: y - half, bottom: y + half, cy: y };
 
         for (const n of neighbors) {
             for (const ne of [n.x, n.x + n.w, n.x + n.w / 2]) {
@@ -683,12 +883,112 @@ window.assetPlacementEditor = (() => {
     }
 
     function startObserver(inst) {
-        // The event delegation model means no per-element binding is needed.
-        // The observer is kept minimal — only used to ensure consistency.
-        inst._observer = new MutationObserver(() => {
-            // Future: could update spatial index here
-        });
+        inst._observer = new MutationObserver(() => {});
         inst._observer.observe(inst.svg, { childList: true, subtree: false });
+    }
+
+    // ════════════════ Keyboard ════════════════
+
+    function bindKeyboard(inst) {
+        let spaceHeld = false;
+        let prevTool = null;
+
+        on(inst, document, 'keydown', (e) => {
+            // Ignore if focus is in an input/textarea
+            const tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+
+            const ctrl = e.ctrlKey || e.metaKey;
+
+            // Space hold → temporary pan
+            if (e.code === 'Space' && !spaceHeld && !ctrl) {
+                spaceHeld = true;
+                prevTool = inst.tool;
+                inst.tool = 'pan';
+                inst.svg.style.cursor = 'grab';
+                e.preventDefault();
+                return;
+            }
+
+            // Escape
+            if (e.key === 'Escape') {
+                inst.dotNetRef.invokeMethodAsync('OnKeyAction', 'escape');
+                removeSelectionBBox(inst);
+                e.preventDefault();
+                return;
+            }
+
+            // Delete / Backspace
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                inst.dotNetRef.invokeMethodAsync('OnKeyAction', 'delete');
+                removeSelectionBBox(inst);
+                e.preventDefault();
+                return;
+            }
+
+            // Ctrl+Z / Ctrl+Y
+            if (ctrl && e.key === 'z') { inst.dotNetRef.invokeMethodAsync('OnKeyAction', 'undo'); e.preventDefault(); return; }
+            if (ctrl && e.key === 'y') { inst.dotNetRef.invokeMethodAsync('OnKeyAction', 'redo'); e.preventDefault(); return; }
+
+            // Ctrl+A
+            if (ctrl && e.key === 'a') { inst.dotNetRef.invokeMethodAsync('OnKeyAction', 'selectAll'); e.preventDefault(); return; }
+
+            // Ctrl+G
+            if (ctrl && e.key === 'g') { inst.dotNetRef.invokeMethodAsync('OnKeyAction', 'group'); e.preventDefault(); return; }
+
+            // Arrow keys
+            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+                const step = e.shiftKey ? (inst.snap.gridSize || 20) : 1;
+                let dx = 0, dy = 0;
+                if (e.key === 'ArrowLeft') dx = -step;
+                if (e.key === 'ArrowRight') dx = step;
+                if (e.key === 'ArrowUp') dy = -step;
+                if (e.key === 'ArrowDown') dy = step;
+                nudgeSelected(inst, dx, dy);
+                e.preventDefault();
+                return;
+            }
+        });
+
+        on(inst, document, 'keyup', (e) => {
+            if (e.code === 'Space' && spaceHeld) {
+                spaceHeld = false;
+                inst.tool = prevTool || 'select';
+                inst.svg.style.cursor = '';
+                e.preventDefault();
+            }
+        });
+    }
+
+    function nudgeSelected(inst, dx, dy) {
+        const moved = [];
+        inst.svg.querySelectorAll('.ap-asset-icon.ap-selected').forEach(g => {
+            const nx = r2((parseFloat(g.dataset.x) || 0) + dx);
+            const ny = r2((parseFloat(g.dataset.y) || 0) + dy);
+            g.dataset.x = nx; g.dataset.y = ny;
+            applyAssetTranslate(g);
+            moved.push({ assetId: parseInt(g.dataset.assetId), x: nx, y: ny });
+        });
+        inst.svg.querySelectorAll('.ap-group-container.ap-group-selected').forEach(g => {
+            const gid = parseInt(g.dataset.groupId);
+            const nx = r2((parseFloat(g.dataset.x) || 0) + dx);
+            const ny = r2((parseFloat(g.dataset.y) || 0) + dy);
+            updateGroupPos(g, nx, ny);
+            inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid, nx, ny,
+                r2(parseFloat(g.dataset.w)), r2(parseFloat(g.dataset.h)));
+            collectGroupMemberStarts(inst, g).forEach((sp, aid) => {
+                const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
+                if (!el) return;
+                const ax = r2(sp.x + dx), ay = r2(sp.y + dy);
+                el.dataset.x = ax; el.dataset.y = ay;
+                applyAssetTranslate(el);
+                moved.push({ assetId: aid, x: ax, y: ay });
+            });
+        });
+        if (moved.length > 0) {
+            inst.dotNetRef.invokeMethodAsync('OnItemsMoved', moved);
+            setTimeout(() => updateSelectionBBox(inst), 50);
+        }
     }
 
     // ════════════════ Grid Preview ════════════════
@@ -895,10 +1195,29 @@ window.assetPlacementEditor = (() => {
         return inst ? Math.round(inst.zoom * 100) : 100;
     }
 
+    function scrollToAsset(containerId, assetId) {
+        const inst = _inst[containerId];
+        if (!inst) return;
+        const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${assetId}"]`);
+        if (!el) return;
+        const x = parseFloat(el.dataset.x) || 0, y = parseFloat(el.dataset.y) || 0;
+        const sz = getIconSize(el);
+        // Center view on asset
+        const zoom = Math.max(inst.zoom, 1.5);
+        const vbW = ORIG_W / zoom, vbH = ORIG_H / zoom;
+        inst.viewBox = { x: x + sz / 2 - vbW / 2, y: y + sz / 2 - vbH / 2, w: vbW, h: vbH };
+        inst.zoom = zoom;
+        applyViewBox(inst);
+        // Flash highlight
+        el.classList.add('ap-flash');
+        setTimeout(() => el.classList.remove('ap-flash'), 1200);
+    }
+
     return {
         init, dispose,
         setTool, setSnapConfig,
         zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel,
         showGridPreview, hideGridPreview,
+        scrollToAsset,
     };
 })();
