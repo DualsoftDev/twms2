@@ -59,6 +59,15 @@ window.assetPlacementEditor = (() => {
     // ════════════════ Coordinate Transform ════════════════
 
     function clientToSvg(inst, cx, cy) {
+        const ctm = inst.svg.getScreenCTM();
+        if (ctm) {
+            const inv = ctm.inverse();
+            return {
+                x: inv.a * cx + inv.c * cy + inv.e,
+                y: inv.b * cx + inv.d * cy + inv.f
+            };
+        }
+        // fallback
         const r = inst.svg.getBoundingClientRect();
         const vb = inst.viewBox;
         return {
@@ -68,6 +77,12 @@ window.assetPlacementEditor = (() => {
     }
 
     function clientDelta(inst, dx, dy) {
+        const ctm = inst.svg.getScreenCTM();
+        if (ctm) {
+            const inv = ctm.inverse();
+            return { dx: inv.a * dx + inv.c * dy, dy: inv.b * dx + inv.d * dy };
+        }
+        // fallback
         const r = inst.svg.getBoundingClientRect();
         const vb = inst.viewBox;
         return { dx: (dx / r.width) * vb.w, dy: (dy / r.height) * vb.h };
@@ -87,16 +102,24 @@ window.assetPlacementEditor = (() => {
     function zoomByFactor(inst, factor, cx, cy) {
         const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, inst.zoom * factor));
         if (Math.abs(newZoom - inst.zoom) < 0.001) return;
-        const r = inst.svg.getBoundingClientRect();
-        const vb = inst.viewBox;
-        const mx = vb.x + ((cx - r.left) / r.width) * vb.w;
-        const my = vb.y + ((cy - r.top) / r.height) * vb.h;
+        const svgPt = clientToSvg(inst, cx, cy);
         const newW = ORIG_W / newZoom, newH = ORIG_H / newZoom;
-        const ratioX = (cx - r.left) / r.width;
-        const ratioY = (cy - r.top) / r.height;
+        // Ratio of cursor position within the rendered SVG area
+        const ctm = inst.svg.getScreenCTM();
+        let ratioX = 0.5, ratioY = 0.5;
+        if (ctm) {
+            // Rendered content origin in screen coords
+            const vb = inst.viewBox;
+            const ox = ctm.a * vb.x + ctm.e;
+            const oy = ctm.d * vb.y + ctm.f;
+            const rw = ctm.a * vb.w;
+            const rh = ctm.d * vb.h;
+            ratioX = rw !== 0 ? (cx - ox) / rw : 0.5;
+            ratioY = rh !== 0 ? (cy - oy) / rh : 0.5;
+        }
         inst.viewBox = {
-            x: clampVBX(mx - newW * ratioX, newW),
-            y: clampVBY(my - newH * ratioY, newH),
+            x: clampVBX(svgPt.x - newW * ratioX, newW),
+            y: clampVBY(svgPt.y - newH * ratioY, newH),
             w: newW, h: newH
         };
         inst.zoom = newZoom;
@@ -490,19 +513,25 @@ window.assetPlacementEditor = (() => {
         const groupId = parseInt(groupEl.dataset.groupId);
         const startClient = { x: e.clientX, y: e.clientY };
         const startSize = { w: parseFloat(groupEl.dataset.w) || 150, h: parseFloat(groupEl.dataset.h) || 100 };
+        let rafId = 0;
 
         return {
             onMove(ev) {
-                const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
-                let nw = Math.max(40, startSize.w + d.dx);
-                let nh = Math.max(30, startSize.h + d.dy);
-                if (inst.snap.enabled) {
-                    nw = snapToGrid(nw, inst.snap.gridSize);
-                    nh = snapToGrid(nh, inst.snap.gridSize);
-                }
-                updateGroupSize(groupEl, nw, nh);
+                if (rafId) return;
+                rafId = requestAnimationFrame(() => {
+                    rafId = 0;
+                    const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
+                    let nw = Math.max(4, startSize.w + d.dx);
+                    let nh = Math.max(4, startSize.h + d.dy);
+                    if (inst.snap.enabled) {
+                        nw = snapToGrid(nw, inst.snap.gridSize);
+                        nh = snapToGrid(nh, inst.snap.gridSize);
+                    }
+                    updateGroupSize(groupEl, nw, nh);
+                });
             },
             onUp() {
+                if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
                 const gx = r2(parseFloat(groupEl.dataset.x));
                 const gy = r2(parseFloat(groupEl.dataset.y));
                 const gw = r2(parseFloat(groupEl.dataset.w));
@@ -523,7 +552,16 @@ window.assetPlacementEditor = (() => {
         const resize = el.querySelector('.ap-group-resize');
         if (resize) {
             const w = parseFloat(el.dataset.w) || 150, h = parseFloat(el.dataset.h) || 100;
-            resize.setAttribute('x', x + w - 8); resize.setAttribute('y', y + h - 8);
+            const sz = Math.min(Math.max(Math.min(w, h) * 0.15, 6), 16);
+            const off = sz / 2;
+            resize.setAttribute('x', x + w - off); resize.setAttribute('y', y + h - off);
+        }
+        // Update clipPath rect position
+        const gid = el.dataset.groupId;
+        if (gid) {
+            const svg = el.closest('svg');
+            const clip = svg && svg.querySelector(`#ap-grp-clip-${gid} rect`);
+            if (clip) { clip.setAttribute('x', x); clip.setAttribute('y', y); }
         }
     }
 
@@ -534,7 +572,17 @@ window.assetPlacementEditor = (() => {
         const resize = el.querySelector('.ap-group-resize');
         if (resize) {
             const x = parseFloat(el.dataset.x) || 0, y = parseFloat(el.dataset.y) || 0;
-            resize.setAttribute('x', x + w - 8); resize.setAttribute('y', y + h - 8);
+            const sz = Math.min(Math.max(Math.min(w, h) * 0.15, 6), 16);
+            const off = sz / 2;
+            resize.setAttribute('x', x + w - off); resize.setAttribute('y', y + h - off);
+            resize.setAttribute('width', sz); resize.setAttribute('height', sz);
+        }
+        // Update clipPath rect to match group bounds
+        const gid = el.dataset.groupId;
+        if (gid) {
+            const svg = el.closest('svg');
+            const clip = svg && svg.querySelector(`#ap-grp-clip-${gid} rect`);
+            if (clip) { clip.setAttribute('width', w); clip.setAttribute('height', h); }
         }
     }
 
@@ -718,7 +766,8 @@ window.assetPlacementEditor = (() => {
 
         removeSelectionBBox(inst);
 
-        const onMove = (ev) => {
+        let rafId = 0;
+        const doResize = (ev) => {
             const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
             let newBBox = { ...origBBox };
 
@@ -749,7 +798,7 @@ window.assetPlacementEditor = (() => {
                 const gnw = r2(gs.w * scaleX);
                 const gnh = r2(gs.h * scaleY);
                 updateGroupPos(gs.el, gnx, gny);
-                updateGroupSize(gs.el, Math.max(30, gnw), Math.max(20, gnh));
+                updateGroupSize(gs.el, Math.max(4, gnw), Math.max(4, gnh));
                 for (const [aid, sp] of gs.members) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (!el) continue;
@@ -761,7 +810,13 @@ window.assetPlacementEditor = (() => {
             }
         };
 
+        const onMove = (ev) => {
+            if (rafId) return;
+            rafId = requestAnimationFrame(() => { rafId = 0; doResize(ev); });
+        };
+
         const onUp = () => {
+            if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
             document.removeEventListener('pointermove', onMove);
             document.removeEventListener('pointerup', onUp);
 

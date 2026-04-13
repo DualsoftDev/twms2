@@ -2439,6 +2439,49 @@ h1:focus {
     filter: drop-shadow(0 0 6px rgba(0,0,0,0.25));
 }
 
+/* 배치도 필터 */
+.apv-filter-item {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.apv-filter-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 2px;
+}
+
+.apv-filter-grp-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    margin-right: 4px;
+    flex-shrink: 0;
+}
+
+.apv-filter-group-wrap {
+    position: relative;
+}
+
+.apv-filter-floors {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 10;
+    background: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 4px;
+    padding: 4px 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    min-width: 80px;
+}
+
+.apv-filter-floor-item {
+    padding: 1px 0;
+}
+
 /* PLC 클릭 가능 아이콘 */
 .blueprint-plc-clickable {
     cursor: pointer;

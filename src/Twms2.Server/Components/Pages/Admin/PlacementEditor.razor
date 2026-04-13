@@ -49,10 +49,8 @@ else
         <MudSpacer />
         @if (_selectedAssetIds.Count + _selectedGroupIds.Count > 0)
         {
-            <MudText Typo="Typo.caption" Color="Color.Primary">
-                @if (_selectedAssetIds.Count > 0) { @($"자산 {_selectedAssetIds.Count}") }
-                @if (_selectedGroupIds.Count > 0) { @($" 그룹 {_selectedGroupIds.Count}") }
-                선택
+            <MudText Typo="Typo.caption" Color="Color.Primary" Style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                @SelectedLabel
             </MudText>
             @if (_selectedAssetIds.Count > 1)
             {
@@ -209,8 +207,8 @@ else
                                     <MudIcon Icon="@(isExpanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
                                              Size="Size.Small" />
                                     <span class="ap-group-color" style="background: @(grp.Color ?? "#4a90d9")"></span>
-                                    <span class="flex-grow-1 ap-list-name">
-                                        @(string.IsNullOrEmpty(grp.Name) ? $"그룹 #{grp.Id}" : grp.Name)
+                                    <span class="flex-grow-1 ap-list-name" style="font-size: 0.75rem;">
+                                        @GetGroupDisplayLabel(grp.Id, memberIds)
                                     </span>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">@memberIds.Count</MudText>
                                     <span @onclick:stopPropagation="true">
@@ -287,6 +285,13 @@ else
                             <path d="M @(_snapGridSize * 5) 0 L 0 0 0 @(_snapGridSize * 5)" fill="none"
                                   stroke="#ccc" stroke-width="0.5" opacity="0.3" />
                         </pattern>
+                        @foreach (var grp in _groups)
+                        {
+                            <clipPath id="ap-grp-clip-@grp.Id">
+                                <rect x="@F(grp.X)" y="@F(grp.Y)"
+                                      width="@F(grp.Width)" height="@F(grp.Height)" rx="6" />
+                            </clipPath>
+                        }
                     </defs>
                     <rect width="1000" height="600" fill="@(_config?.BgColor ?? "#1a1a2e")" />
                     @if (_snapEnabled)
@@ -299,33 +304,61 @@ else
                                preserveAspectRatio="xMidYMid meet" opacity="0.5" />
                     }
 
-                    @* ── 그룹 ── *@
+                    @* ── 그룹 + 내부 자산 아이콘 ── *@
                     @foreach (var grp in _groups)
                     {
-                        var members = GetGroupMemberIds(grp.Id);
+                        var memberIds = GetGroupMemberIds(grp.Id);
+                        var memberAssets = GetGroupMemberAssets(grp.Id);
                         var isGrpSel = _selectedGroupIds.Contains(grp.Id);
+                        var grpColor = grp.Color ?? "#4a90d9";
                         <g class="ap-group-container @(isGrpSel ? "ap-group-selected" : "")"
                            data-group-id="@grp.Id"
                            data-x="@F(grp.X)" data-y="@F(grp.Y)"
                            data-w="@F(grp.Width)" data-h="@F(grp.Height)"
-                           data-members="@string.Join(",", members)">
+                           data-members="@string.Join(",", memberIds)">
                             <rect x="@F(grp.X)" y="@F(grp.Y)" width="@F(grp.Width)" height="@F(grp.Height)"
-                                  rx="6" fill="@(grp.Color ?? "#4a90d9")10"
-                                  stroke="@(grp.Color ?? "#4a90d9")" stroke-width="1.5" stroke-dasharray="6 3" />
+                                  rx="6" fill="@(grpColor)10"
+                                  stroke="@grpColor" stroke-width="1.5" stroke-dasharray="6 3" />
                             <text x="@F(grp.X + 4)" y="@F(grp.Y - 4)" font-size="10"
-                                  fill="@(grp.Color ?? "#4a90d9")" class="ap-group-label">
+                                  fill="@grpColor" class="ap-group-label">
                                 @(string.IsNullOrEmpty(grp.Name) ? $"그룹 #{grp.Id}" : grp.Name)
                             </text>
+                            @* 그룹 내 멤버 자산 아이콘 *@
+                            <g clip-path="url(#ap-grp-clip-@grp.Id)">
+                                @{
+                                    var items = LayoutGroupAssets(grp, memberAssets);
+                                }
+                                @foreach (var item in items)
+                                {
+                                    var isSel = _selectedAssetIds.Contains(item.Asset.AssetId);
+                                    <g class="ap-asset-icon @(isSel ? "ap-selected" : "")"
+                                       data-asset-id="@item.Asset.AssetId"
+                                       data-x="@F(item.X + item.Size / 2)" data-y="@F(item.Y + item.Size / 2)"
+                                       data-scale="@F(item.Size / 32)"
+                                       transform="translate(@F(item.X), @F(item.Y))"
+                                       style="cursor: grab;">
+                                        <rect width="@F(item.Size)" height="@F(item.Size)" rx="3"
+                                              fill="white" stroke="#ccc" stroke-width="1" opacity="0.9" />
+                                        <image href="@GetAssetIcon(item.Asset.AssetTypeName, item.Asset.AugIsRobotPLC)"
+                                               width="@F(item.Size - 2)" height="@F(item.Size - 2)" x="1" y="1" />
+                                    </g>
+                                }
+                            </g>
+                            @{
+                                var rSz = Math.Clamp(Math.Min(grp.Width, grp.Height) * 0.15, 6, 16);
+                                var rOff = rSz / 2;
+                            }
                             <rect class="ap-group-resize"
-                                  x="@F(grp.X + grp.Width - 8)" y="@F(grp.Y + grp.Height - 8)"
-                                  width="16" height="16" rx="2"
-                                  fill="@(grp.Color ?? "#4a90d9")" fill-opacity="0.4" />
+                                  x="@F(grp.X + grp.Width - rOff)" y="@F(grp.Y + grp.Height - rOff)"
+                                  width="@F(rSz)" height="@F(rSz)" rx="2"
+                                  fill="@grpColor" fill-opacity="0.4" />
                         </g>
                     }
 
-                    @* ── 자산 아이콘 ── *@
+                    @* ── 자산 아이콘 (그룹에 속하지 않은 것만) ── *@
                     @foreach (var asset in _allAssets)
                     {
+                        if (_groupedAssetIds.Contains(asset.AssetId)) continue;
                         var pos = GetPosition(asset.AssetId);
                         if (!pos.Visible) continue;
                         if (_displayFilter != null && asset.AssetTypeName != _displayFilter) continue;
@@ -345,8 +378,6 @@ else
                                   stroke-width="1" opacity="0.9" />
                             <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
                                    width="@F(imgSz)" height="@F(imgSz)" x="@F(imgOff)" y="@F(imgOff)" />
-                            <text x="@F(sz / 2)" y="@F(sz + 12)" text-anchor="middle" font-size="9"
-                                  fill="#333" class="ap-icon-label">@TruncName(asset.Name)</text>
                         </g>
                     }
                 </svg>
@@ -503,6 +534,69 @@ else
     private List<int> GetGroupMemberIds(int groupId) =>
         _groupMembers.TryGetValue(groupId, out var ids) ? ids : [];
 
+    private string GetGroupDisplayLabel(int groupId, List<int> memberIds)
+    {
+        if (memberIds.Count == 0) return $"그룹 #{groupId}";
+        var names = memberIds
+            .Select(id => _allAssets.FirstOrDefault(a => a.AssetId == id)?.Name)
+            .Where(n => n != null)
+            .Take(5);
+        var label = string.Join(", ", names);
+        if (memberIds.Count > 5) label += $" 외 {memberIds.Count - 5}";
+        return label;
+    }
+
+    private List<AssetStatusInfo> GetGroupMemberAssets(int groupId)
+    {
+        var memberIds = GetGroupMemberIds(groupId).ToHashSet();
+        return _allAssets.Where(a => memberIds.Contains(a.AssetId)).ToList();
+    }
+
+    // ──────────── 그룹 내 동적 그리드 배치 ────────────
+
+    private record struct GroupAssetItem(double X, double Y, double Size, AssetStatusInfo Asset);
+
+    private static List<GroupAssetItem> LayoutGroupAssets(TwmsPlacementGroup grp, List<AssetStatusInfo> members)
+    {
+        var result = new List<GroupAssetItem>();
+        if (members.Count == 0) return result;
+
+        var pad = 2.0;
+        var availW = grp.Width - pad * 2;
+        var availH = grp.Height - pad * 2;
+        if (availW < 4 || availH < 4) return result;
+
+        var count = members.Count;
+        var aspectRatio = availW / availH;
+
+        var bestCols = Math.Max(1, (int)Math.Round(Math.Sqrt(count * aspectRatio)));
+        var cols = Math.Min(bestCols, count);
+        var rows = (int)Math.Ceiling((double)count / cols);
+
+        var rawSz = Math.Min(availW / cols, availH / rows);
+        var gap = Math.Max(1.0, Math.Min(rawSz * 0.1, 2.0));
+
+        var cellW = (availW - gap * (cols - 1)) / cols;
+        var cellH = (availH - gap * (rows - 1)) / rows;
+        var sz = Math.Max(4, Math.Min(cellW, cellH));
+
+        var totalW = cols * sz + (cols - 1) * gap;
+        var totalH = rows * sz + (rows - 1) * gap;
+        var startX = grp.X + pad + (availW - totalW) / 2;
+        var startY = grp.Y + pad + (availH - totalH) / 2;
+
+        for (var i = 0; i < count; i++)
+        {
+            var col = i % cols;
+            var row = i / cols;
+            var x = startX + col * (sz + gap);
+            var y = startY + row * (sz + gap);
+            result.Add(new(Math.Round(x, 2), Math.Round(y, 2), Math.Round(sz, 1), members[i]));
+        }
+
+        return result;
+    }
+
     // ═══════════════ Computed Lists ═══════════════
 
     private List<AssetStatusInfo> UnplacedAssets
@@ -524,6 +618,30 @@ else
 
     private List<AssetStatusInfo> PlacedUngroupedAssets =>
         _allAssets.Where(a => GetPosition(a.AssetId).Visible && !_groupedAssetIds.Contains(a.AssetId)).ToList();
+
+    private string SelectedLabel
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (_selectedAssetIds.Count > 0)
+            {
+                var names = _selectedAssetIds
+                    .Select(id => _allAssets.FirstOrDefault(a => a.AssetId == id)?.Name ?? $"#{id}")
+                    .OrderBy(n => n);
+                parts.Add(string.Join(", ", names));
+            }
+            if (_selectedGroupIds.Count > 0)
+            {
+                var grpNames = _selectedGroupIds
+                    .Select(id => _groups.FirstOrDefault(g => g.Id == id))
+                    .Where(g => g != null)
+                    .Select(g => string.IsNullOrEmpty(g!.Name) ? $"그룹 #{g.Id}" : g.Name);
+                parts.Add(string.Join(", ", grpNames));
+            }
+            return string.Join(", ", parts);
+        }
+    }
 
     // ═══════════════ Tool / Snap / Zoom ═══════════════
 
@@ -638,6 +756,7 @@ else
             grp.X = x; grp.Y = y; grp.Width = w; grp.Height = h;
             _hasChanges = true;
         }
+        InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]

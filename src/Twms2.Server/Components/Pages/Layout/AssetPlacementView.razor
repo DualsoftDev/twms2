@@ -3,9 +3,9 @@
 @inject NavigationManager Navigation
 @implements IAsyncDisposable
 
-@* ── 범례 ── *@
+@* ── 범례 + 필터 ── *@
 <MudPaper Class="pa-3 mb-3" Elevation="1">
-    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center" Justify="Justify.Center">
+    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center" Justify="Justify.Center" Class="flex-wrap">
         @foreach (var (label, color) in _legendItems)
         {
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -13,9 +13,58 @@
                 <MudText Typo="Typo.body2">@label</MudText>
             </MudStack>
         }
+        <MudDivider Vertical="true" FlexItem="true" />
+
+        @* ── 자산 타입별 필터 (PLC/Robot 구분) ── *@
+        @foreach (var ft in VisibleAssetTypeFilters)
+        {
+            var f = ft;
+            var isChecked = !_hiddenAssetTypeKeys.Contains(f.Key);
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Class="apv-filter-item">
+                <MudCheckBox T="bool" Value="isChecked" Size="Size.Small" Dense="true"
+                             Color="Color.Primary"
+                             ValueChanged="@(v => ToggleAssetTypeKeyFilter(f.Key, v))" />
+                <img src="@f.Icon" class="apv-filter-icon" />
+                <MudText Typo="Typo.caption">@f.Label</MudText>
+            </MudStack>
+        }
+
+        @if (PlacementGroups.Count > 0)
+        {
+            <MudDivider Vertical="true" FlexItem="true" />
+
+            @* ── 그룹 필터: 체크박스 + 층별 상세 메뉴 ── *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Class="apv-filter-item">
+                <MudCheckBox T="bool" Value="_groupsVisible" Size="Size.Small" Dense="true"
+                             Color="Color.Primary"
+                             ValueChanged="ToggleAllGroups" />
+                <MudIcon Icon="@Icons.Material.Filled.GridView" Size="Size.Small"
+                         Style="color: #4a90d9; margin-right: 2px;" />
+                <MudText Typo="Typo.caption">그룹</MudText>
+            </MudStack>
+            @if (AllFloors.Count > 0)
+            {
+                <MudMenu Icon="@Icons.Material.Filled.FilterAlt" Size="Size.Small"
+                         Dense="true" AnchorOrigin="Origin.BottomLeft">
+                    @foreach (var floor in AllFloors)
+                    {
+                        var fl = floor;
+                        var flChecked = !_hiddenFloors.Contains(fl);
+                        <MudMenuItem AutoClose="false" OnClick="@(() => ToggleFloorFilter(fl))">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudCheckBox T="bool" Value="flChecked" Size="Size.Small" Dense="true"
+                                             Color="Color.Secondary" ReadOnly="true" />
+                                <MudText Typo="Typo.body2">@FormatFloorLabel(fl)</MudText>
+                            </MudStack>
+                        </MudMenuItem>
+                    }
+                </MudMenu>
+            }
+        }
+
         <MudSpacer />
         <MudText Typo="Typo.caption" Color="Color.Secondary">
-            @VisiblePositions.Count 개 자산 배치됨 · 휠로 확대/축소
+            @FilteredVisibleCount / @VisiblePositions.Count 개 표시 · 휠로 확대/축소
         </MudText>
     </MudStack>
 </MudPaper>
@@ -46,7 +95,9 @@
             @* ── 그룹 컨테이너 + 내부 자산 아이콘 (동적 배치) ── *@
             @foreach (var grp in PlacementGroups)
             {
-                var memberAssets = GetGroupMemberAssets(grp.Id);
+                if (!_groupsVisible) continue;
+                var memberAssets = GetFilteredGroupMemberAssets(grp.Id);
+                if (memberAssets.Count == 0) continue;
                 var grpColor = grp.Color ?? "#4a90d9";
                 <g>
                     @* 그룹 배경 *@
@@ -56,11 +107,6 @@
                           fill="@(grpColor)10"
                           stroke="@grpColor"
                           stroke-width="0.7" stroke-dasharray="6 3" />
-                    @* 그룹 라벨 (영역 밖 상단) *@
-                    <text x="@F(grp.X + 4)" y="@F(grp.Y - 4)"
-                          font-size="10"
-                          fill="@grpColor"
-                          class="ap-group-label">@FormatGroupLabel(grp)</text>
 
                     @* 그룹 내 멤버 자산 아이콘 - clipPath로 영역 안에 가둠 *@
                     <g clip-path="url(#grp-clip-@grp.Id)">
@@ -99,6 +145,7 @@
             {
                 var asset = AssetStatuses.FirstOrDefault(a => a.AssetId == pos.AssetId);
                 if (asset == null) continue;
+                if (_hiddenAssetTypeKeys.Contains(GetAssetTypeKey(asset))) continue;
 
                 var healthColor = GetHealthColor(asset.Health);
                 var isOffline = asset.LatestPing is { Reachable: false };
@@ -154,8 +201,29 @@
     [Parameter] public List<AssetStatusInfo> AssetStatuses { get; set; } = [];
     [Parameter] public List<TwmsPlacementGroup> PlacementGroups { get; set; } = [];
     [Parameter] public List<TwmsPlacementGroupMember> PlacementGroupMembers { get; set; } = [];
+    [Parameter] public List<TwmsLayoutGroup> LayoutGroups { get; set; } = [];
     private bool _jsInitialized;
     private bool _isFullscreen;
+
+    // ──────────── 필터 상태 ────────────
+    private HashSet<string> _hiddenAssetTypeKeys = new();
+    private bool _groupsVisible = true;
+    private HashSet<int> _hiddenFloors = new();
+    private bool _floorFilterInitialized;
+
+    protected override void OnParametersSet()
+    {
+        _assetFloorMap = null!;
+        if (!_floorFilterInitialized && LayoutGroups.Count > 0)
+        {
+            _floorFilterInitialized = true;
+            // 기본값: 1층만 표시, 나머지 숨김
+            var floors = LayoutGroups
+                .Select(g => g.Floor).Where(f => f.HasValue).Select(f => f!.Value)
+                .Distinct().ToList();
+            _hiddenFloors = floors.Where(f => f != 1).ToHashSet();
+        }
+    }
 
     private void NavigateToAsset(int assetId) => Navigation.NavigateTo($"/assets/{assetId}");
 
@@ -168,6 +236,96 @@
     private List<TwmsAssetPosition> UngroupedVisiblePositions =>
         VisiblePositions.Where(p => !GroupedAssetIds.Contains(p.AssetId)).ToList();
 
+    // ──────────── 필터: 자산 타입 (PLC/Robot 구분) ────────────
+
+    private record AssetTypeFilter(string Key, string Label, string Icon);
+
+    private static string GetAssetTypeKey(AssetStatusInfo a) =>
+        a.AssetTypeName != null && a.AssetTypeName.Contains("PLC") && a.AugIsRobotPLC is > 0
+            ? $"{a.AssetTypeName}__robot"
+            : a.AssetTypeName ?? "_unknown";
+
+    private List<AssetTypeFilter> VisibleAssetTypeFilters
+    {
+        get
+        {
+            var visibleIds = AssetPositions.Where(p => p.Visible).Select(p => p.AssetId).ToHashSet();
+            var seen = new HashSet<string>();
+            var result = new List<AssetTypeFilter>();
+            foreach (var a in AssetStatuses.Where(a => visibleIds.Contains(a.AssetId)))
+            {
+                var key = GetAssetTypeKey(a);
+                if (!seen.Add(key)) continue;
+                var isRobot = key.EndsWith("__robot");
+                var label = isRobot ? "Robot" : a.AssetTypeName ?? "기타";
+                var icon = GetAssetIcon(a.AssetTypeName, isRobot ? 1 : null);
+                result.Add(new(key, label, icon));
+            }
+            return result.OrderBy(f => f.Label).ToList();
+        }
+    }
+
+    private void ToggleAssetTypeKeyFilter(string key, bool show)
+    {
+        if (show) _hiddenAssetTypeKeys.Remove(key);
+        else _hiddenAssetTypeKeys.Add(key);
+    }
+
+    // ──────────── 필터: 그룹 & 층 ────────────
+
+    private void ToggleAllGroups(bool show) => _groupsVisible = show;
+
+    private void ToggleFloorFilter(int floor)
+    {
+        if (!_hiddenFloors.Remove(floor))
+            _hiddenFloors.Add(floor);
+    }
+
+    private Dictionary<int, int?> _assetFloorMap = null!;
+
+    private Dictionary<int, int?> AssetFloorMap =>
+        _assetFloorMap ??= LayoutGroups.ToDictionary(g => g.AssetId, g => g.Floor);
+
+    private List<int> AllFloors =>
+        PlacementGroupMembers
+            .Select(m => AssetFloorMap.GetValueOrDefault(m.AssetId))
+            .Where(f => f.HasValue)
+            .Select(f => f!.Value)
+            .Distinct()
+            .OrderBy(f => f)
+            .ToList();
+
+    private List<AssetStatusInfo> GetFilteredGroupMemberAssets(int groupId)
+    {
+        var all = GetGroupMemberAssets(groupId);
+        if (_hiddenFloors.Count == 0) return all;
+        return all.Where(a =>
+        {
+            var floor = AssetFloorMap.GetValueOrDefault(a.AssetId);
+            if (!floor.HasValue) return true;
+            return !_hiddenFloors.Contains(floor.Value);
+        }).ToList();
+    }
+
+    private static string FormatFloorLabel(int floor) =>
+        floor < 0 ? $"B{-floor}" : $"{floor}F";
+
+    private int FilteredVisibleCount
+    {
+        get
+        {
+            var ungrouped = UngroupedVisiblePositions.Count(p =>
+            {
+                var asset = AssetStatuses.FirstOrDefault(a => a.AssetId == p.AssetId);
+                return asset != null && !_hiddenAssetTypeKeys.Contains(GetAssetTypeKey(asset));
+            });
+            var grouped = _groupsVisible
+                ? PlacementGroups.Sum(g => GetFilteredGroupMemberAssets(g.Id).Count)
+                : 0;
+            return ungrouped + grouped;
+        }
+    }
+
     private static readonly (string Label, string Color)[] _legendItems =
     [
         ("갱신", "#65B991"),
@@ -176,19 +334,22 @@
         ("내역없음", "#999"),
     ];
 
-    // ──────────── 그룹 라벨 포맷 (층 → F) ────────────
+    // ──────────── 그룹 라벨: 멤버 자산의 층 정보 기반 ────────────
 
-    private static readonly System.Text.RegularExpressions.Regex _floorRegex = new(@"(-?\d+)\s*층", System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    private static string FormatGroupLabel(TwmsPlacementGroup grp)
+    private string GetGroupFloorLabel(int groupId)
     {
-        if (string.IsNullOrEmpty(grp.Name))
-            return $"그룹 #{grp.Id}";
-        return _floorRegex.Replace(grp.Name, m =>
-        {
-            var num = int.Parse(m.Groups[1].Value);
-            return num < 0 ? $"B{-num}" : $"{num}F";
-        });
+        var memberIds = PlacementGroupMembers
+            .Where(m => m.GroupId == groupId)
+            .Select(m => m.AssetId);
+        var floors = memberIds
+            .Select(id => AssetFloorMap.GetValueOrDefault(id))
+            .Where(f => f.HasValue)
+            .Select(f => f!.Value)
+            .Distinct()
+            .OrderBy(f => f)
+            .ToList();
+        if (floors.Count == 0) return $"그룹 #{groupId}";
+        return string.Join(", ", floors.Select(FormatFloorLabel));
     }
 
     // ──────────── 그룹 멤버 자산 조회 ────────────
