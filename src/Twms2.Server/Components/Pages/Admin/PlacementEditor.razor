@@ -739,12 +739,35 @@ else
     [JSInvokable]
     public void OnGroupMoved(int groupId, double x, double y, double w, double h)
     {
+        PushUndo();
         var grp = _groups.FirstOrDefault(g => g.Id == groupId);
         if (grp != null)
         {
             grp.X = x; grp.Y = y; grp.Width = w; grp.Height = h;
             _hasChanges = true;
         }
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnBulkMoved(List<JsAssetPos> positions, List<JsGroupPos> groups)
+    {
+        PushUndo();
+        foreach (var gp in groups)
+        {
+            var grp = _groups.FirstOrDefault(g => g.Id == gp.GroupId);
+            if (grp != null)
+            {
+                grp.X = gp.X; grp.Y = gp.Y; grp.Width = gp.W; grp.Height = gp.H;
+            }
+        }
+        foreach (var jp in positions)
+        {
+            var pos = GetPosition(jp.AssetId);
+            pos.X = jp.X;
+            pos.Y = jp.Y;
+        }
+        _hasChanges = true;
         InvokeAsync(StateHasChanged);
     }
 
@@ -1375,4 +1398,5 @@ else
     }
 
     public record JsAssetPos(int AssetId, double X, double Y);
+    public record JsGroupPos(int GroupId, double X, double Y, double W, double H);
 }

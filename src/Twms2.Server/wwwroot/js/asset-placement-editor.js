@@ -390,26 +390,25 @@ window.assetPlacementEditor = (() => {
 
                 // Report moved positions
                 const positions = [];
+                const groups = [];
                 if (isBulk) {
                     for (const [aid] of bulk.assets) {
                         const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                         if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
                     }
                     for (const [gid, gs] of bulk.groups) {
-                        inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
-                            r2(parseFloat(gs.el.dataset.x)), r2(parseFloat(gs.el.dataset.y)),
-                            r2(parseFloat(gs.el.dataset.w)), r2(parseFloat(gs.el.dataset.h)));
+                        groups.push({ groupId: gid, x: r2(parseFloat(gs.el.dataset.x)), y: r2(parseFloat(gs.el.dataset.y)), w: r2(parseFloat(gs.el.dataset.w)), h: r2(parseFloat(gs.el.dataset.h)) });
                         for (const [aid] of gs.members) {
                             const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                             if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
                         }
                     }
+                    inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions, groups);
                 } else {
                     positions.push({ assetId, x: r2(parseFloat(assetEl.dataset.x)), y: r2(parseFloat(assetEl.dataset.y)) });
-                    const sz = getIconSize(assetEl);
                     handleGroupDrop(inst, assetId, parseFloat(assetEl.dataset.x), parseFloat(assetEl.dataset.y));
+                    if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
                 }
-                if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
                 if (isBulk) setTimeout(() => updateSelectionBBox(inst), 50);
             }
         };
@@ -488,20 +487,19 @@ window.assetPlacementEditor = (() => {
                 }
                 // Report all moved positions
                 const positions = [];
+                const groups = [];
                 for (const [aid] of bulk.assets) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
                 }
                 for (const [gid, gs] of bulk.groups) {
-                    inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid,
-                        r2(parseFloat(gs.el.dataset.x)), r2(parseFloat(gs.el.dataset.y)),
-                        r2(parseFloat(gs.el.dataset.w)), r2(parseFloat(gs.el.dataset.h)));
+                    groups.push({ groupId: gid, x: r2(parseFloat(gs.el.dataset.x)), y: r2(parseFloat(gs.el.dataset.y)), w: r2(parseFloat(gs.el.dataset.w)), h: r2(parseFloat(gs.el.dataset.h)) });
                     for (const [aid] of gs.members) {
                         const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                         if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
                     }
                 }
-                if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
+                inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions, groups);
                 setTimeout(() => updateSelectionBBox(inst), 50);
             }
         };
@@ -822,19 +820,18 @@ window.assetPlacementEditor = (() => {
 
             // Report all moved items to C#
             const positions = [];
+            const groups = [];
             for (const a of assetSnaps) {
                 positions.push({ assetId: a.aid, x: r2(parseFloat(a.el.dataset.x)), y: r2(parseFloat(a.el.dataset.y)) });
             }
             for (const gs of groupSnaps) {
-                inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gs.gid,
-                    r2(parseFloat(gs.el.dataset.x)), r2(parseFloat(gs.el.dataset.y)),
-                    r2(parseFloat(gs.el.dataset.w)), r2(parseFloat(gs.el.dataset.h)));
+                groups.push({ groupId: gs.gid, x: r2(parseFloat(gs.el.dataset.x)), y: r2(parseFloat(gs.el.dataset.y)), w: r2(parseFloat(gs.el.dataset.w)), h: r2(parseFloat(gs.el.dataset.h)) });
                 for (const [aid] of gs.members) {
                     const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                     if (el) positions.push({ assetId: aid, x: r2(parseFloat(el.dataset.x)), y: r2(parseFloat(el.dataset.y)) });
                 }
             }
-            if (positions.length > 0) inst.dotNetRef.invokeMethodAsync('OnItemsMoved', positions);
+            inst.dotNetRef.invokeMethodAsync('OnBulkMoved', positions, groups);
 
             // Rebuild bbox
             setTimeout(() => updateSelectionBBox(inst), 50);
@@ -1017,6 +1014,7 @@ window.assetPlacementEditor = (() => {
 
     function nudgeSelected(inst, dx, dy) {
         const moved = [];
+        const groups = [];
         inst.svg.querySelectorAll('.ap-asset-icon.ap-selected').forEach(g => {
             const nx = r2((parseFloat(g.dataset.x) || 0) + dx);
             const ny = r2((parseFloat(g.dataset.y) || 0) + dy);
@@ -1029,8 +1027,7 @@ window.assetPlacementEditor = (() => {
             const nx = r2((parseFloat(g.dataset.x) || 0) + dx);
             const ny = r2((parseFloat(g.dataset.y) || 0) + dy);
             updateGroupPos(g, nx, ny);
-            inst.dotNetRef.invokeMethodAsync('OnGroupMoved', gid, nx, ny,
-                r2(parseFloat(g.dataset.w)), r2(parseFloat(g.dataset.h)));
+            groups.push({ groupId: gid, x: nx, y: ny, w: r2(parseFloat(g.dataset.w)), h: r2(parseFloat(g.dataset.h)) });
             collectGroupMemberStarts(inst, g).forEach((sp, aid) => {
                 const el = inst.svg.querySelector(`.ap-asset-icon[data-asset-id="${aid}"]`);
                 if (!el) return;
@@ -1040,8 +1037,8 @@ window.assetPlacementEditor = (() => {
                 moved.push({ assetId: aid, x: ax, y: ay });
             });
         });
-        if (moved.length > 0) {
-            inst.dotNetRef.invokeMethodAsync('OnItemsMoved', moved);
+        if (moved.length > 0 || groups.length > 0) {
+            inst.dotNetRef.invokeMethodAsync('OnBulkMoved', moved, groups);
             setTimeout(() => updateSelectionBBox(inst), 50);
         }
     }
