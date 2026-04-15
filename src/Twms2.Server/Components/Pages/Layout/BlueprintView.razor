@@ -28,8 +28,10 @@
             @* ── 도면 이미지 배경 ── *@
             @if (!string.IsNullOrEmpty(BlueprintConfig?.ImagePath))
             {
-                <image href="@BlueprintConfig.ImagePath" x="0" y="0" width="1000" height="600"
-                       preserveAspectRatio="xMidYMid meet" opacity="0.85" />
+                var ir = CalcImageRect(BlueprintConfig);
+                <image href="@BlueprintConfig.ImagePath"
+                       x="@F(ir.X)" y="@F(ir.Y)" width="@F(ir.W)" height="@F(ir.H)"
+                       preserveAspectRatio="none" opacity="0.85" />
             }
 
             @* ── 라인 영역 clipPath 정의 ── *@

@@ -1,6 +1,7 @@
 @page "/admin/layout"
 @attribute [Authorize(Roles = "Admin")]
 @using MudBlazor.Utilities
+@using static Twms2.Server.Helpers.LayoutHelpers
 @inject TwmDbService TwmDb
 @inject IWebHostEnvironment WebHostEnv
 @inject ISnackbar Snackbar
@@ -183,8 +184,10 @@
                             <rect width="1000" height="600" fill="url(#preview-grid-large)" />
                             @if (!string.IsNullOrEmpty(_previewImagePath))
                             {
-                                <image href="@_previewImagePath" x="0" y="0" width="1000" height="600"
-                                       preserveAspectRatio="xMidYMid meet" opacity="0.85" />
+                                var ir = CalcImageRect(_config);
+                                <image href="@_previewImagePath"
+                                       x="@F(ir.X)" y="@F(ir.Y)" width="@F(ir.W)" height="@F(ir.H)"
+                                       preserveAspectRatio="none" opacity="0.85" />
                             }
                         </svg>
                     </div>

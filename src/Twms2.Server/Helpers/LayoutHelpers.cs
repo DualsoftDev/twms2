@@ -1,5 +1,6 @@
 using System.Globalization;
 using Twms2.Server.Models.Dashboard;
+using Twms2.Server.Models.Twm;
 using Microsoft.AspNetCore.Components;
 
 namespace Twms2.Server.Helpers;
@@ -81,6 +82,31 @@ public static class LayoutHelpers
         new($"<g transform=\"translate({F(x)},{F(y)})\" opacity=\"{F(opacity)}\">" +
             $"<text x=\"0\" y=\"0\" fill=\"{fill}\" font-size=\"{F(fontSize)}\" " +
             $"class=\"drawing-text-shape\">{System.Net.WebUtility.HtmlEncode(txt ?? "")}</text></g>");
+
+    /// <summary>
+    /// 도면 이미지의 xMidYMid meet 렌더링 영역을 계산.
+    /// DEXA 좌표 임포트와 동일한 로직으로, SVG &lt;image&gt;의 preserveAspectRatio 대신 직접 위치를 지정할 때 사용.
+    /// </summary>
+    public static (double X, double Y, double W, double H) CalcImageRect(
+        TwmsBlueprintConfig? config, double vbW = 1000, double vbH = 600)
+    {
+        if (config == null || config.ImageWidth is not > 0 || config.ImageHeight is not > 0)
+            return (0, 0, vbW, vbH); // 크기 정보 없으면 전체 채움
+
+        var imgRatio = config.ImageWidth.Value / config.ImageHeight.Value;
+        var vbRatio = vbW / vbH;
+
+        if (imgRatio > vbRatio)
+        {
+            var h = vbW / imgRatio;
+            return (0, (vbH - h) / 2, vbW, h);
+        }
+        else
+        {
+            var w = vbH * imgRatio;
+            return ((vbW - w) / 2, 0, w, vbH);
+        }
+    }
 
     /// <summary>SVG &lt;title&gt; 툴팁 (자산 간략 정보)</summary>
     public static MarkupString RenderSvgTitle(AssetStatusInfo asset)

@@ -208,56 +208,80 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
             }
             SqliteConnection.ClearAllPools();
 
-            // ── 레이아웃별 변환 파라미터 계산 ──
-            // TWM1에서는 자산 좌표가 도면 이미지 픽셀 기준으로 기록됨.
-            // 각 라인의 SelfW/SelfH는 무시하고, 실제 도면 이미지 크기를 기준으로 변환.
-            // (도면 라인의 SelfW/SelfH == 이미지 크기, 나머지 라인은 다를 수 있음)
-            var layoutTransform = new Dictionary<int, (double imgW, double imgH,
-                                                       double imgAreaW, double imgAreaH,
-                                                       double offsetX, double offsetY)>();
+            // ── TWM1 좌표 변환 ──
+            // TWM1에서 모든 자산/그룹의 augLX/augLY 좌표는 "도면 라인"(배경 이미지 라인)의
+            // selfW x selfH 좌표 공간에 기록됨 (자산이 속한 라인의 selfW가 아님).
+            // 도면 라인 = 이미지 비율과 일치하는 라인.
 
-            // 매핑된 라인 → layoutId 역매핑 (어떤 라인이든 같은 layoutId면 같은 변환)
+            // 매핑된 라인 → layoutId
             var lineToLayoutId = new Dictionary<int, int>();
             foreach (var line in lineRows)
             {
-                if (!lineLayoutMap.TryGetValue(line.Id, out var layoutId)) continue;
-                lineToLayoutId[line.Id] = layoutId;
+                if (lineLayoutMap.TryGetValue(line.Id, out var layoutId))
+                    lineToLayoutId[line.Id] = layoutId;
+            }
 
-                if (layoutTransform.ContainsKey(layoutId)) continue;
+            // 레이아웃별 변환 파라미터: 도면 라인의 selfW/selfH + 이미지 영역
+            var layoutTransform = new Dictionary<int, (double refW, double refH,
+                                                       double imgAreaW, double imgAreaH,
+                                                       double offsetX, double offsetY)>();
 
-                // 실제 업로드된 이미지 크기 = 좌표 공간 기준
+            foreach (var layoutId in lineToLayoutId.Values.Distinct())
+            {
+                var mappedLines = lineRows.Where(l => lineToLayoutId.GetValueOrDefault(l.Id) == layoutId).ToList();
+                if (mappedLines.Count == 0) continue;
+
+                // 도면 이미지의 실제 픽셀 크기 = 좌표 기준 (도면 라인의 selfW/selfH와 동일)
+                // 매핑되지 않은 도면 라인도 있으므로 이미지 파일에서 직접 읽기
+                var config = await twmDb.GetBlueprintConfigAsync(layoutId);
                 var (imgW, imgH) = await GetActualImageSizeAsync(layoutId);
-                if (imgW <= 0 || imgH <= 0)
+                double refW, refH;
+
+                if (imgW > 0 && imgH > 0)
                 {
-                    // fallback: 이 layoutId에 매핑된 라인 중 SelfW가 이미지와 일치하는 것 사용
-                    (imgW, imgH) = (line.SelfW, line.SelfH);
+                    // 이미지 파일의 픽셀 크기 = 도면 라인의 selfW/selfH = 좌표 공간
+                    refW = imgW;
+                    refH = imgH;
+                }
+                else
+                {
+                    // 이미지 없음 → 모든 라인 중 가장 고유한 selfW를 가진 라인 사용
+                    var bgLine = lineRows.OrderBy(l => l.SelfW).First();
+                    refW = bgLine.SelfW;
+                    refH = bgLine.SelfH;
+                    (imgW, imgH) = (refW, refH);
                 }
 
-                // xMidYMid meet: 실제 이미지가 viewBox 안에서 차지하는 영역
-                var imgRatio = imgW / imgH;
-                var vbRatio  = VB_W / VB_H;
+                // config에 도면 라인의 selfW/selfH 저장 → CalcImageRect와 동일한 offset
+                if (config != null)
+                {
+                    config.ImageWidth = refW;
+                    config.ImageHeight = refH;
+                    await twmDb.UpsertBlueprintConfigAsync(config);
+                }
+
+                // viewBox 내 이미지 영역 — CalcImageRect와 동일 로직
+                var ratio = refW / refH;
+                var vbRatio = VB_W / VB_H;
                 double imgAreaW, imgAreaH, offsetX, offsetY;
 
-                if (imgRatio > vbRatio)
+                if (ratio > vbRatio)
                 {
                     imgAreaW = VB_W;
-                    imgAreaH = VB_W / imgRatio;
+                    imgAreaH = VB_W / ratio;
                     offsetX  = 0;
                     offsetY  = (VB_H - imgAreaH) / 2;
                 }
                 else
                 {
                     imgAreaH = VB_H;
-                    imgAreaW = VB_H * imgRatio;
+                    imgAreaW = VB_H * ratio;
                     offsetX  = (VB_W - imgAreaW) / 2;
                     offsetY  = 0;
                 }
 
-                layoutTransform[layoutId] = (imgW, imgH, imgAreaW, imgAreaH, offsetX, offsetY);
+                layoutTransform[layoutId] = (refW, refH, imgAreaW, imgAreaH, offsetX, offsetY);
             }
-
-            // 라인별 SelfW/SelfH lookup (좌표 정규화용)
-            var lineSelfSize = lineRows.ToDictionary(l => l.Id, l => (l.SelfW, l.SelfH));
 
             // assetPosRows 전용 lineId lookup (자산 배치용)
             var assetLineMap = assetPosRows
@@ -276,11 +300,9 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                     continue;
                 }
 
-                // 좌표는 라인의 SelfW/SelfH 좌표 공간 기준 → 정규화 → viewBox 매핑
-                // imgW/imgH는 aspect ratio offset에만 사용, 나눗셈은 라인의 SelfW/SelfH
-                var (selfW, selfH) = lineSelfSize.GetValueOrDefault(asset.AugLineId.Value, (lt.imgW, lt.imgH));
-                var cx = (asset.AugLX / selfW) * lt.imgAreaW + lt.offsetX;
-                var cy = (asset.AugLY / selfH) * lt.imgAreaH + lt.offsetY;
+                // augLX/augLY는 도면 라인의 selfW x selfH 좌표 → 정규화 → viewBox 매핑
+                var cx = (asset.AugLX / lt.refW) * lt.imgAreaW + lt.offsetX;
+                var cy = (asset.AugLY / lt.refH) * lt.imgAreaH + lt.offsetY;
 
                 assetPositions.Add(new TwmsAssetPosition
                 {
@@ -329,12 +351,11 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                     continue;
                 }
 
-                // 좌표는 멤버 라인의 SelfW/SelfH 좌표 공간 기준 → 정규화 → viewBox 매핑
-                var (gSelfW, gSelfH) = lineSelfSize.GetValueOrDefault(memberLineId.Value, (glt.imgW, glt.imgH));
-                var gx = (grp.X / gSelfW) * glt.imgAreaW + glt.offsetX;
-                var gy = (grp.Y / gSelfH) * glt.imgAreaH + glt.offsetY;
-                var gw = (grp.W / gSelfW) * glt.imgAreaW;
-                var gh = (grp.H / gSelfH) * glt.imgAreaH;
+                // 그룹 좌표도 도면 라인의 selfW x selfH 좌표 → viewBox 매핑
+                var gx = (grp.X / glt.refW) * glt.imgAreaW + glt.offsetX;
+                var gy = (grp.Y / glt.refH) * glt.imgAreaH + glt.offsetY;
+                var gw = (grp.W / glt.refW) * glt.imgAreaW;
+                var gh = (grp.H / glt.refH) * glt.imgAreaH;
 
                 var floorLabel = grp.Floor.HasValue ? $"{grp.Floor}층" : "";
                 var newGroup = new TwmsPlacementGroup
