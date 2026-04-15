@@ -1,0 +1,575 @@
+@page "/admin/layout/{Id:int}"
+@attribute [Authorize(Roles = "Admin")]
+@using MudBlazor.Utilities
+@using static Twms2.Server.Helpers.LayoutHelpers
+@inject TwmDbService TwmDb
+@inject IWebHostEnvironment WebHostEnv
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IJSRuntime JS
+@inject DexaFileImportService DexaImportService
+@inject NavigationManager Navigation
+
+<PageTitle>TWM - @(_layoutName ?? "레이아웃 편집")</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/admin/layout" Size="Size.Small" />
+    <MudText Typo="Typo.h5" Style="font-weight: 700;">@_layoutName</MudText>
+</MudStack>
+
+@if (_layout == null)
+{
+    <MudAlert Severity="Severity.Warning">레이아웃을 찾을 수 없습니다.</MudAlert>
+}
+else
+{
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true"
+             PanelClass="pt-6" Border="true">
+        <MudTabPanel Text="도면 설정" Icon="@Icons.Material.Filled.Image">
+            @* ── 상단: 저장 버튼 ── *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2"
+                             Style="vertical-align: middle;" />
+                    도면 설정
+                </MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save" Size="Size.Small"
+                           OnClick="SaveSettingsAsync" Disabled="_saving">
+                    @(_saving ? "저장 중..." : "도면 설정 저장")
+                </MudButton>
+            </MudStack>
+
+            @* ── 도면 이미지 + 배경색 + 그리드색 설정 ── *@
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4 neu-card">
+                        <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">
+                            <MudIcon Icon="@Icons.Material.Filled.Image" Class="mr-2"
+                                     Style="vertical-align: middle;" />
+                            도면 이미지
+                        </MudText>
+
+                        @if (!string.IsNullOrEmpty(_currentImagePath))
+                        {
+                            <div class="blueprint-image-preview mb-3">
+                                <img src="@_currentImagePath" alt="도면 이미지" style="width: 100%; border-radius: 8px;" />
+                            </div>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
+                                등록된 도면 이미지가 없습니다. 이미지를 업로드하면 청사진 배경 위에 표시됩니다.
+                            </MudAlert>
+                        }
+
+                        <InputFile id="blueprint-image-input" OnChange="OnImageFileSelected"
+                                   accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                   style="display:none;" />
+
+                        <MudStack Row="true" Spacing="2">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Upload"
+                                       OnClick="@(() => JS.InvokeVoidAsync("eval", "document.getElementById('blueprint-image-input').click()"))">
+                                이미지 선택
+                            </MudButton>
+                            @if (_selectedFile != null)
+                            {
+                                <MudChip T="string" Color="Color.Info" Size="Size.Small">@_selectedFileName</MudChip>
+                            }
+                            @if (!string.IsNullOrEmpty(_currentImagePath))
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Delete"
+                                           OnClick="RemoveImageAsync">
+                                    삭제
+                                </MudButton>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4 neu-card">
+                        <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">
+                            <MudIcon Icon="@Icons.Material.Filled.Palette" Class="mr-2"
+                                     Style="vertical-align: middle;" />
+                            배경색
+                        </MudText>
+
+                        <MudColorPicker @bind-Value="_bgColor" Label="청사진 배경색"
+                                        Variant="Variant.Outlined"
+                                        ColorPickerMode="ColorPickerMode.HEX" Class="mb-3" />
+
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="@(() => _bgColor = new MudColor("#1a1a2e"))">
+                            기본 (다크 블루)
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="@(() => _bgColor = new MudColor("#ffffff"))">
+                            흰색
+                        </MudButton>
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4 neu-card mt-4">
+                        <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">
+                            <MudIcon Icon="@Icons.Material.Filled.GridOn" Class="mr-2"
+                                     Style="vertical-align: middle;" />
+                            그리드 색상
+                        </MudText>
+
+                        <MudColorPicker @bind-Value="_gridColor" Label="그리드 색상"
+                                        Variant="Variant.Outlined"
+                                        ColorPickerMode="ColorPickerMode.HEX" Class="mb-3" />
+
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="@(() => _gridColor = new MudColor("#e0e0e0"))">
+                            기본 (밝은 회색)
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="@(() => _gridColor = new MudColor("#ffffff"))">
+                            흰색
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="@(() => _gridColor = new MudColor("#4a90d9"))">
+                            파란색
+                        </MudButton>
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4 neu-card mt-4">
+                        <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">미리보기</MudText>
+                        <div style="border-radius: 8px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
+                            <svg viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"
+                                 style="width: 100%; display: block;">
+                                <defs>
+                                    <pattern id="preview-grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
+                                        <path d="M 20 0 L 0 0 0 20" fill="none"
+                                              stroke="@_gridColor.ToString(MudColorOutputFormats.Hex)"
+                                              stroke-width="0.5" opacity="0.2" />
+                                    </pattern>
+                                    <pattern id="preview-grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
+                                        <rect width="100" height="100" fill="url(#preview-grid-small)" />
+                                        <path d="M 100 0 L 0 0 0 100" fill="none"
+                                              stroke="@_gridColor.ToString(MudColorOutputFormats.Hex)"
+                                              stroke-width="0.8" opacity="0.3" />
+                                    </pattern>
+                                </defs>
+                                <rect width="1000" height="600" fill="@_bgColor.ToString(MudColorOutputFormats.Hex)" />
+                                <rect width="1000" height="600" fill="url(#preview-grid-large)" />
+                                @if (!string.IsNullOrEmpty(_previewImagePath))
+                                {
+                                    var ir = CalcImageRect(_config);
+                                    <image href="@_previewImagePath"
+                                           x="@F(ir.X)" y="@F(ir.Y)" width="@F(ir.W)" height="@F(ir.H)"
+                                           preserveAspectRatio="none" opacity="0.85" />
+                                }
+                            </svg>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        <MudTabPanel Text="라인 영역" Icon="@Icons.Material.Filled.Map">
+            <BlueprintEditor LayoutId="Id" />
+        </MudTabPanel>
+        <MudTabPanel Text="자산 배치" Icon="@Icons.Material.Filled.GridView">
+            <PlacementEditor LayoutId="Id" />
+        </MudTabPanel>
+        <MudTabPanel Text="DEXA 가져오기" Icon="@Icons.Material.Filled.FileUpload">
+            <MudPaper Class="pa-6 neu-card" MaxWidth="900px">
+                <MudText Typo="Typo.h6" Style="font-weight: 600;" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.FileUpload" Class="mr-2"
+                             Style="vertical-align: middle;" />
+                    DEXA 좌표 가져오기
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                    DEXA.sqlite3에서 라인을 선택하여 현재 도면(<b>@_layoutName</b>)에 자산 좌표와 그룹을 가져옵니다.
+                </MudText>
+
+                @* ── Step 1: 파일 선택 + 미리보기 ── *@
+                <InputFile id="dexa-pos-import-input" OnChange="OnPositionFileSelected"
+                           accept=".sqlite3,.sqlite,.db"
+                           style="display:none;" />
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AttachFile"
+                               OnClick="@(() => JS.InvokeVoidAsync("eval", "document.getElementById('dexa-pos-import-input').click()"))">
+                        파일 선택
+                    </MudButton>
+                    @if (_posImportFile != null)
+                    {
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small">@_posImportFileName</MudChip>
+                    }
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Preview"
+                               OnClick="PreviewLinesAsync"
+                               Disabled="@(_posImportFile == null || _posImporting)">
+                        @(_posImporting && _previewLines == null ? "읽는 중..." : "미리보기")
+                    </MudButton>
+                </MudStack>
+
+                @* ── Step 2: 라인 선택 (현재 도면에 가져올 라인 체크) ── *@
+                @if (_previewLines != null && _previewLines.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
+                        선택한 라인의 라인 영역·자산 배치·그룹이 현재 도면에 덮어쓰기됩니다.
+                        필요하면 먼저 레이아웃을 복제하세요.
+                    </MudAlert>
+
+                    <MudStack Row="true" Spacing="2" Class="mb-2">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.SelectAll"
+                                   OnClick="SelectAllLines">
+                            전체 선택
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Secondary" Size="Size.Small"
+                                   OnClick="DeselectAllLines">
+                            전체 해제
+                        </MudButton>
+                    </MudStack>
+
+                    <MudTable Items="_previewLines" Dense="true" Hover="true" Class="mb-4"
+                              Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default);">
+                        <HeaderContent>
+                            <MudTh Style="width: 60px;">선택</MudTh>
+                            <MudTh>DEXA 라인</MudTh>
+                            <MudTh>도면 크기</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudCheckBox T="bool" Value="_lineSelections[context.Id]"
+                                             ValueChanged="@(v => _lineSelections[context.Id] = v)"
+                                             Dense="true" />
+                            </MudTd>
+                            <MudTd>@context.Name</MudTd>
+                            <MudTd>@($"{context.SelfW:F0} × {context.SelfH:F0}")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+
+                    <MudStack Row="true" Spacing="2" Class="mb-4">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.FileDownload"
+                                   OnClick="RunPositionImportAsync"
+                                   Disabled="@(_posImporting || !_lineSelections.Values.Any(v => v))">
+                            @(_posImporting ? "가져오는 중..." : "가져오기")
+                        </MudButton>
+                    </MudStack>
+                }
+
+                @* ── 결과 표시 ── *@
+                @if (_posImportResult != null)
+                {
+                    <MudAlert Severity="@(_posImportResult.HasFatalError ? Severity.Error : Severity.Success)"
+                              Variant="Variant.Outlined">
+                        @if (_posImportResult.HasFatalError)
+                        {
+                            <span>오류: @_posImportResult.FatalError</span>
+                        }
+                        else
+                        {
+                            <span>
+                                자산 배치 <b>@_posImportResult.AssetPositionsImported</b>개,
+                                그룹 <b>@_posImportResult.GroupsImported</b>개 가져옴
+                                @if (_posImportResult.Skipped > 0)
+                                {
+                                    <span> (건너뜀: @_posImportResult.Skipped)</span>
+                                }
+                            </span>
+                        }
+                    </MudAlert>
+                }
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private TwmsLayout? _layout;
+    private string? _layoutName;
+    private TwmsBlueprintConfig? _config;
+    private string? _currentImagePath;
+    private string? _previewImagePath;
+    private IBrowserFile? _selectedFile;
+    private string? _selectedFileName;
+    private MudColor _bgColor = new("#1a1a2e");
+    private MudColor _gridColor = new("#e0e0e0");
+    private bool _saving;
+
+    // ── DEXA 좌표 가져오기 ──
+    private IBrowserFile? _posImportFile;
+    private string? _posImportFileName;
+    private string? _posTempPath;
+    private bool _posImporting;
+    private List<DexaLinePreview>? _previewLines;
+    private Dictionary<int, bool> _lineSelections = new();
+    private DexaPositionImportResult? _posImportResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var layouts = await TwmDb.GetAllLayoutsAsync();
+        _layout = layouts.FirstOrDefault(l => l.Id == Id);
+        _layoutName = _layout?.Name ?? "알 수 없는 레이아웃";
+        await LoadConfigAsync();
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        _config = await TwmDb.GetBlueprintConfigAsync(Id);
+        _selectedFile = null;
+        _selectedFileName = null;
+        if (_config != null)
+        {
+            _currentImagePath = _config.ImagePath;
+            _previewImagePath = _config.ImagePath;
+            if (!string.IsNullOrEmpty(_config.BgColor))
+                _bgColor = new MudColor(_config.BgColor);
+            else
+                _bgColor = new MudColor("#1a1a2e");
+            if (!string.IsNullOrEmpty(_config.GridColor))
+                _gridColor = new MudColor(_config.GridColor);
+            else
+                _gridColor = new MudColor("#e0e0e0");
+        }
+        else
+        {
+            _currentImagePath = null;
+            _previewImagePath = null;
+            _bgColor = new MudColor("#1a1a2e");
+            _gridColor = new MudColor("#e0e0e0");
+        }
+    }
+
+    // ──────────────── 도면 설정 ────────────────
+
+    private void OnImageFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        _selectedFileName = e.File.Name;
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        _saving = true;
+        try
+        {
+            _config ??= new TwmsBlueprintConfig();
+            _config.LayoutId = Id;
+
+            if (_selectedFile != null)
+            {
+                var ext = Path.GetExtension(_selectedFile.Name).ToLowerInvariant();
+                if (ext is not (".png" or ".jpg" or ".jpeg" or ".webp" or ".svg"))
+                {
+                    Snackbar.Add("PNG, JPG, SVG, WEBP 파일만 지원합니다.", Severity.Warning);
+                    return;
+                }
+
+                var uploadsDir = TwmsDataPath.Uploads;
+
+                foreach (var f in Directory.GetFiles(uploadsDir, $"blueprint-bg-{Id}.*"))
+                    File.Delete(f);
+
+                var filePath = Path.Combine(uploadsDir, $"blueprint-bg-{Id}{ext}");
+                await using (var stream = File.Create(filePath))
+                {
+                    await _selectedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(stream);
+                }
+
+                _config.ImagePath = $"uploads/blueprint-bg-{Id}{ext}";
+                _currentImagePath = _config.ImagePath;
+                _previewImagePath = _config.ImagePath;
+                _selectedFile = null;
+                _selectedFileName = null;
+
+                var (imgW, imgH) = ReadImageSize(filePath);
+                _config.ImageWidth = imgW > 0 ? imgW : null;
+                _config.ImageHeight = imgH > 0 ? imgH : null;
+            }
+
+            _config.BgColor = _bgColor.ToString(MudColorOutputFormats.Hex);
+            _config.GridColor = _gridColor.ToString(MudColorOutputFormats.Hex);
+
+            await TwmDb.UpsertBlueprintConfigAsync(_config);
+            Snackbar.Add("도면 설정이 저장되었습니다.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"저장 오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RemoveImageAsync()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(_currentImagePath))
+            {
+                var fullPath = Path.Combine(TwmsDataPath.Base, _currentImagePath);
+                if (File.Exists(fullPath))
+                    File.Delete(fullPath);
+            }
+
+            _config ??= new TwmsBlueprintConfig();
+            _config.LayoutId = Id;
+            _config.ImagePath = null;
+            _config.ImageWidth = null;
+            _config.ImageHeight = null;
+            _currentImagePath = null;
+            _previewImagePath = null;
+
+            await TwmDb.UpsertBlueprintConfigAsync(_config);
+            Snackbar.Add("도면 이미지가 삭제되었습니다.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"삭제 오류: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ──────────────── DEXA 좌표 가져오기 ────────────────
+
+    private void OnPositionFileSelected(InputFileChangeEventArgs e)
+    {
+        _posImportFile = e.File;
+        _posImportFileName = e.File.Name;
+        _previewLines = null;
+        _lineSelections.Clear();
+        _posImportResult = null;
+        CleanupTempFile();
+    }
+
+    private async Task PreviewLinesAsync()
+    {
+        if (_posImportFile == null) return;
+
+        _posImporting = true;
+        _previewLines = null;
+        _posImportResult = null;
+        CleanupTempFile();
+
+        try
+        {
+            _posTempPath = Path.Combine(Path.GetTempPath(), $"dexa_pos_{Guid.NewGuid():N}.sqlite3");
+            await using var fs = File.Create(_posTempPath);
+            await _posImportFile.OpenReadStream(maxAllowedSize: 500 * 1024 * 1024).CopyToAsync(fs);
+            fs.Close();
+
+            _previewLines = await DexaImportService.PreviewLinesFromFileAsync(_posTempPath);
+            _lineSelections = _previewLines.ToDictionary(l => l.Id, _ => true);
+
+            if (_previewLines.Count == 0)
+                Snackbar.Add("DEXA 파일에 라인 정보가 없습니다.", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"미리보기 오류: {ex.Message}", Severity.Error);
+            CleanupTempFile();
+        }
+        finally
+        {
+            _posImporting = false;
+        }
+    }
+
+    private void SelectAllLines()
+    {
+        foreach (var key in _lineSelections.Keys.ToList())
+            _lineSelections[key] = true;
+    }
+
+    private void DeselectAllLines()
+    {
+        foreach (var key in _lineSelections.Keys.ToList())
+            _lineSelections[key] = false;
+    }
+
+    private async Task RunPositionImportAsync()
+    {
+        if (_posTempPath == null || _previewLines == null) return;
+
+        // 선택한 라인들을 모두 현재 레이아웃(Id)에 매핑
+        var map = _lineSelections
+            .Where(kv => kv.Value)
+            .ToDictionary(kv => kv.Key, _ => Id);
+        if (map.Count == 0) return;
+
+        _posImporting = true;
+        _posImportResult = null;
+
+        try
+        {
+            _posImportResult = await DexaImportService.ImportPositionsFromFileAsync(_posTempPath, map);
+
+            if (_posImportResult.HasFatalError)
+                Snackbar.Add($"좌표 가져오기 실패: {_posImportResult.FatalError}", Severity.Error);
+            else
+                Snackbar.Add(
+                    $"완료 — 자산 {_posImportResult.AssetPositionsImported}개, 그룹 {_posImportResult.GroupsImported}개",
+                    Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            CleanupTempFile();
+            _posImporting = false;
+            _posImportFile = null;
+            _posImportFileName = null;
+            _previewLines = null;
+            _lineSelections.Clear();
+        }
+    }
+
+    private void CleanupTempFile()
+    {
+        if (_posTempPath != null)
+        {
+            try { if (File.Exists(_posTempPath)) File.Delete(_posTempPath); } catch { }
+            _posTempPath = null;
+        }
+    }
+
+    private static (double w, double h) ReadImageSize(string filePath)
+    {
+        try
+        {
+            var bytes = File.ReadAllBytes(filePath);
+            if (bytes.Length > 24 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                int w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+                int h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+                return (w, h);
+            }
+            if (bytes.Length > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                int i = 2;
+                while (i + 8 < bytes.Length)
+                {
+                    if (bytes[i] != 0xFF) break;
+                    byte marker = bytes[i + 1];
+                    if (marker == 0xC0 || marker == 0xC2)
+                    {
+                        int h = (bytes[i + 5] << 8) | bytes[i + 6];
+                        int w = (bytes[i + 7] << 8) | bytes[i + 8];
+                        return (w, h);
+                    }
+                    int segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+                    i += 2 + segLen;
+                }
+            }
+        }
+        catch { /* ignore */ }
+        return (0, 0);
+    }
+}
