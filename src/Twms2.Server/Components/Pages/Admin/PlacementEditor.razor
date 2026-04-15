@@ -42,9 +42,12 @@ else
         <MudDivider Vertical="true" FlexItem="true" />
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="ml-2" Spacing="1">
             <MudIcon Icon="@Icons.Material.Filled.AspectRatio" Size="Size.Small" />
-            <MudText Typo="Typo.caption">@($"{_globalScale:F1}x")</MudText>
+            <MudNumericField T="double" Value="_globalScale" ValueChanged="OnGlobalScaleChanged"
+                             Min="0.1" Max="5.0" Step="0.01" Format="F2"
+                             Variant="Variant.Text" Margin="Margin.Dense"
+                             Style="width: 60px;" HideSpinButtons="true" />
             <MudSlider T="double" Value="_globalScale" ValueChanged="OnGlobalScaleChanged"
-                       Min="0.3" Max="3.0" Step="0.1" Style="width: 80px;" />
+                       Min="0.1" Max="5.0" Step="0.01" Style="width: 160px;" />
         </MudStack>
         <MudSpacer />
         @if (_selectedAssetIds.Count + _selectedGroupIds.Count > 0)
@@ -380,6 +383,13 @@ else
             </div>
         </div>
     </div>
+
+    <MudOverlay Visible="_saving" DarkBackground="true" ZIndex="9999" Class="d-flex align-center justify-center">
+        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.body1" Color="Color.Primary">적용 중...</MudText>
+        </MudStack>
+    </MudOverlay>
 }
 
 @code {
@@ -424,6 +434,7 @@ else
     private int _zoomPercent = 100;
 
     // ═══ Change tracking ═══
+    public bool HasUnsavedChanges => _hasChanges;
     private bool _hasChanges;
     private bool _saving;
     private int _nextTempGroupId = -1;
@@ -689,7 +700,7 @@ else
 
     private void OnGlobalScaleChanged(double newScale)
     {
-        newScale = Math.Clamp(newScale, 0.3, 3.0);
+        newScale = Math.Round(Math.Clamp(newScale, 0.1, 5.0), 2);
         _globalScale = newScale;
         foreach (var pos in _positions.Values)
             pos.Scale = newScale;

@@ -9,6 +9,7 @@
 @inject IJSRuntime JS
 @inject DexaFileImportService DexaImportService
 @inject NavigationManager Navigation
+@implements IDisposable
 
 <PageTitle>TWM - @(_layoutName ?? "레이아웃 편집")</PageTitle>
 
@@ -23,8 +24,9 @@
 }
 else
 {
-    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true"
-             PanelClass="pt-6" Border="true">
+    <MudTabs @ref="_tabs" Elevation="0" Rounded="true" ApplyEffectsToContainer="true"
+             PanelClass="pt-6" Border="true"
+             ActivePanelIndexChanged="OnTabChanged">
         <MudTabPanel Text="도면 설정" Icon="@Icons.Material.Filled.Image">
             @* ── 상단: 저장 버튼 ── *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
@@ -80,6 +82,11 @@ else
                             }
                             @if (!string.IsNullOrEmpty(_currentImagePath))
                             {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Download"
+                                           OnClick="DownloadImageAsync">
+                                    다운로드
+                                </MudButton>
                                 <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                                            StartIcon="@Icons.Material.Filled.Delete"
                                            OnClick="RemoveImageAsync">
@@ -171,20 +178,22 @@ else
             </MudGrid>
         </MudTabPanel>
         <MudTabPanel Text="라인 영역" Icon="@Icons.Material.Filled.Map">
-            <BlueprintEditor LayoutId="Id" />
+            <BlueprintEditor @ref="_blueprintEditor" LayoutId="Id" />
         </MudTabPanel>
         <MudTabPanel Text="자산 배치" Icon="@Icons.Material.Filled.GridView">
-            <PlacementEditor LayoutId="Id" />
+            <PlacementEditor @ref="_placementEditor" LayoutId="Id" />
         </MudTabPanel>
-        <MudTabPanel Text="DEXA 가져오기" Icon="@Icons.Material.Filled.FileUpload">
+        <MudTabPanel Text="이전 TWMS 레이아웃 가져오기" Icon="@Icons.Material.Filled.FileUpload"
+                     Style="margin-left: auto;">
             <MudPaper Class="pa-6 neu-card" MaxWidth="900px">
                 <MudText Typo="Typo.h6" Style="font-weight: 600;" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.FileUpload" Class="mr-2"
                              Style="vertical-align: middle;" />
-                    DEXA 좌표 가져오기
+                    이전 TWMS 레이아웃 가져오기
                 </MudText>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
-                    DEXA.sqlite3에서 라인을 선택하여 현재 도면(<b>@_layoutName</b>)에 자산 좌표와 그룹을 가져옵니다.
+                    이전 버전 TWMS의 DEXA.sqlite3에서 라인 배치·자산 좌표·그룹 정보를 현재 도면(<b>@_layoutName</b>)에 가져옵니다.
+                    레이아웃 테이블(layoutLine, layoutGroup)이 없는 새 버전 DEXA 파일은 지원하지 않습니다.
                 </MudText>
 
                 @* ── Step 1: 파일 선택 + 미리보기 ── *@
@@ -219,7 +228,22 @@ else
                         필요하면 먼저 레이아웃을 복제하세요.
                     </MudAlert>
 
+                    @* ── 기준 도면 라인 선택 ── *@
+                    <MudSelect T="int?" @bind-Value="_refLineId" Label="기준 도면 라인 (좌표 공간)"
+                               Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense" Class="mb-3"
+                               HelperText="모든 자산 좌표의 기준이 되는 배경 도면 라인을 선택하세요. 자동 감지되지만 수동 변경 가능합니다.">
+                        @foreach (var line in _previewLines!)
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)line.Id)">
+                                @line.Name (@($"{line.SelfW:F0}×{line.SelfH:F0}"))
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    @* ── 배치할 라인 선택 ── *@
                     <MudStack Row="true" Spacing="2" Class="mb-2">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">배치할 라인</MudText>
+                        <MudSpacer />
                         <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.SelectAll"
                                    OnClick="SelectAllLines">
@@ -284,6 +308,16 @@ else
             </MudPaper>
         </MudTabPanel>
     </MudTabs>
+
+    <MudOverlay Visible="@(_saving || _posImporting)" DarkBackground="true" ZIndex="9999"
+                Class="d-flex align-center justify-center">
+        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.body1" Color="Color.Primary">
+                @(_saving ? "저장 중..." : "DEXA 가져오는 중...")
+            </MudText>
+        </MudStack>
+    </MudOverlay>
 }
 
 @code {
@@ -300,6 +334,13 @@ else
     private MudColor _gridColor = new("#e0e0e0");
     private bool _saving;
 
+    // ── 탭/네비게이션 가드 ──
+    private MudTabs? _tabs;
+    private int _activeTabIndex;
+    private BlueprintEditor? _blueprintEditor;
+    private PlacementEditor? _placementEditor;
+    private IDisposable? _navLock;
+
     // ── DEXA 좌표 가져오기 ──
     private IBrowserFile? _posImportFile;
     private string? _posImportFileName;
@@ -307,6 +348,7 @@ else
     private bool _posImporting;
     private List<DexaLinePreview>? _previewLines;
     private Dictionary<int, bool> _lineSelections = new();
+    private int? _refLineId; // 기준 도면 라인 (좌표 공간)
     private DexaPositionImportResult? _posImportResult;
 
     protected override async Task OnInitializedAsync()
@@ -315,6 +357,43 @@ else
         _layout = layouts.FirstOrDefault(l => l.Id == Id);
         _layoutName = _layout?.Name ?? "알 수 없는 레이아웃";
         await LoadConfigAsync();
+
+        _navLock = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    private bool HasAnyUnsavedChanges() =>
+        (_blueprintEditor?.HasUnsavedChanges ?? false) ||
+        (_placementEditor?.HasUnsavedChanges ?? false);
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (HasAnyUnsavedChanges())
+        {
+            var confirmed = await JS.InvokeAsync<bool>("confirm", "저장하지 않은 변경사항이 있습니다. 페이지를 떠나시겠습니까?");
+            if (!confirmed)
+                context.PreventNavigation();
+        }
+    }
+
+    private async Task OnTabChanged(int newIndex)
+    {
+        if (newIndex != _activeTabIndex && HasAnyUnsavedChanges())
+        {
+            var confirmed = await JS.InvokeAsync<bool>("confirm", "저장하지 않은 변경사항이 있습니다. 탭을 전환하시겠습니까?");
+            if (!confirmed)
+            {
+                // 원래 탭으로 되돌리기
+                if (_tabs != null)
+                    await InvokeAsync(() => { _tabs.ActivatePanel(_activeTabIndex); StateHasChanged(); });
+                return;
+            }
+        }
+        _activeTabIndex = newIndex;
+    }
+
+    public void Dispose()
+    {
+        _navLock?.Dispose();
     }
 
     private async Task LoadConfigAsync()
@@ -407,6 +486,20 @@ else
         }
     }
 
+    private async Task DownloadImageAsync()
+    {
+        if (string.IsNullOrEmpty(_currentImagePath)) return;
+        var filePath = Path.Combine(TwmsDataPath.Base, _currentImagePath);
+        if (!File.Exists(filePath)) { Snackbar.Add("이미지 파일을 찾을 수 없습니다.", Severity.Warning); return; }
+        var bytes = await File.ReadAllBytesAsync(filePath);
+        var base64 = Convert.ToBase64String(bytes);
+        var ext = Path.GetExtension(filePath);
+        var mime = ext switch { ".png" => "image/png", ".jpg" or ".jpeg" => "image/jpeg", ".webp" => "image/webp", _ => "application/octet-stream" };
+        var fileName = $"{_layoutName ?? "layout"}{ext}";
+        await JS.InvokeVoidAsync("eval",
+            $"((d,m,n)=>{{const b=atob(d),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);const u=URL.createObjectURL(new Blob([a],{{type:m}})),l=document.createElement('a');l.href=u;l.download=n;l.click();URL.revokeObjectURL(u)}})('{base64}','{mime}','{fileName}')");
+    }
+
     private async Task RemoveImageAsync()
     {
         try
@@ -466,8 +559,23 @@ else
             _previewLines = await DexaImportService.PreviewLinesFromFileAsync(_posTempPath);
             _lineSelections = _previewLines.ToDictionary(l => l.Id, _ => true);
 
+            // 기준 도면 라인 자동 감지: 이미지 비율과 가장 가까운 라인
+            _refLineId = null;
+            if (_previewLines.Count > 0 && _config?.ImageWidth is > 0 && _config?.ImageHeight is > 0)
+            {
+                var imgRatio = _config.ImageWidth.Value / _config.ImageHeight.Value;
+                _refLineId = _previewLines
+                    .OrderBy(l => Math.Abs(l.SelfW / l.SelfH - imgRatio))
+                    .First().Id;
+            }
+            else if (_previewLines.Count > 0)
+            {
+                // 이미지 없으면 가장 작은 selfW (도면 라인 후보)
+                _refLineId = _previewLines.OrderBy(l => l.SelfW).First().Id;
+            }
+
             if (_previewLines.Count == 0)
-                Snackbar.Add("DEXA 파일에 라인 정보가 없습니다.", Severity.Warning);
+                Snackbar.Add("DEXA 파일에 레이아웃 라인 정보가 없습니다. 구 TWMS용 DEXA 파일인지 확인하세요.", Severity.Warning);
         }
         catch (Exception ex)
         {
@@ -507,7 +615,7 @@ else
 
         try
         {
-            _posImportResult = await DexaImportService.ImportPositionsFromFileAsync(_posTempPath, map);
+            _posImportResult = await DexaImportService.ImportPositionsFromFileAsync(_posTempPath, map, _refLineId);
 
             if (_posImportResult.HasFatalError)
                 Snackbar.Add($"좌표 가져오기 실패: {_posImportResult.FatalError}", Severity.Error);

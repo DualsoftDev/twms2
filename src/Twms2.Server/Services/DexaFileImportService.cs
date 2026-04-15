@@ -168,7 +168,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
     /// 라인↔레이아웃 매핑에 따라 각 도면에 배치.
     /// </summary>
     public async Task<DexaPositionImportResult> ImportPositionsFromFileAsync(
-        string sqliteFilePath, Dictionary<int, int> lineLayoutMap)
+        string sqliteFilePath, Dictionary<int, int> lineLayoutMap, int? refLineId = null)
     {
         var result = new DexaPositionImportResult();
         const double VB_W = 1000, VB_H = 600;
@@ -231,28 +231,38 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                 var mappedLines = lineRows.Where(l => lineToLayoutId.GetValueOrDefault(l.Id) == layoutId).ToList();
                 if (mappedLines.Count == 0) continue;
 
-                // 도면 이미지의 실제 픽셀 크기 = 좌표 기준 (도면 라인의 selfW/selfH와 동일)
-                // 매핑되지 않은 도면 라인도 있으므로 이미지 파일에서 직접 읽기
+                // 기준 도면 라인의 selfW/selfH = 좌표 공간
                 var config = await twmDb.GetBlueprintConfigAsync(layoutId);
-                var (imgW, imgH) = await GetActualImageSizeAsync(layoutId);
                 double refW, refH;
 
-                if (imgW > 0 && imgH > 0)
+                // 1) 명시적으로 지정된 기준 라인 사용
+                var refLine = refLineId.HasValue
+                    ? lineRows.FirstOrDefault(l => l.Id == refLineId.Value)
+                    : null;
+
+                if (refLine != null)
                 {
-                    // 이미지 파일의 픽셀 크기 = 도면 라인의 selfW/selfH = 좌표 공간
-                    refW = imgW;
-                    refH = imgH;
+                    refW = refLine.SelfW;
+                    refH = refLine.SelfH;
                 }
                 else
                 {
-                    // 이미지 없음 → 모든 라인 중 가장 고유한 selfW를 가진 라인 사용
-                    var bgLine = lineRows.OrderBy(l => l.SelfW).First();
-                    refW = bgLine.SelfW;
-                    refH = bgLine.SelfH;
-                    (imgW, imgH) = (refW, refH);
+                    // 2) fallback: 이미지 파일 크기로 자동 감지
+                    var (imgW, imgH) = await GetActualImageSizeAsync(layoutId);
+                    if (imgW > 0 && imgH > 0)
+                    {
+                        refW = imgW;
+                        refH = imgH;
+                    }
+                    else
+                    {
+                        var bgLine = lineRows.OrderBy(l => l.SelfW).First();
+                        refW = bgLine.SelfW;
+                        refH = bgLine.SelfH;
+                    }
                 }
 
-                // config에 도면 라인의 selfW/selfH 저장 → CalcImageRect와 동일한 offset
+                // config에 기준 라인의 selfW/selfH 저장 → CalcImageRect와 동일한 offset
                 if (config != null)
                 {
                     config.ImageWidth = refW;

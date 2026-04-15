@@ -710,4 +710,109 @@ public class TwmDbService
         await conn.ExecuteAsync("DELETE FROM TwmsPlacementGroup WHERE LayoutId = @LayoutId",
             new { LayoutId = layoutId });
     }
+
+    // ──────────────── 레이아웃 Export / Import ────────────────
+
+    public async Task<LayoutExportData> ExportLayoutAsync(int layoutId, string? layoutName)
+    {
+        var config = await GetBlueprintConfigAsync(layoutId);
+        var rects = await GetAllBlueprintRectsAsync(layoutId);
+        var positions = await GetAllAssetPositionsAsync(layoutId);
+        var groups = await GetAllPlacementGroupsAsync(layoutId);
+        var members = await GetPlacementGroupMembersAsync(layoutId);
+        var memberMap = members.GroupBy(m => m.GroupId).ToDictionary(g => g.Key, g => g.Select(m => m.AssetId).ToList());
+
+        return new LayoutExportData
+        {
+            Version = 1,
+            LayoutName = layoutName,
+            ExportedAt = DateTime.Now,
+            Config = config != null ? new LayoutExportConfig
+            {
+                BgColor = config.BgColor,
+                GridColor = config.GridColor,
+                ImageWidth = config.ImageWidth,
+                ImageHeight = config.ImageHeight,
+            } : null,
+            BlueprintRects = rects.Select(r => new LayoutExportRect
+            {
+                LineId = r.LineId, X = r.X, Y = r.Y, Width = r.Width, Height = r.Height,
+            }).ToList(),
+            Positions = positions.Where(p => p.Visible).Select(p => new LayoutExportPosition
+            {
+                AssetId = p.AssetId, X = p.X, Y = p.Y, Scale = p.Scale, Visible = p.Visible,
+            }).ToList(),
+            Groups = groups.Select(g => new LayoutExportGroup
+            {
+                Name = g.Name, X = g.X, Y = g.Y, Width = g.Width, Height = g.Height, Color = g.Color,
+                MemberAssetIds = memberMap.GetValueOrDefault(g.Id) ?? [],
+            }).ToList(),
+        };
+    }
+
+    public async Task<(int positions, int groups, int rects, int skipped)> ImportLayoutAsync(
+        int layoutId, LayoutExportData data, HashSet<int> validAssetIds)
+    {
+        using var conn = _db.Create();
+        int skipped = 0;
+
+        // 라인 영역 덮어쓰기
+        await conn.ExecuteAsync("DELETE FROM TwmsBlueprintRect WHERE LayoutId = @Id", new { Id = layoutId });
+        foreach (var r in data.BlueprintRects)
+        {
+            await conn.ExecuteAsync("""
+                INSERT INTO TwmsBlueprintRect (LayoutId, LineId, X, Y, Width, Height, UpdatedAt)
+                VALUES (@LayoutId, @LineId, @X, @Y, @Width, @Height, CURRENT_TIMESTAMP)
+                """, new { LayoutId = layoutId, r.LineId, r.X, r.Y, r.Width, r.Height });
+        }
+
+        // Config 업데이트 (이미지 경로는 건드리지 않음)
+        if (data.Config != null)
+        {
+            var existing = await GetBlueprintConfigAsync(layoutId);
+            if (existing != null)
+            {
+                existing.BgColor = data.Config.BgColor;
+                existing.GridColor = data.Config.GridColor;
+                existing.ImageWidth = data.Config.ImageWidth;
+                existing.ImageHeight = data.Config.ImageHeight;
+                await UpsertBlueprintConfigAsync(existing);
+            }
+        }
+
+        // 자산 배치 덮어쓰기
+        await conn.ExecuteAsync("DELETE FROM TwmsAssetPosition WHERE LayoutId = @Id", new { Id = layoutId });
+        var validPositions = new List<TwmsAssetPosition>();
+        foreach (var p in data.Positions)
+        {
+            if (!validAssetIds.Contains(p.AssetId)) { skipped++; continue; }
+            validPositions.Add(new TwmsAssetPosition
+            {
+                LayoutId = layoutId, AssetId = p.AssetId,
+                X = p.X, Y = p.Y, Scale = p.Scale, Visible = p.Visible,
+            });
+        }
+        if (validPositions.Count > 0)
+            await UpsertAssetPositionBatchAsync(validPositions);
+
+        // 그룹 덮어쓰기
+        await DeleteAllPlacementGroupsAsync(layoutId);
+        int groupCount = 0;
+        foreach (var g in data.Groups)
+        {
+            var validMembers = g.MemberAssetIds.Where(validAssetIds.Contains).ToList();
+            if (validMembers.Count == 0) { skipped++; continue; }
+
+            var newGroup = new TwmsPlacementGroup
+            {
+                LayoutId = layoutId, Name = g.Name,
+                X = g.X, Y = g.Y, Width = g.Width, Height = g.Height, Color = g.Color,
+            };
+            var newId = await InsertPlacementGroupAsync(newGroup);
+            await SetPlacementGroupMembersAsync(newId, validMembers);
+            groupCount++;
+        }
+
+        return (validPositions.Count, groupCount, data.BlueprintRects.Count, skipped);
+    }
 }

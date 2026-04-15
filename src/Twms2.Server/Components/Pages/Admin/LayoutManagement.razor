@@ -1,8 +1,10 @@
 @page "/admin/layout"
 @attribute [Authorize(Roles = "Admin")]
 @inject TwmDbService TwmDb
+@inject AssetStatusService AssetStatusService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject LayoutNotificationService LayoutNotification
 
@@ -40,7 +42,9 @@
         <MudTd DataLabel="도면">
             @if (_configMap.TryGetValue(context.Id, out var cfg) && !string.IsNullOrEmpty(cfg.ImagePath))
             {
-                <img src="@cfg.ImagePath" alt="도면" style="height: 40px; border-radius: 4px; object-fit: cover;" />
+                <a href="@cfg.ImagePath" target="_blank" style="cursor: pointer;">
+                    <img src="@cfg.ImagePath" alt="도면" style="height: 40px; border-radius: 4px; object-fit: cover;" />
+                </a>
             }
             else
             {
@@ -67,12 +71,28 @@
                            OnClick="@(async () => await RenameLayoutAsync(context))">
                     이름변경
                 </MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.Delete"
-                           OnClick="@(async () => await DeleteLayoutAsync(context))"
-                           Disabled="_layouts.Count <= 1">
-                    삭제
-                </MudButton>
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small"
+                         Dense="true" Variant="Variant.Outlined">
+                    <MudMenuItem Icon="@Icons.Material.Filled.FileDownload"
+                                 OnClick="@(async () => await ExportLayoutAsync(context))">
+                        JSON 내보내기
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.FileUpload"
+                                 OnClick="@(() => TriggerImportFile(context.Id))">
+                        JSON 가져오기
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Image"
+                                 OnClick="@(async () => await DownloadImageAsync(context))"
+                                 Disabled="@(!_configMap.TryGetValue(context.Id, out var imgCfg) || string.IsNullOrEmpty(imgCfg.ImagePath))">
+                        이미지 내보내기
+                    </MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                                 OnClick="@(async () => await DeleteLayoutAsync(context))"
+                                 Disabled="_layouts.Count <= 1">
+                        삭제
+                    </MudMenuItem>
+                </MudMenu>
             </MudStack>
         </MudTd>
     </RowTemplate>
@@ -81,9 +101,20 @@
     </NoRecordsContent>
 </MudTable>
 
+<InputFile id="layout-json-import" OnChange="OnImportFileSelected" accept=".json" style="display:none;" />
+
+<MudOverlay Visible="_importing" DarkBackground="true" ZIndex="9999" Class="d-flex align-center justify-center">
+    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        <MudText Typo="Typo.body1" Color="Color.Primary">가져오는 중...</MudText>
+    </MudStack>
+</MudOverlay>
+
 @code {
     private List<TwmsLayout> _layouts = [];
     private Dictionary<int, TwmsBlueprintConfig> _configMap = new();
+    private int _importTargetLayoutId;
+    private bool _importing;
 
     protected override async Task OnInitializedAsync()
     {
@@ -185,5 +216,113 @@
         var dialogResult = await dialog.Result;
         if (dialogResult == null || dialogResult.Canceled) return null;
         return dialogResult.Data as string;
+    }
+
+    // ──────────────── 이미지 내보내기 ────────────────
+
+    private async Task DownloadImageAsync(TwmsLayout layout)
+    {
+        if (!_configMap.TryGetValue(layout.Id, out var cfg) || string.IsNullOrEmpty(cfg.ImagePath)) return;
+        var filePath = Path.Combine(TwmsDataPath.Base, cfg.ImagePath);
+        if (!File.Exists(filePath)) { Snackbar.Add("이미지 파일을 찾을 수 없습니다.", Severity.Warning); return; }
+        var bytes = await File.ReadAllBytesAsync(filePath);
+        var base64 = Convert.ToBase64String(bytes);
+        var ext = Path.GetExtension(filePath);
+        var mime = ext switch { ".png" => "image/png", ".jpg" or ".jpeg" => "image/jpeg", ".webp" => "image/webp", _ => "application/octet-stream" };
+        var fileName = $"{layout.Name}{ext}";
+        await JS.InvokeVoidAsync("eval",
+            $"((d,m,n)=>{{const b=atob(d),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);const u=URL.createObjectURL(new Blob([a],{{type:m}})),l=document.createElement('a');l.href=u;l.download=n;l.click();URL.revokeObjectURL(u)}})('{base64}','{mime}','{fileName}')");
+    }
+
+    // ──────────────── JSON Export / Import ────────────────
+
+    private async Task ExportLayoutAsync(TwmsLayout layout)
+    {
+        try
+        {
+            var data = await TwmDb.ExportLayoutAsync(layout.Id, layout.Name);
+            var json = System.Text.Json.JsonSerializer.Serialize(data, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            });
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+            var fileName = $"layout-{layout.Name}-{DateTime.Now:yyyyMMdd-HHmm}.json";
+            await JS.InvokeVoidAsync("eval",
+                $"((d,n)=>{{const b=atob(d),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);const u=URL.createObjectURL(new Blob([a],{{type:'application/json'}})),l=document.createElement('a');l.href=u;l.download=n;l.click();URL.revokeObjectURL(u)}})('{base64}','{fileName}')");
+            Snackbar.Add($"'{layout.Name}' 레이아웃이 내보내기되었습니다.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"내보내기 오류: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task TriggerImportFile(int layoutId)
+    {
+        _importTargetLayoutId = layoutId;
+        await JS.InvokeVoidAsync("eval", "document.getElementById('layout-json-import').click()");
+    }
+
+    private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        var layout = _layouts.FirstOrDefault(l => l.Id == _importTargetLayoutId);
+        if (layout == null) return;
+
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var data = await System.Text.Json.JsonSerializer.DeserializeAsync<LayoutExportData>(stream,
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+
+            if (data == null || data.Version < 1)
+            {
+                Snackbar.Add("유효하지 않은 JSON 파일입니다.", Severity.Error);
+                return;
+            }
+
+            if (data.Positions.Count == 0 && data.Groups.Count == 0 && data.BlueprintRects.Count == 0)
+            {
+                Snackbar.Add("가져올 데이터가 없는 JSON 파일입니다.", Severity.Warning);
+                return;
+            }
+
+            // 확인 다이얼로그
+            var sourceInfo = $"원본: {data.LayoutName ?? "알 수 없음"} ({data.ExportedAt:yyyy-MM-dd HH:mm})";
+            var contentInfo = $"자산 {data.Positions.Count}개, 그룹 {data.Groups.Count}개, 라인 영역 {data.BlueprintRects.Count}개";
+            var confirm = await DialogService.ShowMessageBox(
+                "레이아웃 데이터 가져오기",
+                $"'{layout.Name}'에 다음 데이터를 덮어쓰시겠습니까?\n\n{sourceInfo}\n{contentInfo}\n\n기존 배치/그룹/라인 영역이 모두 교체됩니다.",
+                yesText: "가져오기", cancelText: "취소");
+            if (confirm != true) return;
+
+            _importing = true;
+            StateHasChanged();
+            await Task.Yield();
+
+            // 유효한 자산 ID 목록
+            var allAssets = await AssetStatusService.GetAssetStatusesAsync();
+            var validIds = allAssets.Select(a => a.AssetId).ToHashSet();
+
+            var (positions, groups, rects, skipped) = await TwmDb.ImportLayoutAsync(_importTargetLayoutId, data, validIds);
+
+            _importing = false;
+            var msg = $"완료 — 자산 {positions}개, 그룹 {groups}개, 라인 영역 {rects}개 가져옴";
+            if (skipped > 0) msg += $" (건너뜀: {skipped})";
+            Snackbar.Add(msg, Severity.Success);
+            await ReloadAsync();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            Snackbar.Add("JSON 형식이 올바르지 않습니다. 레이아웃 내보내기 파일인지 확인하세요.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"가져오기 오류: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _importing = false;
+        }
     }
 }

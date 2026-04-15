@@ -24,7 +24,7 @@ window.blueprintEditor = (() => {
         const svg = container.querySelector('svg');
         if (!svg) return;
 
-        const inst = { container, svg, dotNetRef, handlers: [] };
+        const inst = { container, svg, dotNetRef, handlers: [], snap: { enabled: true, gridSize: 20 } };
         _inst[containerId] = inst;
 
         const groups = svg.querySelectorAll('.bp-edit-rect');
@@ -38,9 +38,9 @@ window.blueprintEditor = (() => {
             const resizeHandle = g.querySelector('.bp-resize-handle');
             const deleteBtn = g.querySelector('.bp-delete-btn');
 
-            bindDrag(inst, g, fillRect, lineId, 'move');
-            bindDrag(inst, g, borderRect, lineId, 'move');
-            bindDrag(inst, g, label, lineId, 'move');
+            if (fillRect) bindDrag(inst, g, fillRect, lineId, 'move');
+            if (borderRect) bindDrag(inst, g, borderRect, lineId, 'move');
+            if (label) bindDrag(inst, g, label, lineId, 'move');
 
             if (resizeHandle) {
                 bindDrag(inst, g, resizeHandle, lineId, 'resize');
@@ -80,7 +80,19 @@ window.blueprintEditor = (() => {
                 vbH: vbSize.h,
             };
 
-            const fill = group.querySelector('.bp-rect-fill');
+            // 핸들 전용 <g>에는 fill이 없으므로 같은 lineId의 fill을 SVG에서 탐색
+            let fill = group.querySelector('.bp-rect-fill');
+            if (!fill) {
+                const lid = group.dataset.lineId;
+                const svg = group.closest('svg');
+                if (lid && svg) {
+                    for (const g of svg.querySelectorAll(`.bp-edit-rect[data-line-id="${lid}"]`)) {
+                        fill = g.querySelector('.bp-rect-fill');
+                        if (fill) break;
+                    }
+                }
+            }
+            if (!fill) return;
             startRect = {
                 x: parseFloat(fill.getAttribute('x')),
                 y: parseFloat(fill.getAttribute('y')),
@@ -102,19 +114,18 @@ window.blueprintEditor = (() => {
             const dy = ((e.clientY - startPt.clientY) / startPt.svgH) * startPt.vbH;
 
             let x, y, w, h;
+            const snap = v => inst.snap.enabled ? Math.round(v / inst.snap.gridSize) * inst.snap.gridSize : v;
 
             if (mode === 'resize') {
-                w = Math.max(30, startRect.w + dx);
-                h = Math.max(20, startRect.h + dy);
+                w = Math.max(30, snap(startRect.w + dx));
+                h = Math.max(20, snap(startRect.h + dy));
                 x = startRect.x;
                 y = startRect.y;
-                // 경계 제한 없음 — 도면 밖 배치 허용
             } else {
-                x = startRect.x + dx;
-                y = startRect.y + dy;
+                x = snap(startRect.x + dx);
+                y = snap(startRect.y + dy);
                 w = startRect.w;
                 h = startRect.h;
-                // 경계 제한 없음 — 도면 밖 배치 허용
             }
 
             updateGroupPosition(group, x, y, w, h);
@@ -126,7 +137,18 @@ window.blueprintEditor = (() => {
             group.classList.remove('dragging');
 
             if (startPt && startRect && inst.dotNetRef) {
-                const fill = group.querySelector('.bp-rect-fill');
+                let fill = group.querySelector('.bp-rect-fill');
+                if (!fill) {
+                    const lid = group.dataset.lineId;
+                    const svg = group.closest('svg');
+                    if (lid && svg) {
+                        for (const g of svg.querySelectorAll(`.bp-edit-rect[data-line-id="${lid}"]`)) {
+                            fill = g.querySelector('.bp-rect-fill');
+                            if (fill) break;
+                        }
+                    }
+                }
+                if (!fill) { startPt = null; startRect = null; return; }
                 const fx = parseFloat(fill.getAttribute('x'));
                 const fy = parseFloat(fill.getAttribute('y'));
                 const fw = parseFloat(fill.getAttribute('width'));
@@ -147,11 +169,20 @@ window.blueprintEditor = (() => {
     }
 
     function updateGroupPosition(group, x, y, w, h) {
-        const fill = group.querySelector('.bp-rect-fill');
-        const border = group.querySelector('.bp-rect-border');
-        const label = group.querySelector('.bp-rect-label');
-        const handle = group.querySelector('.bp-resize-handle');
-        const delBtn = group.querySelector('.bp-delete-btn');
+        // 같은 lineId의 모든 <g> 요소에서 자식 탐색 (핸들이 별도 레이어)
+        const lineId = group.dataset.lineId;
+        const svg = group.closest('svg');
+        const allGroups = lineId && svg
+            ? svg.querySelectorAll(`.bp-edit-rect[data-line-id="${lineId}"]`)
+            : [group];
+        let fill, border, label, handle, delBtn;
+        allGroups.forEach(g => {
+            fill   = g.querySelector('.bp-rect-fill')   || fill;
+            border = g.querySelector('.bp-rect-border') || border;
+            label  = g.querySelector('.bp-rect-label')  || label;
+            handle = g.querySelector('.bp-resize-handle') || handle;
+            delBtn = g.querySelector('.bp-delete-btn')  || delBtn;
+        });
 
         if (fill) {
             fill.setAttribute('x', x);
@@ -221,5 +252,13 @@ window.blueprintEditor = (() => {
         delete _inst[containerId];
     }
 
-    return { init, getPositions, dispose };
+    function setSnapConfig(containerId, enabled, gridSize) {
+        const inst = _inst[containerId];
+        if (inst) {
+            inst.snap.enabled = !!enabled;
+            inst.snap.gridSize = gridSize > 0 ? gridSize : 20;
+        }
+    }
+
+    return { init, getPositions, setSnapConfig, dispose };
 })();

@@ -81,14 +81,28 @@
                 사각형을 드래그하여 이동, 모서리로 크기 조절. 휠로 축소/확대, 빈 영역 드래그로 이동.
             </MudText>
 
-            @* 줌 컨트롤 *@
-            <MudStack Row="true" Spacing="1" Class="mb-2">
+            @* 줌 + 스냅 컨트롤 *@
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudIconButton Icon="@Icons.Material.Filled.ZoomIn" Size="Size.Small"
                                OnClick="ZoomIn" Title="확대" />
                 <MudIconButton Icon="@Icons.Material.Filled.ZoomOut" Size="Size.Small"
                                OnClick="ZoomOut" Title="축소" />
                 <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" Size="Size.Small"
                                OnClick="ZoomReset" Title="초기화" />
+                <MudDivider Vertical="true" FlexItem="true" />
+                <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
+                               Disabled="@(_undoStack.Count == 0)" OnClick="Undo" />
+                <MudIconButton Icon="@Icons.Material.Filled.Redo" Size="Size.Small"
+                               Disabled="@(_redoStack.Count == 0)" OnClick="Redo" />
+                <MudDivider Vertical="true" FlexItem="true" />
+                <MudToggleIconButton Toggled="_snapEnabled"
+                                     Icon="@Icons.Material.Filled.GridOff"
+                                     ToggledIcon="@Icons.Material.Filled.Grid4x4"
+                                     Size="Size.Small" Color="Color.Default" ToggledColor="Color.Info"
+                                     ToggledChanged="OnSnapToggled" />
+                <MudNumericField T="int" Value="_snapGridSize" ValueChanged="OnSnapGridChanged"
+                                 Label="Grid" Variant="Variant.Text" Min="5" Max="100" Step="5"
+                                 Style="width: 55px;" Margin="Margin.Dense" HideSpinButtons="true" />
             </MudStack>
 
             <div id="bp-editor-container" class="bp-editor-container">
@@ -145,6 +159,12 @@
                               y="@F(rect.Y + rect.Height / 2)"
                               text-anchor="middle" dominant-baseline="central"
                               class="bp-rect-label">@label</text>
+                    </g>
+                }
+                @* ── 핸들/삭제 버튼 (별도 레이어 — 항상 최상단) ── *@
+                @foreach (var rect in _rects)
+                {
+                    <g class="bp-edit-rect" data-line-id="@rect.LineId">
                         @* 리사이즈 핸들 (우하단) *@
                         <rect class="bp-resize-handle"
                               x="@F(rect.X + rect.Width - 15)"
@@ -173,9 +193,19 @@
     private List<TwmsBlueprintRect> _rects = [];
     private List<TwmsLayoutLine> _lines = [];
 
+    public bool HasUnsavedChanges => _hasChanges;
     private bool _saving;
+    private bool _hasChanges;
     private int _prevLayoutId;
+    private bool _snapEnabled = true;
+    private int _snapGridSize = 20;
     private DotNetObjectReference<BlueprintEditor>? _dotNetRef;
+
+    // ═══ Undo / Redo ═══
+    private readonly List<List<RectSnapshot>> _undoStack = [];
+    private readonly List<List<RectSnapshot>> _redoStack = [];
+    private const int MaxUndoSteps = 30;
+    private record RectSnapshot(int LineId, double X, double Y, double W, double H);
 
     protected override async Task OnInitializedAsync()
     {
@@ -244,16 +274,83 @@
         catch (JSDisconnectedException) { }
     }
 
+    private async Task OnSnapToggled(bool toggled)
+    {
+        _snapEnabled = toggled;
+        try { await JS.InvokeVoidAsync("blueprintEditor.setSnapConfig", "bp-editor-container", toggled, _snapGridSize); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task OnSnapGridChanged(int size)
+    {
+        _snapGridSize = Math.Clamp(size, 5, 100);
+        try { await JS.InvokeVoidAsync("blueprintEditor.setSnapConfig", "bp-editor-container", _snapEnabled, _snapGridSize); }
+        catch (JSDisconnectedException) { }
+    }
+
+    // ═══════════════ Undo / Redo ═══════════════
+
+    private List<RectSnapshot> TakeSnapshot() =>
+        _rects.Select(r => new RectSnapshot(r.LineId, r.X, r.Y, r.Width, r.Height)).ToList();
+
+    private void PushUndo()
+    {
+        _undoStack.Add(TakeSnapshot());
+        if (_undoStack.Count > MaxUndoSteps) _undoStack.RemoveAt(0);
+        _redoStack.Clear();
+    }
+
+    private async Task Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        _redoStack.Add(TakeSnapshot());
+        var snap = _undoStack[^1];
+        _undoStack.RemoveAt(_undoStack.Count - 1);
+        RestoreSnapshot(snap);
+        StateHasChanged();
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    private async Task Redo()
+    {
+        if (_redoStack.Count == 0) return;
+        _undoStack.Add(TakeSnapshot());
+        var snap = _redoStack[^1];
+        _redoStack.RemoveAt(_redoStack.Count - 1);
+        RestoreSnapshot(snap);
+        StateHasChanged();
+        await Task.Delay(50);
+        await InitEditorJs();
+    }
+
+    private void RestoreSnapshot(List<RectSnapshot> snap)
+    {
+        _rects.Clear();
+        foreach (var s in snap)
+        {
+            _rects.Add(new TwmsBlueprintRect
+            {
+                LayoutId = LayoutId, LineId = s.LineId,
+                X = s.X, Y = s.Y, Width = s.W, Height = s.H,
+            });
+        }
+    }
+
+    // ═══════════════ JS Callbacks ═══════════════
+
     [JSInvokable]
     public void OnRectMoved(int lineId, double x, double y, double w, double h)
     {
         var rect = _rects.FirstOrDefault(r => r.LineId == lineId);
         if (rect != null)
         {
+            PushUndo();
             rect.X = Math.Round(x, 2);
             rect.Y = Math.Round(y, 2);
             rect.Width = Math.Round(Math.Max(30, w), 2);
             rect.Height = Math.Round(Math.Max(20, h), 2);
+            _hasChanges = true;
             InvokeAsync(StateHasChanged);
         }
     }
@@ -261,8 +358,10 @@
     [JSInvokable]
     public async Task OnRectDeleted(int lineId)
     {
+        PushUndo();
         _rects.RemoveAll(r => r.LineId == lineId);
         await TwmDb.DeleteBlueprintRectAsync(LayoutId, lineId);
+        _hasChanges = true;
         Snackbar.Add("라인 영역이 삭제되었습니다.", Severity.Info);
         await InvokeAsync(StateHasChanged);
         await InitEditorJs();
@@ -282,6 +381,7 @@
     private async Task AddRectForSpecificLine(int lineId)
     {
         if (_rects.Any(r => r.LineId == lineId)) return;
+        PushUndo();
 
         var idx = _rects.Count;
         var newRect = new TwmsBlueprintRect
@@ -294,6 +394,7 @@
             Height = 120,
         };
         _rects.Add(newRect);
+        _hasChanges = true;
         StateHasChanged();
 
         await Task.Delay(50);
@@ -332,6 +433,7 @@
                 await TwmDb.UpsertBlueprintRectAsync(rect);
             }
 
+            _hasChanges = false;
             Snackbar.Add($"{_rects.Count}개 라인 영역이 저장되었습니다.", Severity.Success);
         }
         catch (Exception ex)
