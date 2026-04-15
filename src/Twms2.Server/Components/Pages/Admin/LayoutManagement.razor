@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject IJSRuntime JS
 @inject DexaFileImportService DexaImportService
+@inject LayoutNotificationService LayoutNotification
 
 <PageTitle>TWM - 레이아웃 관리</PageTitle>
 
@@ -33,6 +34,11 @@
     <MudButton Variant="Variant.Outlined" Size="Size.Small"
                StartIcon="@Icons.Material.Filled.Edit" OnClick="RenameLayoutAsync">
         이름 변경
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.SwapVert" OnClick="ReorderLayoutsAsync"
+               Disabled="_layouts.Count <= 1">
+        순서 변경
     </MudButton>
     <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteLayoutAsync"
@@ -425,6 +431,29 @@
         await TwmDb.UpdateLayoutAsync(current);
         await ReloadLayoutsAsync();
         Snackbar.Add($"레이아웃 이름이 '{name}'(으)로 변경되었습니다.", Severity.Success);
+    }
+
+    private async Task ReorderLayoutsAsync()
+    {
+        if (_layouts.Count <= 1) return;
+
+        var parameters = new DialogParameters<LayoutReorderDialog>
+        {
+            { x => x.Layouts, _layouts.ToList() }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<LayoutReorderDialog>("레이아웃 순서 변경", parameters, options);
+        var result = await dialog.Result;
+        if (result == null || result.Canceled) return;
+
+        if (result.Data is List<TwmsLayout> reordered)
+        {
+            var sortOrders = reordered.Select((l, i) => (l.Id, SortOrder: i)).ToList();
+            await TwmDb.UpdateLayoutSortOrdersAsync(sortOrders);
+            await ReloadLayoutsAsync();
+            LayoutNotification.NotifyLayoutChanged(0);
+            Snackbar.Add("레이아웃 순서가 변경되었습니다.", Severity.Success);
+        }
     }
 
     private async Task DeleteLayoutAsync()

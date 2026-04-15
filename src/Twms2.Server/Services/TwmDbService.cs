@@ -242,6 +242,19 @@ public class TwmDbService
             """, layout);
     }
 
+    public async Task UpdateLayoutSortOrdersAsync(List<(int Id, int SortOrder)> sortOrders)
+    {
+        using var conn = _db.Create();
+        using var tx = conn.BeginTransaction();
+        foreach (var (id, sortOrder) in sortOrders)
+        {
+            await conn.ExecuteAsync(
+                "UPDATE TwmsLayout SET SortOrder = @SortOrder, UpdatedAt = CURRENT_TIMESTAMP WHERE Id = @Id",
+                new { Id = id, SortOrder = sortOrder }, transaction: tx);
+        }
+        tx.Commit();
+    }
+
     public async Task DeleteLayoutAsync(int layoutId)
     {
         using var conn = _db.Create();

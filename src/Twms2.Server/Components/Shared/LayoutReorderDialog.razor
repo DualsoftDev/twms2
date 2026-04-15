@@ -1,0 +1,54 @@
+@using Twms2.Server.Models.Twm
+
+<MudDialog>
+    <DialogContent>
+        <MudText Class="mb-3">화살표 버튼으로 레이아웃 순서를 변경하세요.</MudText>
+        @for (var i = 0; i < _items.Count; i++)
+        {
+            var idx = i;
+            <MudPaper Class="pa-2 my-1 d-flex align-center" Elevation="1"
+                      Style="border-radius: 8px;">
+                <MudText Typo="Typo.body1" Class="mr-auto" Style="font-weight: 500;">
+                    @((idx + 1) + ". " + _items[idx].Name)
+                </MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                               Size="Size.Small" Disabled="idx == 0"
+                               OnClick="() => MoveUp(idx)" />
+                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                               Size="Size.Small" Disabled="idx == _items.Count - 1"
+                               OnClick="() => MoveDown(idx)" />
+            </MudPaper>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">취소</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">확인</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public List<TwmsLayout> Layouts { get; set; } = [];
+
+    private List<TwmsLayout> _items = [];
+
+    protected override void OnInitialized()
+    {
+        _items = Layouts.ToList();
+    }
+
+    private void MoveUp(int index)
+    {
+        if (index <= 0) return;
+        (_items[index - 1], _items[index]) = (_items[index], _items[index - 1]);
+    }
+
+    private void MoveDown(int index)
+    {
+        if (index >= _items.Count - 1) return;
+        (_items[index], _items[index + 1]) = (_items[index + 1], _items[index]);
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_items));
+    private void Cancel() => MudDialog.Cancel();
+}
