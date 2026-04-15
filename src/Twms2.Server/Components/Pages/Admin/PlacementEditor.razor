@@ -154,14 +154,6 @@ else
                                      ValueChanged="ToggleCheckAll" Size="Size.Small" Color="Color.Success"
                                      Label="전체" />
                     }
-                    @if (_checkedAssetIds.Count > 0)
-                    {
-                        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Success"
-                                   StartIcon="@Icons.Material.Filled.GridView"
-                                   OnClick="StartGridPlacement">
-                            격자 배치 (@_checkedAssetIds.Count)
-                        </MudButton>
-                    }
                 </div>
                 <div class="ap-asset-list">
                     @foreach (var asset in UnplacedAssets)
@@ -337,6 +329,7 @@ else
                                        data-scale="@F(item.Size / 32)"
                                        transform="translate(@F(item.X), @F(item.Y))"
                                        style="cursor: grab;">
+                                        <title>@item.Asset.Name</title>
                                         <rect width="@F(item.Size)" height="@F(item.Size)" rx="3"
                                               fill="white" stroke="#ccc" stroke-width="1" opacity="0.9" />
                                         <image href="@GetAssetIcon(item.Asset.AssetTypeName, item.Asset.AugIsRobotPLC)"
@@ -374,6 +367,7 @@ else
                            data-scale="@F(s)"
                            transform="translate(@F(pos.X - sz / 2), @F(pos.Y - sz / 2))"
                            style="cursor: grab;">
+                            <title>@asset.Name</title>
                             <rect width="@F(sz)" height="@F(sz)" rx="4" fill="white" stroke="#ccc"
                                   stroke-width="1" opacity="0.9" />
                             <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
@@ -441,11 +435,6 @@ else
         Dictionary<int, (double X, double Y, double Scale, bool Visible)> Positions,
         List<(int Id, string? Name, double X, double Y, double W, double H, string? Color)> Groups,
         Dictionary<int, List<int>> Members);
-
-    // ═══ Grid placement ═══
-    private GridPlaceState? _gridPlaceState;
-
-    private record GridPlaceState(List<int> AssetIds, int Cols, int Rows, double CellW, double CellH);
 
     // ═══════════════ Lifecycle ═══════════════
 
@@ -603,7 +592,7 @@ else
     {
         get
         {
-            var result = _allAssets.Where(a => !GetPosition(a.AssetId).Visible);
+            var result = _allAssets.Where(a => !GetPosition(a.AssetId).Visible && !_groupedAssetIds.Contains(a.AssetId));
             if (_selectedLineId.HasValue)
                 result = _selectedLineId.Value == -1
                     ? result.Where(a => !a.AugLineId.HasValue)
@@ -806,78 +795,33 @@ else
 
     // ═══════════════ Grid Placement ═══════════════
 
-    [JSInvokable]
-    public void OnGridPlaceConfirmed(double x, double y)
-    {
-        if (_gridPlaceState == null) return;
-        PushUndo();
-        var state = _gridPlaceState;
-
-        for (int i = 0; i < state.AssetIds.Count; i++)
-        {
-            int col = i % state.Cols, row = i / state.Cols;
-            var pos = GetPosition(state.AssetIds[i]);
-            pos.Visible = true;
-            pos.Scale = _globalScale;
-            pos.X = Math.Round(x + col * state.CellW + state.CellW / 2, 2);
-            pos.Y = Math.Round(y + row * state.CellH + state.CellH / 2, 2);
-        }
-
-        // Create group
-        var tempId = _nextTempGroupId--;
-        var lineName = _selectedLineId.HasValue && _selectedLineId.Value > 0 && _lines.TryGetValue(_selectedLineId.Value, out var ln)
-            ? ln : "그룹";
-        _groups.Add(new TwmsPlacementGroup
-        {
-            Id = tempId, LayoutId = LayoutId, Name = lineName,
-            X = Math.Round(x - 12, 2), Y = Math.Round(y - 16, 2),
-            Width = Math.Round(state.Cols * state.CellW + 24, 2),
-            Height = Math.Round(state.Rows * state.CellH + 32, 2),
-        });
-        _groupMembers[tempId] = state.AssetIds;
-        RebuildIndexes();
-
-        _checkedAssetIds.Clear();
-        _gridPlaceState = null;
-        _hasChanges = true;
-
-        Snackbar.Add($"{state.AssetIds.Count}개 자산이 배치되었습니다.", Severity.Success);
-        InvokeAsync(StateHasChanged);
-    }
-
-    private async Task StartGridPlacement()
-    {
-        if (_checkedAssetIds.Count == 0) return;
-
-        var assetIds = _checkedAssetIds
-            .OrderBy(id => _allAssets.FirstOrDefault(a => a.AssetId == id)?.Name ?? "")
-            .ToList();
-        int count = assetIds.Count;
-        int cols = (int)Math.Ceiling(Math.Sqrt(count));
-        int rows = (int)Math.Ceiling((double)count / cols);
-        double cellW = 32.0 * _globalScale + 16;
-        double cellH = 32.0 * _globalScale + 28;
-
-        _gridPlaceState = new GridPlaceState(assetIds, cols, rows, cellW, cellH);
-
-        var names = assetIds
-            .Select(id => TruncName(_allAssets.FirstOrDefault(a => a.AssetId == id)?.Name))
-            .ToArray();
-
-        try
-        {
-            await JS.InvokeVoidAsync("assetPlacementEditor.showGridPreview",
-                "ap-editor-container", cols, rows, cellW, cellH, names);
-        }
-        catch (JSDisconnectedException) { }
-    }
-
     // ═══════════════ Unplace / Check ═══════════════
 
     private void ToggleCheck(int assetId)
     {
         if (!_checkedAssetIds.Remove(assetId))
+        {
             _checkedAssetIds.Add(assetId);
+            PlaceAssetIndividually(assetId);
+        }
+    }
+
+    private void PlaceAssetIndividually(int assetId)
+    {
+        var pos = GetPosition(assetId);
+        if (pos.Visible) return;
+
+        PushUndo();
+        var idx = _checkedAssetIds.Count - 1;
+        var cols = 5;
+        var spacing = 32.0 * _globalScale + 12;
+        var col = idx % cols;
+        var row = idx / cols;
+        pos.Visible = true;
+        pos.Scale = _globalScale;
+        pos.X = Math.Round(40 + col * spacing, 2);
+        pos.Y = Math.Round(40 + row * spacing, 2);
+        _hasChanges = true;
     }
 
     private void UnplaceAsset(int assetId)
@@ -1087,7 +1031,6 @@ else
             case "escape":
                 _selectedAssetIds.Clear();
                 _selectedGroupIds.Clear();
-                _gridPlaceState = null;
                 break;
             case "selectAll":
                 _selectedAssetIds = new HashSet<int>(
@@ -1138,6 +1081,7 @@ else
     private void UnplaceSelected()
     {
         var count = 0;
+        // 선택된 개별 자산 미배치
         foreach (var aid in _selectedAssetIds)
         {
             var pos = GetPosition(aid);
@@ -1151,10 +1095,18 @@ else
                 }
             }
         }
+        // 선택된 그룹 해체 (그룹만 삭제, 멤버 자산은 개별 배치 유지)
+        foreach (var gid in _selectedGroupIds)
+        {
+            _groups.RemoveAll(g => g.Id == gid);
+            _groupMembers.Remove(gid);
+            count++;
+        }
         _selectedAssetIds.Clear();
+        _selectedGroupIds.Clear();
         RebuildIndexes();
         _hasChanges = true;
-        if (count > 0) Snackbar.Add($"{count}개 미배치됨", Severity.Success);
+        if (count > 0) Snackbar.Add($"{count}개 제거됨", Severity.Success);
     }
 
     // ═══════════════ 자동 그룹핑 ═══════════════
@@ -1235,8 +1187,24 @@ else
     {
         if (check)
         {
-            foreach (var a in UnplacedAssets)
+            PushUndo();
+            var unplaced = UnplacedAssets;
+            var spacing = 32.0 * _globalScale + 12;
+            var cols = 5;
+            for (int i = 0; i < unplaced.Count; i++)
+            {
+                var a = unplaced[i];
                 _checkedAssetIds.Add(a.AssetId);
+                var pos = GetPosition(a.AssetId);
+                if (!pos.Visible)
+                {
+                    pos.Visible = true;
+                    pos.Scale = _globalScale;
+                    pos.X = Math.Round(40 + (i % cols) * spacing, 2);
+                    pos.Y = Math.Round(40 + (i / cols) * spacing, 2);
+                }
+            }
+            _hasChanges = true;
         }
         else
         {

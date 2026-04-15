@@ -3,14 +3,19 @@
 @inject NavigationManager Navigation
 @implements IAsyncDisposable
 
-@* ── 범례 + 필터 ── *@
+@* ── 범례(건강 상태 필터) + 필터 ── *@
 <MudPaper Class="pa-3 mb-3" Elevation="1">
     <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center" Justify="Justify.Center" Class="flex-wrap">
-        @foreach (var (label, color) in _legendItems)
+        @foreach (var fi in _healthFilterItems)
         {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <div class="topology-legend-dot" style="background: @color;"></div>
-                <MudText Typo="Typo.body2">@label</MudText>
+            var f = fi;
+            var isChecked = !_hiddenHealthStatuses.Contains(f.Status);
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Class="apv-filter-item">
+                <MudCheckBox T="bool" Value="isChecked" Size="Size.Small" Dense="true"
+                             Color="Color.Primary"
+                             ValueChanged="@(v => ToggleHealthFilter(f.Status, v))" />
+                <div class="topology-legend-dot" style="background: @f.Color;"></div>
+                <MudText Typo="Typo.body2">@f.Label</MudText>
             </MudStack>
         }
         <MudDivider Vertical="true" FlexItem="true" />
@@ -138,6 +143,7 @@
                 var asset = AssetStatuses.FirstOrDefault(a => a.AssetId == pos.AssetId);
                 if (asset == null) continue;
                 if (_hiddenAssetTypeKeys.Contains(GetAssetTypeKey(asset))) continue;
+                if (_hiddenHealthStatuses.Contains(asset.Health)) continue;
 
                 var healthColor = GetHealthColor(asset.Health);
                 var isOffline = asset.LatestPing is { Reachable: false };
@@ -191,6 +197,7 @@
 
     // ──────────── 필터 상태 ────────────
     private HashSet<string> _hiddenAssetTypeKeys = new();
+    private HashSet<AssetHealthStatus> _hiddenHealthStatuses = new();
     private bool _groupsVisible = true;
     private HashSet<int> _hiddenFloors = new();
     private bool _floorFilterInitialized;
@@ -282,12 +289,16 @@
     private List<AssetStatusInfo> GetFilteredGroupMemberAssets(int groupId)
     {
         var all = GetGroupMemberAssets(groupId);
-        if (_hiddenFloors.Count == 0) return all;
         return all.Where(a =>
         {
-            var floor = AssetFloorMap.GetValueOrDefault(a.AssetId);
-            if (!floor.HasValue) return true;
-            return !_hiddenFloors.Contains(floor.Value);
+            if (_hiddenHealthStatuses.Contains(a.Health)) return false;
+            if (_hiddenAssetTypeKeys.Contains(GetAssetTypeKey(a))) return false;
+            if (_hiddenFloors.Count > 0)
+            {
+                var floor = AssetFloorMap.GetValueOrDefault(a.AssetId);
+                if (floor.HasValue && _hiddenFloors.Contains(floor.Value)) return false;
+            }
+            return true;
         }).ToList();
     }
 
@@ -301,7 +312,9 @@
             var ungrouped = UngroupedVisiblePositions.Count(p =>
             {
                 var asset = AssetStatuses.FirstOrDefault(a => a.AssetId == p.AssetId);
-                return asset != null && !_hiddenAssetTypeKeys.Contains(GetAssetTypeKey(asset));
+                return asset != null
+                    && !_hiddenAssetTypeKeys.Contains(GetAssetTypeKey(asset))
+                    && !_hiddenHealthStatuses.Contains(asset.Health);
             });
             var grouped = _groupsVisible
                 ? PlacementGroups.Sum(g => GetFilteredGroupMemberAssets(g.Id).Count)
@@ -310,13 +323,21 @@
         }
     }
 
-    private static readonly (string Label, string Color)[] _legendItems =
+    private record HealthFilterItem(string Label, string Color, AssetHealthStatus Status);
+
+    private static readonly HealthFilterItem[] _healthFilterItems =
     [
-        ("갱신", "#65B991"),
-        ("유지", "#6BA0DE"),
-        ("실패", "#E67E7E"),
-        ("내역없음", "#999"),
+        new("갱신", "#65B991", AssetHealthStatus.BackedUp),
+        new("유지", "#6BA0DE", AssetHealthStatus.Unchanged),
+        new("실패", "#E67E7E", AssetHealthStatus.Failed),
+        new("내역없음", "#999", AssetHealthStatus.Unknown),
     ];
+
+    private void ToggleHealthFilter(AssetHealthStatus status, bool show)
+    {
+        if (show) _hiddenHealthStatuses.Remove(status);
+        else _hiddenHealthStatuses.Add(status);
+    }
 
     // ──────────── 그룹 라벨: 멤버 자산의 층 정보 기반 ────────────
 

@@ -1272,7 +1272,6 @@ window.assetPlacementEditor = (() => {
         init, dispose,
         setTool, setSnapConfig,
         zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel,
-        showGridPreview, hideGridPreview,
         scrollToAsset,
     };
 })();
