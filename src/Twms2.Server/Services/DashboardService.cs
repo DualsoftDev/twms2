@@ -1,3 +1,4 @@
+using Dapper;
 using Twms2.Dexa;
 using Twms2.Server.Data;
 using Twms2.Server.Models.Dashboard;
@@ -121,17 +122,37 @@ public class DashboardService
     {
         try
         {
-            var path = _dexaDbConn.DbFilePath;
-            var root = Path.GetPathRoot(path);
-            if (string.IsNullOrEmpty(root)) return null;
-            var drive = new DriveInfo(root);
-            return new DriveStat
+            if (_dexaDbConn.Provider == DexaDbProvider.SqlServer)
             {
-                DriveName = drive.Name,
-                DbFilePath = path,
-                TotalBytes = drive.TotalSize,
-                FreeBytes = drive.AvailableFreeSpace,
-            };
+                using var conn = _dexaDbConn.Create();
+                var stat = conn.QueryFirstOrDefault<DriveStat>(@"
+                    SELECT
+                        vs.volume_mount_point  AS DriveName,
+                        df.physical_name       AS DbFilePath,
+                        vs.total_bytes         AS TotalBytes,
+                        vs.available_bytes     AS FreeBytes
+                    FROM sys.dm_os_volume_stats(DB_ID(), 1) vs
+                    CROSS APPLY (
+                        SELECT TOP 1 physical_name
+                        FROM sys.database_files
+                        WHERE type = 0
+                    ) df");
+                return stat;
+            }
+            else
+            {
+                var path = _dexaDbConn.DbFilePath;
+                var root = Path.GetPathRoot(path);
+                if (string.IsNullOrEmpty(root)) return null;
+                var drive = new DriveInfo(root);
+                return new DriveStat
+                {
+                    DriveName = drive.Name,
+                    DbFilePath = path!,
+                    TotalBytes = drive.TotalSize,
+                    FreeBytes = drive.AvailableFreeSpace,
+                };
+            }
         }
         catch (Exception ex)
         {

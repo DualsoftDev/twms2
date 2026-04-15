@@ -30,6 +30,35 @@ public static class LayoutHelpers
         _                            => "#999",
     };
 
+    /// <summary>
+    /// 자산 아이콘 배경색: 백업 상태 색상의 밝은 버전, 오프라인이면 약간 어둡게.
+    /// </summary>
+    public static string GetIconBgColor(AssetHealthStatus health, bool isOffline) => (health, isOffline) switch
+    {
+        (AssetHealthStatus.BackedUp,   true)  => "#a3d4b5",
+        (AssetHealthStatus.BackedUp,   false) => "#d4f0e0",
+        (AssetHealthStatus.Unchanged,  true)  => "#a0c4e4",
+        (AssetHealthStatus.Unchanged,  false) => "#d6e8f7",
+        (AssetHealthStatus.Failed,     true)  => "#dca0a0",
+        (AssetHealthStatus.Failed,     false) => "#f5d0d0",
+        (AssetHealthStatus.InProgress, true)  => "#e0c080",
+        (AssetHealthStatus.InProgress, false) => "#fde8c4",
+        (_,                            true)  => "#b8b8b8",
+        _                                     => "#e0e0e0",
+    };
+
+    /// <summary>
+    /// 건강 색상 hex 문자열로부터 밝은 배경색 반환 (그룹 아이콘용).
+    /// </summary>
+    public static string GetIconBgColorFromHex(string healthColor) => healthColor switch
+    {
+        "#65B991" => "#d4f0e0",
+        "#6BA0DE" => "#d6e8f7",
+        "#E67E7E" => "#f5d0d0",
+        "#f59e0b" => "#fde8c4",
+        _         => "#e0e0e0",
+    };
+
     public static string GetHealthLabel(AssetHealthStatus health) => health switch
     {
         AssetHealthStatus.BackedUp   => "백업 갱신",

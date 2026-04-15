@@ -111,21 +111,17 @@
                                   rx="5" fill="#1e1e38"
                                   stroke="rgba(255,255,255,0.25)" stroke-width="0.8" />
                             <g class="blueprint-asset-icon">
+                                @{
+                                    var plcOffline = card.Plc.LatestPing is { Reachable: false };
+                                    var plcBg = GetIconBgColor(card.Plc.Health, plcOffline);
+                                }
                                 @(RenderSvgTitle(card.Plc))
                                 <rect x="@F(plcIx)" y="@F(plcIy)"
                                       width="@F(card.PlcSize)" height="@F(card.PlcSize)"
-                                      rx="4" fill="white" stroke="@plcColor" stroke-width="0.7" opacity="0.95" />
+                                      rx="4" fill="@plcBg" stroke="@plcColor" stroke-width="0.7" opacity="0.95" />
                                 <image href="@GetAssetIcon(card.Plc.AssetTypeName, card.Plc.AugIsRobotPLC)"
                                        x="@F(plcIx + 2)" y="@F(plcIy + 2)"
                                        width="@F(card.PlcSize - 4)" height="@F(card.PlcSize - 4)" />
-                                @if (card.Plc.LatestPing is { Reachable: false })
-                                {
-                                    <rect x="@F(plcIx + card.PlcSize - dr * 3)" y="@F(plcIy + card.PlcSize - dr * 3)"
-                                          width="@F(dr * 4)" height="@F(dr * 4)"
-                                          rx="2" fill="#333" opacity="0.7" />
-                                }
-                                <circle cx="@F(plcIx + card.PlcSize - dr)" cy="@F(plcIy + card.PlcSize - dr)"
-                                        r="@F(dr)" fill="@plcColor" stroke="white" stroke-width="0.8" />
                             </g>
                             @if (card.HasIp && !string.IsNullOrEmpty(card.Ip))
                             {
@@ -148,21 +144,19 @@
                         @* 종류별 2단 자산 그룹 (각각 클릭 → 그룹 상세) *@
                         @foreach (var grp in card.Groups)
                         {
-                            var gdr = Math.Max(2.0, grp.Size * 0.14);
+                            var grpBg = GetIconBgColorFromHex(grp.Color);
                             <g @onclick="() => OnGroupClick(card.Plc.AssetId, grp.GroupIcon)"
                                @onclick:stopPropagation="true" style="cursor:pointer">
                                 <g class="blueprint-asset-icon">
                                     <rect x="@F(grp.X)" y="@F(grp.Y)"
                                           width="@F(grp.Size)" height="@F(grp.Size)"
-                                          rx="2" fill="white" stroke="@grp.Color" stroke-width="1" opacity="0.9" />
+                                          rx="2" fill="@grpBg" stroke="@grp.Color" stroke-width="1" opacity="0.9" />
                                     <image href="@GetAssetIcon(grp.Rep.AssetTypeName, grp.Rep.AugIsRobotPLC)"
                                            x="@F(grp.X + 1)" y="@F(grp.Y + 1)"
                                            width="@F(grp.Size - 2)" height="@F(grp.Size - 2)" />
                                     <circle cx="@F(grp.X + grp.Size - 2)" cy="@F(grp.Y + 2)" r="5"
                                             fill="#555" stroke="white" stroke-width="0.8" />
                                     @(RenderBadgeText(grp.X + grp.Size - 2, grp.Y + 4.5, grp.Count))
-                                    <circle cx="@F(grp.X + grp.Size - gdr)" cy="@F(grp.Y + grp.Size - gdr)"
-                                            r="@F(gdr)" fill="@grp.Color" stroke="white" stroke-width="0.7" />
                                 </g>
                             </g>
                         }
@@ -173,7 +167,7 @@
                     {
                         var ac = GetHealthColor(item.Asset.Health);
                         var offline = item.Asset.LatestPing is { Reachable: false };
-                        var dr = Math.Max(2.0, item.Size * 0.12);
+                        var stBg = GetIconBgColor(item.Asset.Health, offline);
 
                         <g @onclick="() => OnAssetClick(item.Asset.AssetId)" @onclick:stopPropagation="true"
                            style="cursor:pointer">
@@ -181,18 +175,10 @@
                                 @(RenderSvgTitle(item.Asset))
                                 <rect x="@F(item.X)" y="@F(item.Y)"
                                       width="@F(item.Size)" height="@F(item.Size)"
-                                      rx="4" fill="white" stroke="@ac" stroke-width="0.7" opacity="0.95" />
+                                      rx="4" fill="@stBg" stroke="@ac" stroke-width="0.7" opacity="0.95" />
                                 <image href="@GetAssetIcon(item.Asset.AssetTypeName, item.Asset.AugIsRobotPLC)"
                                        x="@F(item.X + 2)" y="@F(item.Y + 2)"
                                        width="@F(item.Size - 4)" height="@F(item.Size - 4)" />
-                                @if (offline)
-                                {
-                                    <rect x="@F(item.X + item.Size - dr * 3)" y="@F(item.Y + item.Size - dr * 3)"
-                                          width="@F(dr * 4)" height="@F(dr * 4)"
-                                          rx="2" fill="#333" opacity="0.7" />
-                                }
-                                <circle cx="@F(item.X + item.Size - dr)" cy="@F(item.Y + item.Size - dr)"
-                                        r="@F(dr)" fill="@ac" stroke="white" stroke-width="0.8" />
                             </g>
                         </g>
                     }

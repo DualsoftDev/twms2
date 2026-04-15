@@ -117,23 +117,15 @@
                         {
                             var healthColor = GetHealthColor(item.Asset.Health);
                             var isOffline = item.Asset.LatestPing is { Reachable: false };
-                            var dr = Math.Max(1.5, item.Size * 0.12);
+                            var bgColor = GetIconBgColor(item.Asset.Health, isOffline);
                             <g transform="translate(@F(item.X), @F(item.Y))" class="apv-asset-icon"
                                @onclick="() => NavigateToAsset(item.Asset.AssetId)"
                                @onclick:stopPropagation="true" style="cursor:pointer">
                                 @(RenderSvgTitle(item.Asset))
                                 <rect width="@F(item.Size)" height="@F(item.Size)" rx="3"
-                                      fill="white" stroke="@healthColor" stroke-width="1" opacity="0.9" />
+                                      fill="@bgColor" stroke="@healthColor" stroke-width="1" opacity="0.9" />
                                 <image href="@GetAssetIcon(item.Asset.AssetTypeName, item.Asset.AugIsRobotPLC)"
                                        width="@F(item.Size - 2)" height="@F(item.Size - 2)" x="1" y="1" />
-                                @if (isOffline)
-                                {
-                                    <rect x="@F(item.Size - dr * 3)" y="@F(item.Size - dr * 3)"
-                                          width="@F(dr * 4)" height="@F(dr * 4)"
-                                          rx="1" fill="#333" opacity="0.7" />
-                                }
-                                <circle cx="@F(item.Size - dr)" cy="@F(item.Size - dr)"
-                                        r="@F(dr)" fill="@healthColor" stroke="white" stroke-width="0.5" />
                             </g>
                         }
                     </g>
@@ -149,27 +141,19 @@
 
                 var healthColor = GetHealthColor(asset.Health);
                 var isOffline = asset.LatestPing is { Reachable: false };
+                var bgColor = GetIconBgColor(asset.Health, isOffline);
                 var s = pos.Scale;
                 var sz = 36 * s;
                 var imgSz = 28 * s;
                 var imgOff = 4 * s;
-                var dr = Math.Max(1.5, sz * 0.12);
                 <g transform="translate(@F(pos.X - sz / 2), @F(pos.Y - sz / 2))" class="apv-asset-icon"
                    @onclick="() => NavigateToAsset(asset.AssetId)"
                    @onclick:stopPropagation="true" style="cursor:pointer">
                     @(RenderSvgTitle(asset))
                     <rect width="@F(sz)" height="@F(sz)" rx="@F(Math.Max(1, 4 * s))"
-                          fill="white" stroke="@healthColor" stroke-width="@F(Math.Max(0.5, 1.5 * s))" opacity="0.9" />
+                          fill="@bgColor" stroke="@healthColor" stroke-width="@F(Math.Max(0.5, 1.5 * s))" opacity="0.9" />
                     <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
                            width="@F(imgSz)" height="@F(imgSz)" x="@F(imgOff)" y="@F(imgOff)" />
-                    @if (isOffline)
-                    {
-                        <rect x="@F(sz - dr * 3)" y="@F(sz - dr * 3)"
-                              width="@F(dr * 4)" height="@F(dr * 4)"
-                              rx="@F(Math.Max(1, dr))" fill="#333" opacity="0.7" />
-                    }
-                    <circle cx="@F(sz - dr)" cy="@F(sz - dr)" r="@F(dr)"
-                            fill="@healthColor" stroke="white" stroke-width="@F(Math.Max(0.5, dr * 0.4))" />
                 </g>
             }
         </svg>
