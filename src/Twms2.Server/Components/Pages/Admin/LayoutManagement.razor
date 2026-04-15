@@ -493,14 +493,21 @@
                     File.Delete(f);
 
                 var filePath = Path.Combine(uploadsDir, $"blueprint-bg-{_selectedLayoutId}{ext}");
-                await using var stream = File.Create(filePath);
-                await _selectedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(stream);
+                await using (var stream = File.Create(filePath))
+                {
+                    await _selectedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(stream);
+                }
 
                 _config.ImagePath = $"uploads/blueprint-bg-{_selectedLayoutId}{ext}";
                 _currentImagePath = _config.ImagePath;
                 _previewImagePath = _config.ImagePath;
                 _selectedFile = null;
                 _selectedFileName = null;
+
+                // 이미지 크기 저장 (DEXA 좌표 변환 시 사용)
+                var (imgW, imgH) = ReadImageSize(filePath);
+                _config.ImageWidth = imgW > 0 ? imgW : null;
+                _config.ImageHeight = imgH > 0 ? imgH : null;
             }
 
             _config.BgColor = _bgColor.ToString(MudColorOutputFormats.Hex);
@@ -642,5 +649,40 @@
             try { if (File.Exists(_posTempPath)) File.Delete(_posTempPath); } catch { }
             _posTempPath = null;
         }
+    }
+
+    private static (double w, double h) ReadImageSize(string filePath)
+    {
+        try
+        {
+            var bytes = File.ReadAllBytes(filePath);
+            // PNG: signature 89 50 4E 47, width@16, height@20 (4 bytes BE)
+            if (bytes.Length > 24 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                int w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+                int h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+                return (w, h);
+            }
+            // JPEG: SOI(FFD8) → find SOF0(FFC0) marker, height@+5, width@+7 (2 bytes BE)
+            if (bytes.Length > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                int i = 2;
+                while (i + 8 < bytes.Length)
+                {
+                    if (bytes[i] != 0xFF) break;
+                    byte marker = bytes[i + 1];
+                    if (marker == 0xC0 || marker == 0xC2)
+                    {
+                        int h = (bytes[i + 5] << 8) | bytes[i + 6];
+                        int w = (bytes[i + 7] << 8) | bytes[i + 8];
+                        return (w, h);
+                    }
+                    int segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+                    i += 2 + segLen;
+                }
+            }
+        }
+        catch { /* ignore */ }
+        return (0, 0);
     }
 }

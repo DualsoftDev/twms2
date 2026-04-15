@@ -256,6 +256,9 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                 layoutTransform[layoutId] = (imgW, imgH, imgAreaW, imgAreaH, offsetX, offsetY);
             }
 
+            // 라인별 SelfW/SelfH lookup (좌표 정규화용)
+            var lineSelfSize = lineRows.ToDictionary(l => l.Id, l => (l.SelfW, l.SelfH));
+
             // assetPosRows 전용 lineId lookup (자산 배치용)
             var assetLineMap = assetPosRows
                 .Where(a => a.AugLineId.HasValue)
@@ -273,10 +276,11 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                     continue;
                 }
 
-                // 좌표는 도면 이미지 픽셀 기준 → 이미지 크기로 정규화 → viewBox 매핑
-                // 중심 좌표를 그대로 저장 (앵커 = 중심)
-                var cx = (asset.AugLX / lt.imgW) * lt.imgAreaW + lt.offsetX;
-                var cy = (asset.AugLY / lt.imgH) * lt.imgAreaH + lt.offsetY;
+                // 좌표는 라인의 SelfW/SelfH 좌표 공간 기준 → 정규화 → viewBox 매핑
+                // imgW/imgH는 aspect ratio offset에만 사용, 나눗셈은 라인의 SelfW/SelfH
+                var (selfW, selfH) = lineSelfSize.GetValueOrDefault(asset.AugLineId.Value, (lt.imgW, lt.imgH));
+                var cx = (asset.AugLX / selfW) * lt.imgAreaW + lt.offsetX;
+                var cy = (asset.AugLY / selfH) * lt.imgAreaH + lt.offsetY;
 
                 assetPositions.Add(new TwmsAssetPosition
                 {
@@ -325,11 +329,12 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                     continue;
                 }
 
-                // 좌표는 도면 이미지 픽셀 기준 → 이미지 크기로 정규화 → viewBox 매핑
-                var gx = (grp.X / glt.imgW) * glt.imgAreaW + glt.offsetX;
-                var gy = (grp.Y / glt.imgH) * glt.imgAreaH + glt.offsetY;
-                var gw = (grp.W / glt.imgW) * glt.imgAreaW;
-                var gh = (grp.H / glt.imgH) * glt.imgAreaH;
+                // 좌표는 멤버 라인의 SelfW/SelfH 좌표 공간 기준 → 정규화 → viewBox 매핑
+                var (gSelfW, gSelfH) = lineSelfSize.GetValueOrDefault(memberLineId.Value, (glt.imgW, glt.imgH));
+                var gx = (grp.X / gSelfW) * glt.imgAreaW + glt.offsetX;
+                var gy = (grp.Y / gSelfH) * glt.imgAreaH + glt.offsetY;
+                var gw = (grp.W / gSelfW) * glt.imgAreaW;
+                var gh = (grp.H / gSelfH) * glt.imgAreaH;
 
                 var floorLabel = grp.Floor.HasValue ? $"{grp.Floor}층" : "";
                 var newGroup = new TwmsPlacementGroup
