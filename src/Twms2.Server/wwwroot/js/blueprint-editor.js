@@ -24,7 +24,7 @@ window.blueprintEditor = (() => {
         const svg = container.querySelector('svg');
         if (!svg) return;
 
-        const inst = { container, svg, dotNetRef, handlers: [], snap: { enabled: true, gridSize: 20 } };
+        const inst = { container, svg, dotNetRef, handlers: [], snap: { enabled: true, gridSize: 20 }, dragging: false };
         _inst[containerId] = inst;
 
         const groups = svg.querySelectorAll('.bp-edit-rect');
@@ -50,6 +50,10 @@ window.blueprintEditor = (() => {
                 const handler = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    // 드래그 중에는 삭제 무시
+                    if (inst.dragging) return;
+                    const lineName = g.querySelector('.bp-rect-label')?.textContent?.trim() || `Line ${lineId}`;
+                    if (!confirm(`'${lineName}' 라인 영역을 삭제하시겠습니까?`)) return;
                     if (dotNetRef) {
                         dotNetRef.invokeMethodAsync('OnRectDeleted', lineId);
                     }
@@ -103,6 +107,7 @@ window.blueprintEditor = (() => {
             document.addEventListener('pointermove', onMove);
             document.addEventListener('pointerup', onUp);
             group.classList.add('dragging');
+            inst.dragging = true;
             target.setPointerCapture(e.pointerId);
         };
 
@@ -135,6 +140,8 @@ window.blueprintEditor = (() => {
             document.removeEventListener('pointermove', onMove);
             document.removeEventListener('pointerup', onUp);
             group.classList.remove('dragging');
+            // 약간의 지연 후 dragging 해제 — pointerup 직후 삭제 버튼 오발동 방지
+            setTimeout(() => { inst.dragging = false; }, 100);
 
             if (startPt && startRect && inst.dotNetRef) {
                 let fill = group.querySelector('.bp-rect-fill');

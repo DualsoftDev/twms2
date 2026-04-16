@@ -3,6 +3,7 @@
 @inject TwmDbService TwmDb
 @inject DexaNotificationService NotificationService
 @inject LayoutNotificationService LayoutNotification
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>TWM - 레이아웃</PageTitle>
@@ -107,6 +108,15 @@
         else
             _loading = false;
 
+        // localStorage에서 뷰 모드 복원
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "twms-layout-viewMode");
+            if (int.TryParse(saved, out var mode) && mode is 0 or 1)
+                _viewMode = mode;
+        }
+        catch { /* prerender 등에서 무시 */ }
+
         _statusTimer = new System.Threading.Timer(async _ =>
         {
             await InvokeAsync(async () =>
@@ -117,9 +127,11 @@
         }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
 
-    private void SetView(int mode)
+    private async Task SetView(int mode)
     {
         _viewMode = mode;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "twms-layout-viewMode", mode.ToString()); }
+        catch { /* ignore */ }
     }
 
     private async Task OnLayoutTabChanged(int index)

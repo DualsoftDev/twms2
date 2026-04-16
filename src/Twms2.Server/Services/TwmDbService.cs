@@ -369,8 +369,8 @@ public class TwmDbService
     {
         using var conn = _db.Create();
         await conn.ExecuteAsync("""
-            INSERT INTO TwmsBlueprintConfig (LayoutId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, UpdatedAt)
-            VALUES (@LayoutId, @ImagePath, @ImageWidth, @ImageHeight, @DrawingData, @BgColor, @GridColor, CURRENT_TIMESTAMP)
+            INSERT INTO TwmsBlueprintConfig (LayoutId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, GridEnabled, GridSize, UpdatedAt)
+            VALUES (@LayoutId, @ImagePath, @ImageWidth, @ImageHeight, @DrawingData, @BgColor, @GridColor, @GridEnabled, @GridSize, CURRENT_TIMESTAMP)
             ON CONFLICT(LayoutId) DO UPDATE SET
                 ImagePath   = @ImagePath,
                 ImageWidth  = @ImageWidth,
@@ -378,6 +378,8 @@ public class TwmDbService
                 DrawingData = @DrawingData,
                 BgColor     = @BgColor,
                 GridColor   = @GridColor,
+                GridEnabled = @GridEnabled,
+                GridSize    = @GridSize,
                 UpdatedAt   = CURRENT_TIMESTAMP
             """, config);
     }

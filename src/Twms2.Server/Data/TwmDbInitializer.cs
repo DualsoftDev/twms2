@@ -263,6 +263,12 @@ public class TwmDbInitializer
                 UploadedAt     DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             """),
+
+        // V27: 그리드 사용여부/크기 설정
+        (27, "GridEnabled/GridSize 컬럼 추가", """
+            ALTER TABLE TwmsBlueprintConfig ADD COLUMN GridEnabled INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE TwmsBlueprintConfig ADD COLUMN GridSize INTEGER NOT NULL DEFAULT 20;
+            """),
     ];
 
     public async Task InitializeAsync()

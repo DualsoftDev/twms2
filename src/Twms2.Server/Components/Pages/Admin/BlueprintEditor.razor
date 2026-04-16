@@ -4,22 +4,28 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
+@* ── 상단: 제목 + 저장 버튼 (우측 상단 통일) ── *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h6" Style="font-weight: 600;">
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" Style="vertical-align: middle;" />
+        라인 영역 편집
+    </MudText>
+    <MudSpacer />
+    @if (_hasChanges)
+    {
+        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Text">변경됨</MudChip>
+    }
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.Save"
+               OnClick="SaveAllRectsAsync" Disabled="_saving">
+        @(_saving ? "저장 중..." : "저장")
+    </MudButton>
+</MudStack>
+
 <MudGrid>
     @* ── 라인 목록 (좌측) ── *@
     <MudItem xs="12" md="4">
         <MudPaper Class="pa-4 neu-card">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
-                <MudText Typo="Typo.h6" Style="font-weight: 600;">
-                    <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" Style="vertical-align: middle;" />
-                    라인 영역 편집
-                </MudText>
-                <MudSpacer />
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.Save"
-                           OnClick="SaveAllRectsAsync" Disabled="_saving">
-                    @(_saving ? "저장 중..." : "저장")
-                </MudButton>
-            </MudStack>
 
             @* ── 배치된 라인 목록 ── *@
             @if (_rects.Count > 0)
@@ -109,15 +115,20 @@
                 <svg id="bp-editor-svg" class="drawing-editor-svg" viewBox="0 0 1000 600"
                      preserveAspectRatio="xMidYMid meet">
                 @* 그리드 배경 *@
+                @{
+                    var bpGridSmall = _config?.GridSize > 0 ? _config.GridSize : 20;
+                    var bpGridLarge = bpGridSmall * 5;
+                    var bpGridEnabled = _config?.GridEnabled ?? true;
+                }
                 <defs>
-                    <pattern id="bp-grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
-                        <path d="M 20 0 L 0 0 0 20" fill="none"
+                    <pattern id="bp-grid-small" width="@bpGridSmall" height="@bpGridSmall" patternUnits="userSpaceOnUse">
+                        <path d="M @bpGridSmall 0 L 0 0 0 @bpGridSmall" fill="none"
                               stroke="@(_config?.GridColor ?? "#e0e0e0")"
                               stroke-width="0.5" opacity="0.2" />
                     </pattern>
-                    <pattern id="bp-grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
-                        <rect width="100" height="100" fill="url(#bp-grid-small)" />
-                        <path d="M 100 0 L 0 0 0 100" fill="none"
+                    <pattern id="bp-grid-large" width="@bpGridLarge" height="@bpGridLarge" patternUnits="userSpaceOnUse">
+                        <rect width="@bpGridLarge" height="@bpGridLarge" fill="url(#bp-grid-small)" />
+                        <path d="M @bpGridLarge 0 L 0 0 0 @bpGridLarge" fill="none"
                               stroke="@(_config?.GridColor ?? "#e0e0e0")"
                               stroke-width="0.8" opacity="0.3" />
                     </pattern>
@@ -126,7 +137,10 @@
                 <rect x="-2000" y="-2000" width="5000" height="4000" fill="#111122" />
                 @* 배경색 + 그리드 *@
                 <rect width="1000" height="600" fill="@(_config?.BgColor ?? "#1a1a2e")" />
-                <rect width="1000" height="600" fill="url(#bp-grid-large)" />
+                @if (bpGridEnabled)
+                {
+                    <rect width="1000" height="600" fill="url(#bp-grid-large)" />
+                }
                 @* 도면 영역 경계선 *@
                 <rect width="1000" height="600" fill="none"
                       stroke="#ffffff" stroke-width="2" stroke-dasharray="8 4" opacity="0.4" />

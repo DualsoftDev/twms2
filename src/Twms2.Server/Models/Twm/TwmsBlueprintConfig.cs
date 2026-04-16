@@ -10,5 +10,7 @@ public class TwmsBlueprintConfig
     public string?  DrawingData { get; set; }
     public string?  BgColor     { get; set; }
     public string?  GridColor   { get; set; }
+    public bool     GridEnabled { get; set; } = true;
+    public int      GridSize    { get; set; } = 20;
     public DateTime UpdatedAt   { get; set; }
 }
