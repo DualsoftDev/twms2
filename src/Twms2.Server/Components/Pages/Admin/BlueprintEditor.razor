@@ -4,30 +4,42 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-@* ── 상단: 제목 + 저장 버튼 (우측 상단 통일) ── *@
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudText Typo="Typo.h6" Style="font-weight: 600;">
-        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" Style="vertical-align: middle;" />
-        라인 영역 편집
-    </MudText>
+@* ── 툴바 ── *@
+<MudPaper Class="pa-2 mb-2 d-flex align-center gap-2 flex-wrap" Elevation="1">
+    <MudToggleIconButton Toggled="_snapEnabled"
+                         Icon="@Icons.Material.Filled.GridOff"
+                         ToggledIcon="@Icons.Material.Filled.Grid4x4"
+                         Size="Size.Small" Color="Color.Default" ToggledColor="Color.Info"
+                         ToggledChanged="OnSnapToggled" />
+    <MudNumericField T="int" Value="_snapGridSize" ValueChanged="OnSnapGridChanged"
+                     Label="Grid" Variant="Variant.Text" Min="5" Max="100" Step="5"
+                     Style="width: 60px;" Margin="Margin.Dense" HideSpinButtons="true" />
+    <MudDivider Vertical="true" FlexItem="true" />
+    <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="ZoomOut" />
+    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="ZoomIn" />
+    <MudIconButton Icon="@Icons.Material.Filled.CenterFocusWeak" Size="Size.Small" OnClick="ZoomReset" />
+    <MudDivider Vertical="true" FlexItem="true" />
+    <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
+                   Disabled="@(_undoStack.Count == 0)" OnClick="Undo" />
+    <MudIconButton Icon="@Icons.Material.Filled.Redo" Size="Size.Small"
+                   Disabled="@(_redoStack.Count == 0)" OnClick="Redo" />
     <MudSpacer />
     @if (_hasChanges)
     {
         <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Text">변경됨</MudChip>
     }
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-               StartIcon="@Icons.Material.Filled.Save"
+               StartIcon="@Icons.Material.Filled.Check"
                OnClick="SaveAllRectsAsync" Disabled="_saving">
         @(_saving ? "저장 중..." : "저장")
     </MudButton>
-</MudStack>
+</MudPaper>
 
-<MudGrid>
-    @* ── 라인 목록 (좌측) ── *@
-    <MudItem xs="12" md="4">
-        <MudPaper Class="pa-4 neu-card">
-
-            @* ── 배치된 라인 목록 ── *@
+@* ── 메인 레이아웃: 좌측 패널 + 캔버스 ── *@
+<div class="ap-editor-layout">
+    @* ── 좌측 패널 ── *@
+    <div class="ap-left-panel">
+        @* ── 배치된 라인 목록 ── *@
             @if (_rects.Count > 0)
             {
                 <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mb-1" Style="font-weight: 600;">
@@ -77,41 +89,11 @@
                        OnClick="AddRectForLine" Disabled="_lines.Count == 0">
                 라인 추가
             </MudButton>
-        </MudPaper>
-    </MudItem>
+        </div>
 
-    @* ── 도면 뷰포트 (우측) ── *@
-    <MudItem xs="12" md="8">
-        <MudPaper Class="pa-4 neu-card">
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
-                사각형을 드래그하여 이동, 모서리로 크기 조절. 휠로 축소/확대, 빈 영역 드래그로 이동.
-            </MudText>
-
-            @* 줌 + 스냅 컨트롤 *@
-            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
-                <MudIconButton Icon="@Icons.Material.Filled.ZoomIn" Size="Size.Small"
-                               OnClick="ZoomIn" Title="확대" />
-                <MudIconButton Icon="@Icons.Material.Filled.ZoomOut" Size="Size.Small"
-                               OnClick="ZoomOut" Title="축소" />
-                <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" Size="Size.Small"
-                               OnClick="ZoomReset" Title="초기화" />
-                <MudDivider Vertical="true" FlexItem="true" />
-                <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
-                               Disabled="@(_undoStack.Count == 0)" OnClick="Undo" />
-                <MudIconButton Icon="@Icons.Material.Filled.Redo" Size="Size.Small"
-                               Disabled="@(_redoStack.Count == 0)" OnClick="Redo" />
-                <MudDivider Vertical="true" FlexItem="true" />
-                <MudToggleIconButton Toggled="_snapEnabled"
-                                     Icon="@Icons.Material.Filled.GridOff"
-                                     ToggledIcon="@Icons.Material.Filled.Grid4x4"
-                                     Size="Size.Small" Color="Color.Default" ToggledColor="Color.Info"
-                                     ToggledChanged="OnSnapToggled" />
-                <MudNumericField T="int" Value="_snapGridSize" ValueChanged="OnSnapGridChanged"
-                                 Label="Grid" Variant="Variant.Text" Min="5" Max="100" Step="5"
-                                 Style="width: 55px;" Margin="Margin.Dense" HideSpinButtons="true" />
-            </MudStack>
-
-            <div id="bp-editor-container" class="bp-editor-container">
+        @* ── 캔버스 ── *@
+        <div class="ap-canvas-area">
+            <div id="bp-editor-container" class="ap-canvas-container">
                 <svg id="bp-editor-svg" class="drawing-editor-svg" viewBox="0 0 1000 600"
                      preserveAspectRatio="xMidYMid meet">
                 @* 그리드 배경 *@
@@ -196,9 +178,8 @@
                 }
                 </svg>
             </div>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+        </div>
+    </div>
 
 @code {
     [Parameter] public int LayoutId { get; set; }

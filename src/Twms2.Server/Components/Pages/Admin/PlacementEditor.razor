@@ -74,14 +74,9 @@ else
             <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small"
                            Color="Color.Error" OnClick="UnplaceSelected" />
         }
-        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-            <MudMenuItem OnClick="ExportCsvAsync">CSV 내보내기</MudMenuItem>
-            <MudMenuItem OnClick="@(() => JS.InvokeVoidAsync("eval", "document.getElementById('ap-csv-import').click()"))">
-                CSV 가져오기
-            </MudMenuItem>
-            @if (_snapshots.Count > 0)
-            {
-                <MudDivider />
+        @if (_snapshots.Count > 0)
+        {
+            <MudMenu Icon="@Icons.Material.Filled.History" Size="Size.Small" Dense="true">
                 @foreach (var snap in _snapshots.Take(5))
                 {
                     var s = snap;
@@ -89,9 +84,8 @@ else
                         복원: @s.CreatedAt.ToString("MM/dd HH:mm")
                     </MudMenuItem>
                 }
-            }
-        </MudMenu>
-        <InputFile id="ap-csv-import" OnChange="ImportCsvAsync" accept=".csv" style="display:none;" />
+            </MudMenu>
+        }
         @if (_hasChanges)
         {
             <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Text">변경됨</MudChip>
@@ -122,13 +116,8 @@ else
                 <MudSelectItem T="int?" Value="@((int?)-1)">미지정</MudSelectItem>
             </MudSelect>
 
-            @* 자동 그룹 + 캔버스 필터 *@
+            @* 캔버스 필터 *@
             <MudStack Row="true" Spacing="1" Class="mb-2">
-                <MudMenu Label="자동 그룹" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Tertiary"
-                         StartIcon="@Icons.Material.Filled.AutoAwesome" Dense="true">
-                    <MudMenuItem OnClick="@(() => AutoGroupBy("line"))">라인별 자동 그룹</MudMenuItem>
-                    <MudMenuItem OnClick="@(() => AutoGroupBy("type"))">타입별 자동 그룹</MudMenuItem>
-                </MudMenu>
                 <MudMenu Label="표시" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
                          StartIcon="@Icons.Material.Filled.FilterAlt" Dense="true">
                     <MudMenuItem OnClick="@(() => SetDisplayFilter(null))">
