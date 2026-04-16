@@ -3,6 +3,7 @@
 @inject AssetService AssetService
 @inject LayoutDbService LayoutDb
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>TWM - 자산 테이블 편집</PageTitle>
 
@@ -15,6 +16,18 @@
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mr-3">
             총 @(_allRows.Count)건 / 수정 @(ModifiedCount)건
         </MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.FileDownload"
+                   OnClick="ExportCsv" Disabled="_saving"
+                   Size="Size.Small">
+            CSV 내보내기
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.FileUpload"
+                   OnClick="TriggerCsvImport" Disabled="_saving"
+                   Size="Size.Small">
+            CSV 가져오기
+        </MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
                    StartIcon="@Icons.Material.Filled.Refresh"
                    OnClick="LoadAll" Disabled="_saving">
@@ -108,6 +121,9 @@ else
         </MudTabPanel>
 
     </MudTabs>
+
+    <InputFile id="csv-import-input" OnChange="OnCsvFileSelected" style="display:none"
+               accept=".csv" />
 }
 
 @code {
@@ -214,5 +230,76 @@ else
 
         // 탭 레이블 갱신 (IsModified 상태 반영)
         StateHasChanged();
+    }
+
+    // ── CSV Export / Import ──────────────────────────────────
+
+    private IReadOnlyList<AssetEditRow> CurrentTabRows => _activeTab switch
+    {
+        1 => RowsOf(3),
+        2 => RowsOf(4),
+        3 => RowsOf(5),
+        4 => RowsOf(6),
+        5 => RowsOf(7),
+        _ => _allRows,
+    };
+
+    private string CurrentTabName => _activeTab switch
+    {
+        1 => "FTP",
+        2 => "Drive",
+        3 => "XP",
+        4 => "PLC",
+        5 => "Servo",
+        _ => "All",
+    };
+
+    private async Task ExportCsv()
+    {
+        var rows = CurrentTabRows;
+        if (rows.Count == 0) { Snackbar.Add("내보낼 데이터가 없습니다.", Severity.Warning); return; }
+
+        var bytes = AssetService.ExportCsv(rows);
+        var base64 = Convert.ToBase64String(bytes);
+        var fileName = $"assets-{CurrentTabName}-{DateTime.Now:yyyyMMdd-HHmm}.csv";
+        await JS.InvokeVoidAsync("eval",
+            $"((d,n)=>{{const b=atob(d),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);const u=URL.createObjectURL(new Blob([a],{{type:'text/csv'}})),l=document.createElement('a');l.href=u;l.download=n;l.click();URL.revokeObjectURL(u)}})('{base64}','{fileName}')");
+        Snackbar.Add($"{rows.Count}건 CSV 내보내기 완료", Severity.Success);
+    }
+
+    private async Task TriggerCsvImport()
+    {
+        await JS.InvokeVoidAsync("eval", "document.getElementById('csv-import-input').click()");
+    }
+
+    private async Task OnCsvFileSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+
+            var result = AssetService.ApplyCsvImport(_allRows, ms, _lineMap);
+
+            if (result.HasError)
+            {
+                Snackbar.Add($"CSV 오류: {result.Error}", Severity.Error);
+                return;
+            }
+
+            var msg = $"CSV 가져오기: {result.Updated}건 변경, {result.Skipped}건 스킵";
+            if (result.NotFound > 0) msg += $", {result.NotFound}건 ID 없음(무시)";
+
+            _resultMsg = msg;
+            _resultSeverity = result.NotFound > 0 ? Severity.Warning : Severity.Info;
+            Snackbar.Add(msg, _resultSeverity);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"파일 읽기 오류: {ex.Message}", Severity.Error);
+        }
     }
 }

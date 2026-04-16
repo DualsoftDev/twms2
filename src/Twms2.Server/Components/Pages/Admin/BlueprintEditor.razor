@@ -131,7 +131,7 @@
                 @if (!string.IsNullOrEmpty(_config?.ImagePath))
                 {
                     var ir = CalcImageRect(_config);
-                    <image href="@_config.ImagePath"
+                    <image href="@($"/{_config.ImagePath.TrimStart('/')}")"
                            x="@F(ir.X)" y="@F(ir.Y)" width="@F(ir.W)" height="@F(ir.H)"
                            preserveAspectRatio="none" opacity="0.5" />
                 }

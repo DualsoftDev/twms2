@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using DEX.Core.Actor;
 using Twms2.Server.HOCON;
 using Twms2.Server.Models.Dexa;
@@ -411,6 +413,220 @@ public class AssetService
         NotifyAssetChanged();
     }
 
+    // ── CSV Export / Import ──────────────────────────────────
+
+    private static readonly string[] CsvHeaders =
+    [
+        "AssetId", "AssetTypeId", "TypeName",
+        "Name", "LineName", "StationNumber", "Vendor", "Spec",
+        "DisplayIp", "ConnIpVia", "ConnBase", "ConnSlot", "ConnIsRobot",
+        "Description", "Agent", "ModelName", "ModelVersion",
+    ];
+
+    /// <summary>
+    /// AssetEditRow 목록을 BOM UTF-8 CSV 바이트 배열로 변환.
+    /// </summary>
+    public static byte[] ExportCsv(IReadOnlyList<AssetEditRow> rows)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join(",", CsvHeaders));
+
+        foreach (var r in rows)
+        {
+            sb.Append(r.AssetId).Append(',');
+            sb.Append(r.AssetTypeId).Append(',');
+            sb.Append(CsvEscape(r.TypeName)).Append(',');
+            sb.Append(CsvEscape(r.Name)).Append(',');
+            sb.Append(CsvEscape(r.LineName)).Append(',');
+            sb.Append(r.StationNumber?.ToString() ?? "").Append(',');
+            sb.Append(CsvEscape(r.Vendor ?? "")).Append(',');
+            sb.Append(CsvEscape(r.Spec ?? "")).Append(',');
+            sb.Append(CsvEscape(r.DisplayIp)).Append(',');
+            sb.Append(CsvEscape(r.ConnIpVia ?? "")).Append(',');
+            sb.Append(r.ConnBase).Append(',');
+            sb.Append(r.ConnSlot?.ToString() ?? "").Append(',');
+            sb.Append(r.ConnIsRobot?.ToString() ?? "").Append(',');
+            sb.Append(CsvEscape(r.Description)).Append(',');
+            sb.Append(CsvEscape(r.Agent)).Append(',');
+            sb.Append(CsvEscape(r.ModelName)).Append(',');
+            sb.AppendLine(CsvEscape(r.ModelVersion));
+        }
+
+        // BOM + UTF-8
+        var bom = Encoding.UTF8.GetPreamble();
+        var body = Encoding.UTF8.GetBytes(sb.ToString());
+        var result = new byte[bom.Length + body.Length];
+        bom.CopyTo(result, 0);
+        body.CopyTo(result, bom.Length);
+        return result;
+    }
+
+    /// <summary>
+    /// CSV 스트림을 파싱하여 기존 AssetEditRow에 값 적용.
+    /// 빈 셀은 변경하지 않음. 존재하지 않는 AssetId는 무시.
+    /// </summary>
+    public static CsvImportResult ApplyCsvImport(
+        List<AssetEditRow> allRows,
+        Stream csvStream,
+        Dictionary<int, string> lineMap)
+    {
+        var rowMap = allRows.ToDictionary(r => r.AssetId);
+        var reverseLineMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, name) in lineMap)
+            reverseLineMap.TryAdd(name, id);
+
+        using var reader = new StreamReader(csvStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var headerLine = reader.ReadLine();
+        if (headerLine == null)
+            return new CsvImportResult { Error = "빈 파일입니다." };
+
+        var headers = ParseCsvLine(headerLine);
+        var colIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < headers.Length; i++)
+            colIndex[headers[i].Trim()] = i;
+
+        if (!colIndex.ContainsKey("AssetId"))
+            return new CsvImportResult { Error = "AssetId 컬럼이 없습니다." };
+
+        int updated = 0, skipped = 0, notFound = 0;
+        int lineNum = 1;
+
+        while (reader.ReadLine() is { } line)
+        {
+            lineNum++;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            var cols = ParseCsvLine(line);
+            if (!colIndex.TryGetValue("AssetId", out var idIdx) || idIdx >= cols.Length) { skipped++; continue; }
+            if (!int.TryParse(cols[idIdx].Trim(), out var assetId)) { skipped++; continue; }
+            if (!rowMap.TryGetValue(assetId, out var row)) { notFound++; continue; }
+
+            bool changed = false;
+            changed |= ApplyStr(cols, colIndex, "Name", v => row.Name = v);
+            changed |= ApplyStr(cols, colIndex, "Description", v => row.Description = v);
+            changed |= ApplyStr(cols, colIndex, "Agent", v => row.Agent = v);
+            changed |= ApplyStr(cols, colIndex, "Vendor", v => row.Vendor = v);
+            changed |= ApplyStr(cols, colIndex, "Spec", v => row.Spec = v);
+            changed |= ApplyStr(cols, colIndex, "DisplayIp", v => row.DisplayIp = v);
+            changed |= ApplyStr(cols, colIndex, "ConnIpVia", v => row.ConnIpVia = string.IsNullOrEmpty(v) ? null : v);
+            changed |= ApplyStr(cols, colIndex, "ModelName", v => row.ModelName = v);
+            changed |= ApplyStr(cols, colIndex, "ModelVersion", v => row.ModelVersion = v);
+
+            // 숫자 필드
+            changed |= ApplyNullableInt(cols, colIndex, "StationNumber", v => row.StationNumber = v);
+            changed |= ApplyInt(cols, colIndex, "ConnBase", v => row.ConnBase = v);
+            changed |= ApplyNullableInt(cols, colIndex, "ConnSlot", v => row.ConnSlot = v);
+            changed |= ApplyNullableInt(cols, colIndex, "ConnIsRobot", v => row.ConnIsRobot = v);
+
+            // LineName → LineId 역매핑
+            if (colIndex.TryGetValue("LineName", out var lnIdx) && lnIdx < cols.Length)
+            {
+                var lnVal = cols[lnIdx].Trim();
+                if (lnVal.Length > 0)
+                {
+                    if (reverseLineMap.TryGetValue(lnVal, out var lineId))
+                    {
+                        row.LineId = lineId;
+                        row.LineName = lnVal;
+                        changed = true;
+                    }
+                    // 매핑 실패 시 변경하지 않음
+                }
+            }
+
+            if (changed) updated++;
+            else skipped++;
+        }
+
+        return new CsvImportResult { Updated = updated, Skipped = skipped, NotFound = notFound };
+    }
+
+    private static string CsvEscape(string value)
+    {
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
+    }
+
+    private static string[] ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        int i = 0;
+        while (i <= line.Length)
+        {
+            if (i == line.Length) { fields.Add(""); break; }
+
+            if (line[i] == '"')
+            {
+                // quoted field
+                var sb = new StringBuilder();
+                i++; // skip opening quote
+                while (i < line.Length)
+                {
+                    if (line[i] == '"')
+                    {
+                        if (i + 1 < line.Length && line[i + 1] == '"')
+                        {
+                            sb.Append('"');
+                            i += 2;
+                        }
+                        else
+                        {
+                            i++; // skip closing quote
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        sb.Append(line[i]);
+                        i++;
+                    }
+                }
+                fields.Add(sb.ToString());
+                if (i < line.Length && line[i] == ',') i++; // skip comma
+            }
+            else
+            {
+                var next = line.IndexOf(',', i);
+                if (next < 0)
+                {
+                    fields.Add(line[i..]);
+                    break;
+                }
+                fields.Add(line[i..next]);
+                i = next + 1;
+            }
+        }
+        return fields.ToArray();
+    }
+
+    private static bool ApplyStr(string[] cols, Dictionary<string, int> colIndex, string key, Action<string> setter)
+    {
+        if (!colIndex.TryGetValue(key, out var idx) || idx >= cols.Length) return false;
+        var val = cols[idx].Trim();
+        if (val.Length == 0) return false; // 빈 셀 → 변경 안 함
+        setter(val);
+        return true;
+    }
+
+    private static bool ApplyInt(string[] cols, Dictionary<string, int> colIndex, string key, Action<int> setter)
+    {
+        if (!colIndex.TryGetValue(key, out var idx) || idx >= cols.Length) return false;
+        var val = cols[idx].Trim();
+        if (val.Length == 0) return false;
+        if (int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)) { setter(n); return true; }
+        return false;
+    }
+
+    private static bool ApplyNullableInt(string[] cols, Dictionary<string, int> colIndex, string key, Action<int?> setter)
+    {
+        if (!colIndex.TryGetValue(key, out var idx) || idx >= cols.Length) return false;
+        var val = cols[idx].Trim();
+        if (val.Length == 0) return false;
+        if (int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)) { setter(n); return true; }
+        return false;
+    }
+
     /// <summary>
     /// DEXA Server에 DB 변경 알림 전송 (fire-and-forget).
     /// 서버가 연결된 모든 클라이언트에 변경 브로드캐스트.
@@ -419,4 +635,13 @@ public class AssetService
     {
         _dexa.Tell(new AmC2SNotifyDataChanged("asset", DatabaseChangeOperation.Update));
     }
+}
+
+public class CsvImportResult
+{
+    public int Updated { get; set; }
+    public int Skipped { get; set; }
+    public int NotFound { get; set; }
+    public string? Error { get; set; }
+    public bool HasError => Error != null;
 }

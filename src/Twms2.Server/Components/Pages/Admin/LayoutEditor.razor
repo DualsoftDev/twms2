@@ -342,7 +342,7 @@ else
         if (_config != null)
         {
             _currentImagePath = _config.ImagePath;
-            _previewImagePath = _config.ImagePath;
+            _previewImagePath = string.IsNullOrEmpty(_config.ImagePath) ? null : $"/{_config.ImagePath.TrimStart('/')}";
             if (!string.IsNullOrEmpty(_config.BgColor))
                 _bgColor = new MudColor(_config.BgColor);
             else
@@ -403,7 +403,7 @@ else
 
                 _config.ImagePath = $"uploads/blueprint-bg-{Id}{ext}";
                 _currentImagePath = _config.ImagePath;
-                _previewImagePath = _config.ImagePath;
+                _previewImagePath = $"/{_config.ImagePath}";
                 _selectedFile = null;
                 _selectedFileName = null;
 

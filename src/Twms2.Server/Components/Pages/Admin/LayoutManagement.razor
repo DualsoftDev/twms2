@@ -42,8 +42,8 @@
         <MudTd DataLabel="도면">
             @if (_configMap.TryGetValue(context.Id, out var cfg) && !string.IsNullOrEmpty(cfg.ImagePath))
             {
-                <a href="@cfg.ImagePath" target="_blank" style="cursor: pointer;">
-                    <img src="@cfg.ImagePath" alt="도면" style="height: 40px; border-radius: 4px; object-fit: cover;" />
+                <a href="@($"/{cfg.ImagePath.TrimStart('/')}")" target="_blank" style="cursor: pointer;">
+                    <img src="@($"/{cfg.ImagePath.TrimStart('/')}")" alt="도면" style="height: 40px; border-radius: 4px; object-fit: cover;" />
                 </a>
             }
             else
