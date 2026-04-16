@@ -69,6 +69,7 @@ window.blueprintEditor = (() => {
         let startRect = null;
 
         const onDown = (e) => {
+            if (e.button !== 0) return; // 좌클릭만 허용
             if (e.target.closest('.bp-delete-btn')) return;
             e.preventDefault();
             e.stopPropagation();
