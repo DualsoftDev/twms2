@@ -11,14 +11,16 @@ public class AssetStatusService
 {
     private readonly AssetService _assetService;
     private readonly DexaReadService _dexaRead;
-    private readonly TwmDbService _twmDb;
+    private readonly PingDbService _pingDb;
+    private readonly LayoutDbService _layoutDb;
     private readonly ILogger<AssetStatusService> _logger;
 
-    public AssetStatusService(AssetService assetService, DexaReadService dexaRead, TwmDbService twmDb, ILogger<AssetStatusService> logger)
+    public AssetStatusService(AssetService assetService, DexaReadService dexaRead, PingDbService pingDb, LayoutDbService layoutDb, ILogger<AssetStatusService> logger)
     {
         _assetService = assetService;
         _dexaRead = dexaRead;
-        _twmDb = twmDb;
+        _pingDb = pingDb;
+        _layoutDb = layoutDb;
         _logger = logger;
     }
 
@@ -32,8 +34,8 @@ public class AssetStatusService
             var agentsTask     = _dexaRead.GetAgentsAsync();
             var actionsTask    = _dexaRead.GetLatestActionPerAssetAsync();
             var allActionsTask = _dexaRead.GetAllActionsAsync();
-            var pingTask       = _twmDb.GetAllPingResultsAsync();
-            var lineTask       = _twmDb.GetTwmsLayoutLineMapAsync();
+            var pingTask       = _pingDb.GetAllPingResultsAsync();
+            var lineTask       = _layoutDb.GetTwmsLayoutLineMapAsync();
             await Task.WhenAll(assetsTask, agentsTask, actionsTask, allActionsTask, pingTask, lineTask);
 
             var assets      = assetsTask.Result;

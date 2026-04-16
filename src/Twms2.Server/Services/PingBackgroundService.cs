@@ -80,8 +80,8 @@ public class PingBackgroundService : BackgroundService
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var twmDb = scope.ServiceProvider.GetRequiredService<TwmDbService>();
-            await twmDb.LoadPingCacheFromDbAsync();
+            var pingDb = scope.ServiceProvider.GetRequiredService<PingDbService>();
+            await pingDb.LoadPingCacheFromDbAsync();
         }
         catch (Exception ex)
         {
@@ -95,7 +95,7 @@ public class PingBackgroundService : BackgroundService
 
         using var scope = _scopeFactory.CreateScope();
         var pingService = scope.ServiceProvider.GetRequiredService<PingService>();
-        var twmDb = scope.ServiceProvider.GetRequiredService<TwmDbService>();
+        var pingDb = scope.ServiceProvider.GetRequiredService<PingDbService>();
 
         // 1차: AugIp만 있는 자산 ICMP ping (병합 자산도 함께 반환)
         var (failedViaIps, mergedAssets) = await pingService.PingPhase1Async(ct, _options.Phase1MaxConcurrency);
@@ -104,7 +104,7 @@ public class PingBackgroundService : BackgroundService
         await pingService.PingPhase2Async(failedViaIps, mergedAssets, ct);
 
         // DB 배치 저장 + 상태 변경 이력 기록
-        await twmDb.FlushPingToDbAsync();
+        await pingDb.FlushPingToDbAsync();
 
         _logger.LogInformation("주기적 Ping 사이클 완료");
     }

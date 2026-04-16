@@ -1,5 +1,5 @@
 @inject DexaFileImportService DexaImportService
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 
@@ -186,7 +186,7 @@
             _refLineId = null;
             if (_previewLines.Count > 0)
             {
-                var config = await TwmDb.GetBlueprintConfigAsync(LayoutId);
+                var config = await LayoutDb.GetBlueprintConfigAsync(LayoutId);
                 if (config?.ImageWidth is > 0 && config?.ImageHeight is > 0)
                 {
                     var imgRatio = config.ImageWidth.Value / config.ImageHeight.Value;

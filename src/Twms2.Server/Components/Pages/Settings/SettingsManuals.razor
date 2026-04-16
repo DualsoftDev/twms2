@@ -1,4 +1,4 @@
-@inject TwmDbService TwmDb
+@inject ManualDbService ManualDb
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -114,7 +114,7 @@
     private async Task LoadManualsAsync()
     {
         _loading = true;
-        _manuals = await TwmDb.GetAllManualsAsync();
+        _manuals = await ManualDb.GetAllManualsAsync();
         _loading = false;
     }
 
@@ -144,7 +144,7 @@
             await using var fs = File.Create(filePath);
             await _selectedFile.OpenReadStream(MaxFileSize).CopyToAsync(fs);
 
-            await TwmDb.InsertManualAsync(new TwmsManual
+            await ManualDb.InsertManualAsync(new TwmsManual
             {
                 Keyword = _keyword.Trim(),
                 FileName = _selectedFile.Name,
@@ -188,7 +188,7 @@
                 catch { /* 파일 삭제 실패는 무시 */ }
             }
 
-            await TwmDb.DeleteManualAsync(manual.Id);
+            await ManualDb.DeleteManualAsync(manual.Id);
             await LoadManualsAsync();
             Snackbar.Add($"매뉴얼 '{manual.FileName}'이(가) 삭제되었습니다.", Severity.Success);
         }

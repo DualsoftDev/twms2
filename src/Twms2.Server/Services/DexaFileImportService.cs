@@ -11,7 +11,7 @@ namespace Twms2.Server.Services;
 /// - layoutLine: id, name
 /// - layoutGroup: id, assetId, floor, assets
 /// </summary>
-public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEnv, ILogger<DexaFileImportService> logger)
+public class DexaFileImportService(TwmDbService twmDb, LayoutDbService layoutDb, IWebHostEnvironment webEnv, ILogger<DexaFileImportService> logger)
 {
     private const int AssetTypeXgtPlc = 6;
     private const int AssetTypeServo  = 7;
@@ -67,10 +67,10 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
             // ── layoutLine (전체 교체) ──
             if (lineRows.Count > 0)
             {
-                await twmDb.DeleteAllTwmsLayoutLinesAsync();
+                await layoutDb.DeleteAllTwmsLayoutLinesAsync();
                 foreach (var line in lineRows)
                 {
-                    await twmDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine
+                    await layoutDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine
                     {
                         Id   = line.Id,
                         Name = line.Name ?? $"Line#{line.Id}",
@@ -82,10 +82,10 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
             // ── layoutGroup (전체 교체) ──
             if (groupRows.Count > 0)
             {
-                await twmDb.DeleteAllTwmsLayoutGroupsAsync();
+                await layoutDb.DeleteAllTwmsLayoutGroupsAsync();
                 foreach (var grp in groupRows)
                 {
-                    await twmDb.UpsertTwmsLayoutGroupAsync(new TwmsLayoutGroup
+                    await layoutDb.UpsertTwmsLayoutGroupAsync(new TwmsLayoutGroup
                     {
                         Id      = grp.Id,
                         AssetId = grp.AssetId,
@@ -232,7 +232,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                 if (mappedLines.Count == 0) continue;
 
                 // 기준 도면 라인의 selfW/selfH = 좌표 공간
-                var config = await twmDb.GetBlueprintConfigAsync(layoutId);
+                var config = await layoutDb.GetBlueprintConfigAsync(layoutId);
                 double refW, refH;
 
                 // 1) 명시적으로 지정된 기준 라인 사용
@@ -267,7 +267,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                 {
                     config.ImageWidth = refW;
                     config.ImageHeight = refH;
-                    await twmDb.UpsertBlueprintConfigAsync(config);
+                    await layoutDb.UpsertBlueprintConfigAsync(config);
                 }
 
                 // viewBox 내 이미지 영역 — CalcImageRect와 동일 로직
@@ -325,13 +325,13 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                 });
             }
             if (assetPositions.Count > 0)
-                await twmDb.UpsertAssetPositionBatchAsync(assetPositions);
+                await layoutDb.UpsertAssetPositionBatchAsync(assetPositions);
             result.AssetPositionsImported = assetPositions.Count;
 
             // ── 그룹 → TwmsPlacementGroup + 멤버 ──
             // 매핑된 레이아웃들의 기존 그룹 삭제
             foreach (var layoutId in lineToLayoutId.Values.Distinct())
-                await twmDb.DeleteAllPlacementGroupsAsync(layoutId);
+                await layoutDb.DeleteAllPlacementGroupsAsync(layoutId);
 
             foreach (var grp in groupRows)
             {
@@ -377,7 +377,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                     Width    = Math.Round(Math.Max(gw, 10), 2),
                     Height   = Math.Round(Math.Max(gh, 10), 2),
                 };
-                var newGroupId = await twmDb.InsertPlacementGroupAsync(newGroup);
+                var newGroupId = await layoutDb.InsertPlacementGroupAsync(newGroup);
 
                 // 멤버 파싱
                 if (!string.IsNullOrWhiteSpace(grp.Assets))
@@ -387,7 +387,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
                         .Where(v => v > 0)
                         .ToList();
                     if (memberIds.Count > 0)
-                        await twmDb.SetPlacementGroupMembersAsync(newGroupId, memberIds);
+                        await layoutDb.SetPlacementGroupMembersAsync(newGroupId, memberIds);
                 }
                 result.GroupsImported++;
             }
@@ -406,7 +406,7 @@ public class DexaFileImportService(TwmDbService twmDb, IWebHostEnvironment webEn
     /// <summary>레이아웃에 연결된 실제 도면 이미지의 크기를 읽는다.</summary>
     private async Task<(double w, double h)> GetActualImageSizeAsync(int layoutId)
     {
-        var config = await twmDb.GetBlueprintConfigAsync(layoutId);
+        var config = await layoutDb.GetBlueprintConfigAsync(layoutId);
         if (config == null || string.IsNullOrEmpty(config.ImagePath))
             return (0, 0);
 

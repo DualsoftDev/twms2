@@ -1,4 +1,5 @@
 @page "/history"
+@using static Twms2.Server.Helpers.LayoutHelpers
 @implements IDisposable
 @inject DexaReadService DexaRead
 @inject AssetStatusService AssetStatus
@@ -6,7 +7,7 @@
 @inject IDialogService DialogService
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
-@inject TwmDbService TwmDb
+@inject PingDbService PingDb
 @inject ISnackbar Snackbar
 @using System.Text
 @using Twms2.Server.Models.Dashboard
@@ -920,15 +921,6 @@
             $"((d,n)=>{{const b=atob(d),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);const u=URL.createObjectURL(new Blob([a],{{type:'text/csv'}})),l=document.createElement('a');l.href=u;l.download=n;l.click();URL.revokeObjectURL(u)}})('{base64}','{fileName}')");
     }
 
-    private static string GetHealthLabel(AssetHealthStatus health) => health switch
-    {
-        AssetHealthStatus.BackedUp => "백업 갱신",
-        AssetHealthStatus.Unchanged => "변경 없음",
-        AssetHealthStatus.Failed => "작업 실패",
-        AssetHealthStatus.InProgress => "작업중",
-        _ => "내역 없음",
-    };
-
     // ─── 탭 2: 백업 이력 로직 (기존) ───
     private string GetAssetName(int assetId)
         => _assetNames.TryGetValue(assetId, out var name) ? name : $"#{assetId}";
@@ -1116,7 +1108,7 @@
         _pingLoading = true;
         try
         {
-            _allPingLogs = await TwmDb.GetPingLogsAsync(_startDate, _endDate);
+            _allPingLogs = await PingDb.GetPingLogsAsync(_startDate, _endDate);
             FilterPingLogs();
         }
         finally

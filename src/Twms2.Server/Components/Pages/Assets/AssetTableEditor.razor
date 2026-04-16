@@ -1,7 +1,7 @@
 @page "/assets/table"
 @attribute [Authorize]
 @inject AssetService AssetService
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject ISnackbar Snackbar
 
 <PageTitle>TWM - 자산 테이블 편집</PageTitle>
@@ -137,7 +137,7 @@ else
         try
         {
             var rowsTask = AssetService.GetAssetEditRowsAsync();
-            var lineTask = TwmDb.GetTwmsLayoutLineMapAsync();
+            var lineTask = LayoutDb.GetTwmsLayoutLineMapAsync();
             await Task.WhenAll(rowsTask, lineTask);
 
             _allRows = rowsTask.Result;

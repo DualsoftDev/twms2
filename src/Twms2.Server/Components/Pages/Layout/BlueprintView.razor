@@ -451,7 +451,7 @@
             {
                 <code style="font-size:0.75rem; color:var(--mud-palette-text-secondary);">@a.Ip</code>
             }
-            @{ var (hLabel, hColor) = GetHealthLabel(a.Health); }
+            @{ var (hLabel, hColor) = GetHealthLabelAndColor(a.Health); }
             <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
                      Style="@($"height:20px; font-size:0.7rem; background:{hColor}; color:white;")">
                 @hLabel
@@ -485,7 +485,7 @@
             <tbody>
                 @foreach (var c in children)
                 {
-                    var (cLabel, cColor) = GetHealthLabel(c.Health);
+                    var (cLabel, cColor) = GetHealthLabelAndColor(c.Health);
                     <tr>
                         <td><img src="@GetAssetIcon(c.AssetTypeName, c.AugIsRobotPLC)" style="width:22px;height:22px;" /></td>
                         <td class="blueprint-asset-link" style="white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis;"
@@ -695,23 +695,5 @@
         return (standalones, plcCards);
     }
 
-    private static (string Label, string Color) GetHealthLabel(AssetHealthStatus health) => health switch
-    {
-        AssetHealthStatus.BackedUp   => ("갱신", "#65B991"),
-        AssetHealthStatus.Unchanged  => ("유지", "#6BA0DE"),
-        AssetHealthStatus.Failed     => ("실패", "#E67E7E"),
-        AssetHealthStatus.InProgress => ("진행중", "#f59e0b"),
-        _                            => ("내역없음", "#999"),
-    };
-
-    private static string AggregateHealthColor(List<AssetStatusInfo> assets)
-    {
-        if (assets.Count == 0) return "#999";
-        if (assets.Any(a => a.Health == AssetHealthStatus.Failed)) return "#E67E7E";
-        if (assets.Any(a => a.Health == AssetHealthStatus.InProgress)) return "#f59e0b";
-        if (assets.Any(a => a.Health == AssetHealthStatus.BackedUp)) return "#65B991";
-        if (assets.Any(a => a.Health == AssetHealthStatus.Unchanged)) return "#6BA0DE";
-        return "#999";
-    }
 
 }

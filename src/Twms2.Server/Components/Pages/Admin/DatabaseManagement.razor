@@ -2,6 +2,7 @@
 @using Twms2.Server.Models.Twm
 @using Twms2.Server.Services
 @inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject DexaFileImportService ImportService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
@@ -271,7 +272,7 @@
     {
         _stats = await TwmDb.GetStatsAsync();
         _migrations = await TwmDb.GetMigrationsAsync();
-        _layouts = await TwmDb.GetAllLayoutsAsync();
+        _layouts = await LayoutDb.GetAllLayoutsAsync();
     }
 
     private void OnImportFileSelected(InputFileChangeEventArgs e)
@@ -321,7 +322,7 @@
 
                 // 라인 프리뷰 로드 → 배치 매핑 UI 표시
                 var previews = await ImportService.PreviewLinesFromFileAsync(_tempFilePath);
-                _layouts = await TwmDb.GetAllLayoutsAsync();
+                _layouts = await LayoutDb.GetAllLayoutsAsync();
                 _linePreviews = previews.Select(p => new LinePreviewVM
                 {
                     Id = p.Id, Name = p.Name, SelfW = p.SelfW, SelfH = p.SelfH,

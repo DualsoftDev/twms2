@@ -1,5 +1,5 @@
 @using static Twms2.Server.Helpers.LayoutHelpers
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 
 <div class="asset-list-panel">
     @* ── 검색바 ── *@
@@ -77,7 +77,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _lineMap = await TwmDb.GetTwmsLayoutLineMapAsync();
+        _lineMap = await LayoutDb.GetTwmsLayoutLineMapAsync();
     }
 
     private List<ViewAsset> FilteredAssets => Assets

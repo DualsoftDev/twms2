@@ -1,5 +1,7 @@
 @inject AssetService AssetService
 @inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
+@inject ManualDbService ManualDb
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject DexaReadService DexaRead
@@ -431,8 +433,8 @@
 
     private async Task LoadManualsAsync()
     {
-        var matchedTask = TwmDb.GetManualsByKeywordMatchAsync(Asset.AugSpec ?? "");
-        var allTask = TwmDb.GetAllManualsAsync();
+        var matchedTask = ManualDb.GetManualsByKeywordMatchAsync(Asset.AugSpec ?? "");
+        var allTask = ManualDb.GetAllManualsAsync();
         await Task.WhenAll(matchedTask, allTask);
         _matchedManuals = matchedTask.Result;
         _allManuals = allTask.Result;
@@ -442,7 +444,7 @@
     {
         var augTask = TwmDb.GetTwmsAssetAsync(Asset.AssetId);
         var connTask = TwmDb.GetTwmsAssetConnAsync(Asset.AssetId);
-        var lineTask = TwmDb.GetTwmsLayoutLineMapAsync();
+        var lineTask = LayoutDb.GetTwmsLayoutLineMapAsync();
         var agentTask = DexaRead.GetAgentsAsync();
         await Task.WhenAll(augTask, connTask, lineTask, agentTask);
 

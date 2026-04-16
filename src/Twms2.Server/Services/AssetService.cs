@@ -12,13 +12,15 @@ public class AssetService
 {
     private readonly DexaReadService _dexaRead;
     private readonly TwmDbService _twmDb;
+    private readonly LayoutDbService _layoutDb;
     private readonly DexaServerClient _dexa;
     private readonly ILogger<AssetService> _logger;
 
-    public AssetService(DexaReadService dexaRead, TwmDbService twmDb, DexaServerClient dexa, ILogger<AssetService> logger)
+    public AssetService(DexaReadService dexaRead, TwmDbService twmDb, LayoutDbService layoutDb, DexaServerClient dexa, ILogger<AssetService> logger)
     {
         _dexaRead = dexaRead;
         _twmDb = twmDb;
+        _layoutDb = layoutDb;
         _dexa = dexa;
         _logger = logger;
     }
@@ -46,7 +48,7 @@ public class AssetService
         {
             var augTask  = _twmDb.GetTwmsAssetMapAsync();
             var connTask = _twmDb.GetTwmsAssetConnMapAsync();
-            var lineTask = _twmDb.GetTwmsLayoutLineMapAsync();
+            var lineTask = _layoutDb.GetTwmsLayoutLineMapAsync();
             await Task.WhenAll(augTask, connTask, lineTask);
 
             var augMap  = augTask.Result;

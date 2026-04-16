@@ -1,5 +1,5 @@
 @using static Twms2.Server.Helpers.LayoutHelpers
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @implements IAsyncDisposable
@@ -224,9 +224,9 @@
     private async Task LoadDataAsync()
     {
         if (LayoutId == 0) return;
-        var configTask = TwmDb.GetBlueprintConfigAsync(LayoutId);
-        var rectsTask  = TwmDb.GetAllBlueprintRectsAsync(LayoutId);
-        var linesTask  = TwmDb.GetAllTwmsLayoutLinesAsync();
+        var configTask = LayoutDb.GetBlueprintConfigAsync(LayoutId);
+        var rectsTask  = LayoutDb.GetAllBlueprintRectsAsync(LayoutId);
+        var linesTask  = LayoutDb.GetAllTwmsLayoutLinesAsync();
         await Task.WhenAll(configTask, rectsTask, linesTask);
 
         _config = configTask.Result;
@@ -355,7 +355,7 @@
     {
         PushUndo();
         _rects.RemoveAll(r => r.LineId == lineId);
-        await TwmDb.DeleteBlueprintRectAsync(LayoutId, lineId);
+        await LayoutDb.DeleteBlueprintRectAsync(LayoutId, lineId);
         _hasChanges = true;
         Snackbar.Add("라인 영역이 삭제되었습니다.", Severity.Info);
         await InvokeAsync(StateHasChanged);
@@ -425,7 +425,7 @@
             foreach (var rect in _rects)
             {
                 rect.LayoutId = LayoutId;
-                await TwmDb.UpsertBlueprintRectAsync(rect);
+                await LayoutDb.UpsertBlueprintRectAsync(rect);
             }
 
             _hasChanges = false;

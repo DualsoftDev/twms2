@@ -2,6 +2,7 @@ using System.Globalization;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Models.Twm;
 using Microsoft.AspNetCore.Components;
+using MudColor = MudBlazor.Color;
 
 namespace Twms2.Server.Helpers;
 
@@ -68,6 +69,53 @@ public static class LayoutHelpers
         AssetHealthStatus.InProgress => "작업중",
         _                            => "내역 없음",
     };
+
+    public static string GetHealthLabelShort(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp   => "갱신",
+        AssetHealthStatus.Unchanged  => "유지",
+        AssetHealthStatus.Failed     => "실패",
+        AssetHealthStatus.InProgress => "작업중",
+        _                            => "내역없음",
+    };
+
+    public static (string Label, string Color) GetHealthLabelAndColor(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp   => ("갱신", "#65B991"),
+        AssetHealthStatus.Unchanged  => ("유지", "#6BA0DE"),
+        AssetHealthStatus.Failed     => ("실패", "#E67E7E"),
+        AssetHealthStatus.InProgress => ("진행중", "#f59e0b"),
+        _                            => ("내역없음", "#999"),
+    };
+
+    public static MudColor GetHealthChipColor(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp   => MudColor.Success,
+        AssetHealthStatus.Unchanged  => MudColor.Info,
+        AssetHealthStatus.Failed     => MudColor.Error,
+        AssetHealthStatus.InProgress => MudColor.Warning,
+        _                            => MudColor.Default,
+    };
+
+    public static string GetHeatmapTileClass(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp   => "heatmap-tile-success",
+        AssetHealthStatus.Unchanged  => "heatmap-tile-info",
+        AssetHealthStatus.Failed     => "heatmap-tile-error",
+        AssetHealthStatus.InProgress => "heatmap-tile-inprogress",
+        _                            => "heatmap-tile-warning",
+    };
+
+    public static string AggregateHealthColor(IEnumerable<AssetStatusInfo> assets)
+    {
+        var list = assets as ICollection<AssetStatusInfo> ?? assets.ToList();
+        if (list.Count == 0) return "#999";
+        if (list.Any(a => a.Health == AssetHealthStatus.Failed)) return "#E67E7E";
+        if (list.Any(a => a.Health == AssetHealthStatus.InProgress)) return "#f59e0b";
+        if (list.Any(a => a.Health == AssetHealthStatus.BackedUp)) return "#65B991";
+        if (list.Any(a => a.Health == AssetHealthStatus.Unchanged)) return "#6BA0DE";
+        return "#999";
+    }
 
     public static string TruncName(string? name, int maxLen = 8) =>
         name != null && name.Length > maxLen ? name[..maxLen] + ".." : name ?? "";

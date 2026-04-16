@@ -1,6 +1,6 @@
 @page "/layout"
 @inject AssetStatusService AssetStatusService
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject DexaNotificationService NotificationService
 @inject LayoutNotificationService LayoutNotification
 @inject IJSRuntime JS
@@ -101,7 +101,7 @@
     {
         NotificationService.OnDatabaseChanged += HandleDatabaseChanged;
         LayoutNotification.OnLayoutChanged += HandleLayoutChanged;
-        _layouts = await TwmDb.GetAllLayoutsAsync();
+        _layouts = await LayoutDb.GetAllLayoutsAsync();
         _selectedLayoutId = _layouts.FirstOrDefault()?.Id ?? 0;
         if (_selectedLayoutId > 0)
             await RefreshAsync();
@@ -151,14 +151,14 @@
         StateHasChanged();
         try
         {
-            var linesTask   = TwmDb.GetAllTwmsLayoutLinesAsync();
-            var rectsTask   = TwmDb.GetAllBlueprintRectsAsync(_selectedLayoutId);
-            var configTask  = TwmDb.GetBlueprintConfigAsync(_selectedLayoutId);
-            var posTask     = TwmDb.GetAllAssetPositionsAsync(_selectedLayoutId);
+            var linesTask   = LayoutDb.GetAllTwmsLayoutLinesAsync();
+            var rectsTask   = LayoutDb.GetAllBlueprintRectsAsync(_selectedLayoutId);
+            var configTask  = LayoutDb.GetBlueprintConfigAsync(_selectedLayoutId);
+            var posTask     = LayoutDb.GetAllAssetPositionsAsync(_selectedLayoutId);
             var statusTask  = AssetStatusService.GetAssetStatusesAsync();
-            var groupTask   = TwmDb.GetAllPlacementGroupsAsync(_selectedLayoutId);
-            var memberTask  = TwmDb.GetPlacementGroupMembersAsync(_selectedLayoutId);
-            var lgTask      = TwmDb.GetAllTwmsLayoutGroupsAsync();
+            var groupTask   = LayoutDb.GetAllPlacementGroupsAsync(_selectedLayoutId);
+            var memberTask  = LayoutDb.GetPlacementGroupMembersAsync(_selectedLayoutId);
+            var lgTask      = LayoutDb.GetAllTwmsLayoutGroupsAsync();
             await Task.WhenAll(linesTask, rectsTask, configTask, posTask, statusTask, groupTask, memberTask, lgTask);
 
             _lines                  = linesTask.Result;

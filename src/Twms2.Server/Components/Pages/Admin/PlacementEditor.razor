@@ -1,5 +1,5 @@
 @using static Twms2.Server.Helpers.LayoutHelpers
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject AssetStatusService AssetStatusService
 @inject LayoutNotificationService LayoutNotification
 @inject ISnackbar Snackbar
@@ -475,11 +475,11 @@ else
         try
         {
             var statusTask = AssetStatusService.GetAssetStatusesAsync();
-            var posTask    = TwmDb.GetAllAssetPositionsAsync(LayoutId);
-            var configTask = TwmDb.GetBlueprintConfigAsync(LayoutId);
-            var groupTask  = TwmDb.GetAllPlacementGroupsAsync(LayoutId);
-            var memberTask = TwmDb.GetPlacementGroupMembersAsync(LayoutId);
-            var lineTask   = TwmDb.GetTwmsLayoutLineMapAsync();
+            var posTask    = LayoutDb.GetAllAssetPositionsAsync(LayoutId);
+            var configTask = LayoutDb.GetBlueprintConfigAsync(LayoutId);
+            var groupTask  = LayoutDb.GetAllPlacementGroupsAsync(LayoutId);
+            var memberTask = LayoutDb.GetPlacementGroupMembersAsync(LayoutId);
+            var lineTask   = LayoutDb.GetTwmsLayoutLineMapAsync();
             await Task.WhenAll(statusTask, posTask, configTask, groupTask, memberTask, lineTask);
 
             _allAssets = statusTask.Result;
@@ -1134,64 +1134,6 @@ else
         if (count > 0) Snackbar.Add($"{count}개 제거됨", Severity.Success);
     }
 
-    // ═══════════════ 자동 그룹핑 ═══════════════
-
-    private void AutoGroupBy(string criteria)
-    {
-        PushUndo();
-        var unplaced = _allAssets.Where(a => !GetPosition(a.AssetId).Visible).ToList();
-        if (unplaced.Count == 0) { Snackbar.Add("미배치 자산이 없습니다.", Severity.Warning); return; }
-
-        IEnumerable<IGrouping<string, AssetStatusInfo>> groups;
-        if (criteria == "line")
-            groups = unplaced.Where(a => a.AugLineId.HasValue)
-                .GroupBy(a => a.LayoutLineName ?? $"라인 {a.AugLineId}");
-        else
-            groups = unplaced.Where(a => a.AssetTypeName != null)
-                .GroupBy(a => a.AssetTypeName!);
-
-        double offsetY = 10;
-        int created = 0;
-        foreach (var grp in groups.OrderBy(g => g.Key))
-        {
-            var assetIds = grp.OrderBy(a => a.Name).Select(a => a.AssetId).ToList();
-            var count = assetIds.Count;
-            if (count == 0) continue;
-
-            var cols = (int)Math.Ceiling(Math.Sqrt(count));
-            var rows = (int)Math.Ceiling((double)count / cols);
-            var cellW = 32.0 * _globalScale + 16;
-            var cellH = 32.0 * _globalScale + 28;
-            var grpW = cols * cellW + 24;
-            var grpH = rows * cellH + 32;
-
-            for (int i = 0; i < count; i++)
-            {
-                var pos = GetPosition(assetIds[i]);
-                pos.Visible = true;
-                pos.Scale = _globalScale;
-                pos.X = Math.Round(22 + (i % cols) * cellW + cellW / 2, 2);
-                pos.Y = Math.Round(offsetY + 16 + (i / cols) * cellH + cellH / 2, 2);
-            }
-
-            var tempId = _nextTempGroupId--;
-            _groups.Add(new TwmsPlacementGroup
-            {
-                Id = tempId, LayoutId = LayoutId, Name = grp.Key,
-                X = 10, Y = Math.Round(offsetY, 2),
-                Width = Math.Round(grpW, 2), Height = Math.Round(grpH, 2),
-            });
-            _groupMembers[tempId] = assetIds;
-            offsetY += grpH + 20;
-            created++;
-        }
-
-        RebuildIndexes();
-        _checkedAssetIds.Clear();
-        _hasChanges = true;
-        Snackbar.Add($"{created}개 그룹 자동 생성됨", Severity.Success);
-    }
-
     // ═══════════════ 캔버스 필터 ═══════════════
 
     private void SetDisplayFilter(string? filter) { _displayFilter = filter; }
@@ -1255,19 +1197,19 @@ else
             var toSave = _positions.Values.Where(p => p.Visible).ToList();
             foreach (var p in toSave) p.LayoutId = LayoutId;
             if (toSave.Count > 0)
-                await TwmDb.UpsertAssetPositionBatchAsync(toSave);
+                await LayoutDb.UpsertAssetPositionBatchAsync(toSave);
 
-            await TwmDb.DeleteAllPlacementGroupsAsync(LayoutId);
+            await LayoutDb.DeleteAllPlacementGroupsAsync(LayoutId);
 
             foreach (var grp in _groups)
             {
                 grp.LayoutId = LayoutId;
                 var oldId = grp.Id;
-                var newId = await TwmDb.InsertPlacementGroupAsync(grp);
+                var newId = await LayoutDb.InsertPlacementGroupAsync(grp);
                 grp.Id = newId;
                 if (_groupMembers.TryGetValue(oldId, out var memberIds))
                 {
-                    await TwmDb.SetPlacementGroupMembersAsync(newId, memberIds);
+                    await LayoutDb.SetPlacementGroupMembersAsync(newId, memberIds);
                     _groupMembers.Remove(oldId);
                     _groupMembers[newId] = memberIds;
                 }
@@ -1283,102 +1225,6 @@ else
             Snackbar.Add($"적용 오류: {ex.Message}", Severity.Error);
         }
         finally { _saving = false; }
-    }
-
-    // ═══════════════ CSV 내보내기/가져오기 ═══════════════
-
-    private async Task ExportCsvAsync()
-    {
-        var lines = new List<string> { "AssetId,Name,IP,Type,Line,X,Y,Scale,GroupName" };
-        foreach (var asset in _allAssets)
-        {
-            var pos = GetPosition(asset.AssetId);
-            if (!pos.Visible) continue;
-            var groupName = "";
-            foreach (var (gid, members) in _groupMembers)
-            {
-                if (members.Contains(asset.AssetId))
-                {
-                    groupName = _groups.FirstOrDefault(g => g.Id == gid)?.Name ?? "";
-                    break;
-                }
-            }
-            lines.Add($"{asset.AssetId},{Esc(asset.Name)},{Esc(asset.Ip)},{Esc(asset.AssetTypeName)},{Esc(asset.LayoutLineName)},{pos.X},{pos.Y},{pos.Scale},{Esc(groupName)}");
-        }
-        var csv = string.Join("\n", lines);
-        var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
-        var base64 = Convert.ToBase64String(bytes);
-        await JS.InvokeVoidAsync("eval", $"{{const a=document.createElement('a');a.href='data:text/csv;base64,{base64}';a.download='layout-{LayoutId}.csv';a.click();}}");
-        Snackbar.Add("CSV 내보내기 완료", Severity.Success);
-
-        static string Esc(string? v) => v?.Replace(",", " ") ?? "";
-    }
-
-    private async Task ImportCsvAsync(InputFileChangeEventArgs e)
-    {
-        PushUndo();
-        try
-        {
-            using var reader = new System.IO.StreamReader(e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
-            var content = await reader.ReadToEndAsync();
-            var csvLines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1); // skip header
-            int imported = 0;
-            var groupMap = new Dictionary<string, List<int>>(); // groupName → assetIds
-            foreach (var line in csvLines)
-            {
-                var parts = line.Split(',');
-                if (parts.Length < 8) continue;
-                if (!int.TryParse(parts[0].Trim(), out var assetId)) continue;
-                if (!double.TryParse(parts[5].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var x)) continue;
-                if (!double.TryParse(parts[6].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var y)) continue;
-                double.TryParse(parts[7].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var scale);
-                if (scale <= 0) scale = _globalScale;
-
-                var pos = GetPosition(assetId);
-                pos.Visible = true;
-                pos.X = x; pos.Y = y; pos.Scale = scale;
-                imported++;
-
-                if (parts.Length > 8)
-                {
-                    var gname = parts[8].Trim();
-                    if (!string.IsNullOrEmpty(gname))
-                    {
-                        if (!groupMap.ContainsKey(gname)) groupMap[gname] = [];
-                        groupMap[gname].Add(assetId);
-                    }
-                }
-            }
-
-            // Create groups from CSV
-            foreach (var (gname, members) in groupMap)
-            {
-                if (members.Count == 0) continue;
-                var tempId = _nextTempGroupId--;
-                double gMinX = double.MaxValue, gMinY = double.MaxValue, gMaxX = 0, gMaxY = 0;
-                foreach (var aid in members)
-                {
-                    var p = GetPosition(aid);
-                    gMinX = Math.Min(gMinX, p.X); gMinY = Math.Min(gMinY, p.Y);
-                    gMaxX = Math.Max(gMaxX, p.X + 32); gMaxY = Math.Max(gMaxY, p.Y + 32);
-                }
-                _groups.Add(new TwmsPlacementGroup
-                {
-                    Id = tempId, LayoutId = LayoutId, Name = gname,
-                    X = Math.Round(gMinX - 10, 2), Y = Math.Round(gMinY - 20, 2),
-                    Width = Math.Round(gMaxX - gMinX + 20, 2), Height = Math.Round(gMaxY - gMinY + 40, 2),
-                });
-                _groupMembers[tempId] = members;
-            }
-
-            RebuildIndexes();
-            _hasChanges = true;
-            Snackbar.Add($"CSV 가져오기: {imported}개 자산 반영됨", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"CSV 오류: {ex.Message}", Severity.Error);
-        }
     }
 
     // ═══════════════ 스냅샷 복원 ═══════════════

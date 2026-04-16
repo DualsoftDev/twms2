@@ -1,4 +1,4 @@
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -72,7 +72,7 @@
     private async Task LoadLinesAsync()
     {
         _loading = true;
-        _lines = await TwmDb.GetAllTwmsLayoutLinesAsync();
+        _lines = await LayoutDb.GetAllTwmsLayoutLinesAsync();
         _loading = false;
     }
 
@@ -90,7 +90,7 @@
 
         if (result is { Canceled: false, Data: string name } && !string.IsNullOrWhiteSpace(name))
         {
-            await TwmDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine { Id = nextId, Name = name.Trim() });
+            await LayoutDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine { Id = nextId, Name = name.Trim() });
             await LoadLinesAsync();
             Snackbar.Add($"라인 '{name.Trim()}'이(가) 추가되었습니다.", Severity.Success);
         }
@@ -109,7 +109,7 @@
 
         if (result is { Canceled: false, Data: string name } && !string.IsNullOrWhiteSpace(name))
         {
-            await TwmDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine { Id = line.Id, Name = name.Trim() });
+            await LayoutDb.UpsertTwmsLayoutLineAsync(new TwmsLayoutLine { Id = line.Id, Name = name.Trim() });
             await LoadLinesAsync();
             Snackbar.Add($"라인 이름이 '{name.Trim()}'(으)로 변경되었습니다.", Severity.Success);
         }
@@ -117,7 +117,7 @@
 
     private async Task DeleteLineAsync(TwmsLayoutLine line)
     {
-        var assetCount = await TwmDb.CountAssetsByLineIdAsync(line.Id);
+        var assetCount = await LayoutDb.CountAssetsByLineIdAsync(line.Id);
         if (assetCount > 0)
         {
             Snackbar.Add($"라인 '{line.Name}'에 {assetCount}개의 자산이 배정되어 있어 삭제할 수 없습니다.", Severity.Warning);
@@ -135,7 +135,7 @@
 
         if (result is { Canceled: false })
         {
-            await TwmDb.DeleteTwmsLayoutLineAsync(line.Id);
+            await LayoutDb.DeleteTwmsLayoutLineAsync(line.Id);
             await LoadLinesAsync();
             Snackbar.Add($"라인 '{line.Name}'이(가) 삭제되었습니다.", Severity.Success);
         }

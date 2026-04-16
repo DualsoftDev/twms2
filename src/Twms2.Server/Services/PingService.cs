@@ -23,17 +23,19 @@ public class PingService
     private readonly AssetService _assetService;
     private readonly DexaReadService _dexaRead;
     private readonly TwmDbService _twmDb;
+    private readonly PingDbService _pingDb;
     private readonly ILogger<PingService> _logger;
 
     private static readonly TimeSpan PingTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan Phase2FailDelay = TimeSpan.FromSeconds(6);
     private const int DeepPingTimeoutSec = 5;
 
-    public PingService(AssetService assetService, DexaReadService dexaRead, TwmDbService twmDb, ILogger<PingService> logger)
+    public PingService(AssetService assetService, DexaReadService dexaRead, TwmDbService twmDb, PingDbService pingDb, ILogger<PingService> logger)
     {
         _assetService = assetService;
         _dexaRead = dexaRead;
         _twmDb = twmDb;
+        _pingDb = pingDb;
         _logger = logger;
     }
 
@@ -56,14 +58,14 @@ public class PingService
         else
             result = await PingHostAsync(asset.Ip);
 
-        await _twmDb.UpsertPingResultAsync(dexaAssetId, asset.Ip, result.Reachable, result.RoundtripMs);
+        await _pingDb.UpsertPingResultAsync(dexaAssetId, asset.Ip, result.Reachable, result.RoundtripMs);
         return result;
     }
 
     /// <summary>캐시된 ping 결과 조회</summary>
     public async Task<Dictionary<int, PingStatus>> GetCachedResultsAsync()
     {
-        var results = await _twmDb.GetAllPingResultsAsync();
+        var results = await _pingDb.GetAllPingResultsAsync();
         return results.ToDictionary(
             r => r.DexaAssetId,
             r => new PingStatus
@@ -116,7 +118,7 @@ public class PingService
             try
             {
                 var result = await PingHostAsync(asset.Ip!);
-                await _twmDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, result.Reachable, result.RoundtripMs);
+                await _pingDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, result.Reachable, result.RoundtripMs);
 
                 if (!result.Reachable)
                     failedIps.Add(asset.Ip!);
@@ -201,7 +203,7 @@ public class PingService
         foreach (var asset in offlineAssets)
         {
             if (!string.IsNullOrEmpty(asset.Ip))
-                await _twmDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, false, null);
+                await _pingDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, false, null);
         }
         if (offlineAssets.Count > 0)
             _logger.LogInformation("2차 Ping: 경유 PLC 오프라인으로 {Count}건 즉시 실패 기록", offlineAssets.Count);
@@ -232,7 +234,7 @@ public class PingService
             if (string.IsNullOrEmpty(asset.Ip)) continue;
 
             var result = await PingViaDllAsync(viaIp, asset.AugBaseNumber ?? 0, asset.AugSlotNumber, asset.Ip);
-            await _twmDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, result.Reachable, result.RoundtripMs);
+            await _pingDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, result.Reachable, result.RoundtripMs);
 
             if (!result.Reachable)
                 await Task.Delay(Phase2FailDelay, ct);

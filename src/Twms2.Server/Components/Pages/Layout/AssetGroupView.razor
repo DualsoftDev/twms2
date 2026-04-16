@@ -1,3 +1,4 @@
+@using static Twms2.Server.Helpers.LayoutHelpers
 @using Twms2.Server.Models.Dashboard
 @using Twms2.Server.Models.Twm
 @using System.Text.Json
@@ -100,7 +101,7 @@ else
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
                                              Color="@GetHealthChipColor(asset.Health)"
                                              Style="height: 20px; font-size: 0.7rem;">
-                                        @GetHealthLabel(asset.Health)
+                                        @GetHealthLabelShort(asset.Health)
                                     </MudChip>
                                 </div>
                             </div>
@@ -143,7 +144,7 @@ else
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
                                          Color="@GetHealthChipColor(asset.Health)"
                                          Style="height: 20px; font-size: 0.7rem;">
-                                    @GetHealthLabel(asset.Health)
+                                    @GetHealthLabelShort(asset.Health)
                                 </MudChip>
                             </div>
                         </div>
@@ -197,7 +198,7 @@ else
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
                                      Color="@GetHealthChipColor(asset.Health)"
                                      Style="height: 20px; font-size: 0.7rem;">
-                                @GetHealthLabel(asset.Health)
+                                @GetHealthLabelShort(asset.Health)
                             </MudChip>
                         </div>
                     </div>
@@ -264,34 +265,6 @@ else
     {
         Nav.NavigateTo($"/assets/{assetId}");
     }
-
-    private static string AggregateHealthColor(List<AssetStatusInfo> assets)
-    {
-        if (assets.Count == 0) return "#999";
-        if (assets.Any(a => a.Health == AssetHealthStatus.Failed)) return "#E67E7E";
-        if (assets.Any(a => a.Health == AssetHealthStatus.InProgress)) return "#f59e0b";
-        if (assets.Any(a => a.Health == AssetHealthStatus.BackedUp)) return "#65B991";
-        if (assets.Any(a => a.Health == AssetHealthStatus.Unchanged)) return "#6BA0DE";
-        return "#999";
-    }
-
-    private static Color GetHealthChipColor(AssetHealthStatus health) => health switch
-    {
-        AssetHealthStatus.BackedUp   => Color.Success,
-        AssetHealthStatus.Unchanged  => Color.Info,
-        AssetHealthStatus.Failed     => Color.Error,
-        AssetHealthStatus.InProgress => Color.Warning,
-        _                            => Color.Default,
-    };
-
-    private static string GetHealthLabel(AssetHealthStatus health) => health switch
-    {
-        AssetHealthStatus.BackedUp   => "갱신",
-        AssetHealthStatus.Unchanged  => "유지",
-        AssetHealthStatus.Failed     => "실패",
-        AssetHealthStatus.InProgress => "작업중",
-        _                            => "내역없음",
-    };
 
     private static string GetAssetIcon(string? typeName) => typeName switch
     {

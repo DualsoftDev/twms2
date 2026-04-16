@@ -305,15 +305,6 @@
         catch { /* 사이드바가 오류로 깨지지 않도록 */ }
     }
 
-    private static string GetHeatmapTileClass(AssetHealthStatus health) => health switch
-    {
-        AssetHealthStatus.BackedUp => "heatmap-tile-success",
-        AssetHealthStatus.Unchanged => "heatmap-tile-info",
-        AssetHealthStatus.Failed => "heatmap-tile-error",
-        AssetHealthStatus.InProgress => "heatmap-tile-inprogress",
-        _ => "heatmap-tile-warning",
-    };
-
     private async Task LoadAssetTreeAsync()
     {
         try

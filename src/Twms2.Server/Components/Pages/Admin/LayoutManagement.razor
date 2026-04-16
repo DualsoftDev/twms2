@@ -1,6 +1,6 @@
 @page "/admin/layout"
 @attribute [Authorize(Roles = "Admin")]
-@inject TwmDbService TwmDb
+@inject LayoutDbService LayoutDb
 @inject AssetStatusService AssetStatusService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -128,11 +128,11 @@
 
     private async Task ReloadAsync()
     {
-        _layouts = await TwmDb.GetAllLayoutsAsync();
+        _layouts = await LayoutDb.GetAllLayoutsAsync();
         _configMap.Clear();
         foreach (var layout in _layouts)
         {
-            var cfg = await TwmDb.GetBlueprintConfigAsync(layout.Id);
+            var cfg = await LayoutDb.GetBlueprintConfigAsync(layout.Id);
             if (cfg != null)
                 _configMap[layout.Id] = cfg;
         }
@@ -145,7 +145,7 @@
         var name = await PromptNameAsync("새 레이아웃", "새 레이아웃 이름을 입력하세요.");
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        var newId = await TwmDb.InsertLayoutAsync(new TwmsLayout { Name = name });
+        var newId = await LayoutDb.InsertLayoutAsync(new TwmsLayout { Name = name });
         await ReloadAsync();
         Snackbar.Add($"레이아웃 '{name}'이(가) 생성되었습니다.", Severity.Success);
     }
@@ -155,7 +155,7 @@
         var name = await PromptNameAsync("레이아웃 복제", $"'{layout.Name}' 복제본 이름을 입력하세요.", $"{layout.Name} (복사)");
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        await TwmDb.DuplicateLayoutAsync(layout.Id, name);
+        await LayoutDb.DuplicateLayoutAsync(layout.Id, name);
         await ReloadAsync();
         Snackbar.Add($"레이아웃이 '{name}'(으)로 복제되었습니다.", Severity.Success);
     }
@@ -166,7 +166,7 @@
         if (string.IsNullOrWhiteSpace(name)) return;
 
         layout.Name = name;
-        await TwmDb.UpdateLayoutAsync(layout);
+        await LayoutDb.UpdateLayoutAsync(layout);
         await ReloadAsync();
         Snackbar.Add($"레이아웃 이름이 '{name}'(으)로 변경되었습니다.", Severity.Success);
     }
@@ -187,7 +187,7 @@
         if (result.Data is List<TwmsLayout> reordered)
         {
             var sortOrders = reordered.Select((l, i) => (l.Id, SortOrder: i)).ToList();
-            await TwmDb.UpdateLayoutSortOrdersAsync(sortOrders);
+            await LayoutDb.UpdateLayoutSortOrdersAsync(sortOrders);
             await ReloadAsync();
             LayoutNotification.NotifyLayoutChanged(0);
             Snackbar.Add("레이아웃 순서가 변경되었습니다.", Severity.Success);
@@ -204,7 +204,7 @@
             yesText: "삭제", cancelText: "취소");
         if (result != true) return;
 
-        await TwmDb.DeleteLayoutAsync(layout.Id);
+        await LayoutDb.DeleteLayoutAsync(layout.Id);
         await ReloadAsync();
         Snackbar.Add("레이아웃이 삭제되었습니다.", Severity.Info);
     }
@@ -245,7 +245,7 @@
     {
         try
         {
-            var data = await TwmDb.ExportLayoutAsync(layout.Id, layout.Name);
+            var data = await LayoutDb.ExportLayoutAsync(layout.Id, layout.Name);
             var json = System.Text.Json.JsonSerializer.Serialize(data, new System.Text.Json.JsonSerializerOptions
             {
                 WriteIndented = true,
@@ -309,7 +309,7 @@
             var allAssets = await AssetStatusService.GetAssetStatusesAsync();
             var validIds = allAssets.Select(a => a.AssetId).ToHashSet();
 
-            var (positions, groups, rects, skipped) = await TwmDb.ImportLayoutAsync(_importTargetLayoutId, data, validIds);
+            var (positions, groups, rects, skipped) = await LayoutDb.ImportLayoutAsync(_importTargetLayoutId, data, validIds);
 
             _importing = false;
             var msg = $"완료 — 자산 {positions}개, 그룹 {groups}개, 라인 영역 {rects}개 가져옴";

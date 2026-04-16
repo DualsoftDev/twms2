@@ -1,4 +1,5 @@
 @page "/"
+@using static Twms2.Server.Helpers.LayoutHelpers
 @implements IAsyncDisposable
 @inject DashboardService DashboardService
 @inject AssetStatusService AssetStatusService
@@ -937,23 +938,6 @@
             _ => "",
         };
 
-    private static string GetHeatmapTileClass(AssetHealthStatus health) => health switch
-    {
-        AssetHealthStatus.BackedUp => "heatmap-tile-success",
-        AssetHealthStatus.Unchanged => "heatmap-tile-info",
-        AssetHealthStatus.Failed => "heatmap-tile-error",
-        AssetHealthStatus.InProgress => "heatmap-tile-inprogress",
-        _ => "heatmap-tile-warning",
-    };
-
-    private static string GetHealthLabel(AssetHealthStatus health) => health switch
-    {
-        AssetHealthStatus.BackedUp => "백업 갱신",
-        AssetHealthStatus.Unchanged => "변경 없음",
-        AssetHealthStatus.Failed => "작업 실패",
-        AssetHealthStatus.InProgress => "작업중",
-        _ => "내역 없음",
-    };
 
     private sealed class TypeStat
     {
