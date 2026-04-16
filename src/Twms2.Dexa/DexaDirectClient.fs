@@ -29,6 +29,8 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
     let mutable disposed = false
     let mutable dataChangedSub: IDisposable = null
     let mutable messageSub: IDisposable = null
+    let mutable reconnectCts: CancellationTokenSource = null
+    let mutable lastConnectedState = false
     let dexaPath = opts.DllPath
 
     /// DEXA DLL 경로에서 어셈블리 resolve
@@ -72,6 +74,50 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
     let getProxyProp (name: string) =
         try proxy.GetType().GetProperty(name).GetValue(proxy :> obj)
         with _ -> null
+
+    /// 현재 연결 여부 확인
+    let isConnectedNow () =
+        initialized && not disposed
+        && not (isNull (getProxyProp "ShortTermActor"))
+        && not (isNull (getProxyProp "ServerShortTermActor"))
+
+    /// 백그라운드 재연결 루프: 연결이 끊겨있으면 주기적으로 proxy.Connect() 재시도
+    let startReconnectLoop () =
+        reconnectCts <- new CancellationTokenSource()
+        let ct = reconnectCts.Token
+        Task.Run(Func<Task>(fun () ->
+            task {
+                while not ct.IsCancellationRequested && not disposed do
+                    try do! Task.Delay(10_000, ct) with :? OperationCanceledException -> ()
+                    if ct.IsCancellationRequested || disposed then ()
+                    else
+                        let connected = isConnectedNow ()
+                        // 상태 변경 감지 시 알림
+                        if connected <> lastConnectedState then
+                            lastConnectedState <- connected
+                            logger.LogInformation("DEXA 연결 상태 변경 감지: {Connected}", connected :> obj)
+                            notifications.OnNext(ConnectivityChangedNotification(connected))
+                        // 연결 안 되어있으면 재연결 시도
+                        if not connected && initialized && not disposed then
+                            try
+                                logger.LogInformation("DEXA 서버 재연결 시도: {Ip}:{Port}", opts.ServerIp :> obj, opts.ServerPort :> obj)
+                                proxy.Connect(opts.ServerIp, opts.ServerPort)
+                                // 연결 대기 (최대 10초)
+                                let mutable reconnected = false
+                                for i in 1 .. 10 do
+                                    if not reconnected && not ct.IsCancellationRequested then
+                                        try do! Task.Delay(1000, ct) with :? OperationCanceledException -> ()
+                                        let shortTerm = getProxyProp "ShortTermActor"
+                                        let serverShortTerm = getProxyProp "ServerShortTermActor"
+                                        if not (isNull shortTerm) && not (isNull serverShortTerm) then
+                                            reconnected <- true
+                                if reconnected then
+                                    lastConnectedState <- true
+                                    logger.LogInformation("DEXA 서버 재연결 성공")
+                                    notifications.OnNext(ConnectivityChangedNotification(true))
+                            with ex ->
+                                logger.LogWarning("DEXA 서버 재연결 실패: {Err}", ex.Message :> obj)
+            }), ct) |> ignore
 
     /// CommProxy.AskServer<T>(message) 호출 (reflection - generic method)
     let mutable askMethodCache: MethodInfo = null
@@ -324,7 +370,11 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                         notifications.OnNext(ConnectivityChangedNotification(true))
 
                     initialized <- true
+                    lastConnectedState <- connected
                     logger.LogInformation("DexaDirectClient 초기화 완료 (CommProxy in-process)")
+
+                    // 백그라운드 재연결 루프 시작
+                    startReconnectLoop ()
                 with ex ->
                     initialized <- false
                     logger.LogError(ex, "DexaDirectClient 초기화 실패")
@@ -374,6 +424,9 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
         member _.Dispose() =
             if not disposed then
                 disposed <- true
+                if not (isNull reconnectCts) then
+                    reconnectCts.Cancel()
+                    reconnectCts.Dispose()
                 if not (isNull dataChangedSub) then dataChangedSub.Dispose()
                 if not (isNull messageSub) then messageSub.Dispose()
                 notifications.OnCompleted()

@@ -44,7 +44,9 @@ public class AssetStatusService
             var pingResults = pingTask.Result;
             var lineMap     = lineTask.Result;
 
-            var agentMap = agents.ToDictionary(a => a.Name ?? "", a => a, StringComparer.OrdinalIgnoreCase);
+            var agentMap = agents
+                .GroupBy(a => a.Name ?? "", StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
             var pingMap  = pingResults.ToDictionary(p => p.DexaAssetId);
 
             // 자산별 최신 액션 (assetId → 최신 action)
