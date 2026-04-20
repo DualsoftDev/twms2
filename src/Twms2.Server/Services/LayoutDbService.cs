@@ -274,6 +274,20 @@ public class LayoutDbService
             new { LayoutId = layoutId })).AsList();
     }
 
+    public async Task<HashSet<int>> GetAssetIdsPlacedOnOtherLayoutsAsync(int layoutId)
+    {
+        using var conn = _db.Create();
+        var ids = await conn.QueryAsync<int>("""
+            SELECT DISTINCT AssetId FROM TwmsAssetPosition
+            WHERE LayoutId <> @LayoutId AND Visible = 1
+            UNION
+            SELECT DISTINCT m.AssetId FROM TwmsPlacementGroupMember m
+            JOIN TwmsPlacementGroup g ON g.Id = m.GroupId
+            WHERE g.LayoutId <> @LayoutId
+            """, new { LayoutId = layoutId });
+        return new HashSet<int>(ids);
+    }
+
     public async Task UpsertAssetPositionAsync(TwmsAssetPosition pos)
     {
         using var conn = _db.Create();

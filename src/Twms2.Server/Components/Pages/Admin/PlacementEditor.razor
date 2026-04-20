@@ -140,6 +140,10 @@ else
                         미배치 (@UnplacedAssets.Count)
                     </MudText>
                     <MudSpacer />
+                    <MudCheckBox T="bool" Value="_includeOtherLayouts"
+                                 ValueChanged="@((bool v) => { _includeOtherLayouts = v; _checkedAssetIds.Clear(); })"
+                                 Size="Size.Small" Color="Color.Info"
+                                 Label="다른도면포함" />
                     @if (UnplacedAssets.Count > 0)
                     {
                         <MudCheckBox T="bool" Value="@(_checkedAssetIds.Count > 0 && _checkedAssetIds.Count >= UnplacedAssets.Count)"
@@ -393,6 +397,7 @@ else
     private List<AssetStatusInfo> _allAssets = [];
     private TwmsBlueprintConfig? _config;
     private Dictionary<int, string> _lines = new();
+    private HashSet<int> _placedOnOtherLayouts = new();
 
     // ═══ Working copies (in-memory) ═══
     private Dictionary<int, TwmsAssetPosition> _positions = new();
@@ -410,6 +415,7 @@ else
     private string? _searchText;
     private int? _selectedLineId;
     private string? _displayFilter; // null=전체, "PLC"/"HMI" 등
+    private bool _includeOtherLayouts;
 
     // ═══ Snapshots (in-memory, 적용 시 자동 저장) ═══
     private readonly List<LayoutSnapshot> _snapshots = [];
@@ -480,13 +486,15 @@ else
             var groupTask  = LayoutDb.GetAllPlacementGroupsAsync(LayoutId);
             var memberTask = LayoutDb.GetPlacementGroupMembersAsync(LayoutId);
             var lineTask   = LayoutDb.GetTwmsLayoutLineMapAsync();
-            await Task.WhenAll(statusTask, posTask, configTask, groupTask, memberTask, lineTask);
+            var otherTask  = LayoutDb.GetAssetIdsPlacedOnOtherLayoutsAsync(LayoutId);
+            await Task.WhenAll(statusTask, posTask, configTask, groupTask, memberTask, lineTask, otherTask);
 
             _allAssets = statusTask.Result;
             _positions = posTask.Result.ToDictionary(p => p.AssetId);
             _config = configTask.Result;
             _groups = groupTask.Result;
             _lines = lineTask.Result;
+            _placedOnOtherLayouts = otherTask.Result;
             _groupMembers = memberTask.Result
                 .GroupBy(m => m.GroupId)
                 .ToDictionary(g => g.Key, g => g.Select(m => m.AssetId).ToList());
@@ -595,6 +603,8 @@ else
         get
         {
             var result = _allAssets.Where(a => !GetPosition(a.AssetId).Visible && !_groupedAssetIds.Contains(a.AssetId));
+            if (!_includeOtherLayouts)
+                result = result.Where(a => !_placedOnOtherLayouts.Contains(a.AssetId));
             if (_selectedLineId.HasValue)
                 result = _selectedLineId.Value == -1
                     ? result.Where(a => !a.AugLineId.HasValue)
