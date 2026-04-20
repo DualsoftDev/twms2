@@ -2353,8 +2353,12 @@ h1:focus {
 }
 
 /* ── 그룹 패널 ── */
-.ap-group-item { border-bottom: 1px solid rgba(0,0,0,0.06); }
-.ap-group-item.selected { background: rgba(33,150,243,0.08); }
+.ap-group-item { border-bottom: 1px solid rgba(0,0,0,0.06); transition: background 0.12s ease; }
+.ap-group-item.selected {
+    background: rgba(33,150,243,0.22);
+    box-shadow: inset 3px 0 0 #2196f3;
+}
+.ap-group-item.selected .ap-group-header:hover { background: rgba(33,150,243,0.28); }
 
 .ap-group-header {
     display: flex;

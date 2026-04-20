@@ -1265,10 +1265,17 @@ window.assetPlacementEditor = (() => {
         setTimeout(() => el.classList.remove('ap-flash'), 1200);
     }
 
+    function scrollListGroupIntoView(groupId) {
+        const el = document.querySelector(`[data-list-group-id="${groupId}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
     return {
         init, dispose,
         setTool, setSnapConfig,
         zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel,
         scrollToAsset,
+        scrollListGroupIntoView,
     };
 })();

@@ -205,7 +205,7 @@ else
                             var isExpanded = _expandedGroupIds.Contains(grp.Id);
                             var isGrpSel = _selectedGroupIds.Contains(grp.Id);
                             var memberIds = GetGroupMemberIds(grp.Id);
-                            <div class="ap-group-item @(isGrpSel ? "selected" : "")">
+                            <div class="ap-group-item @(isGrpSel ? "selected" : "")" data-list-group-id="@grp.Id">
                                 <div class="ap-group-header" @onclick="() => ToggleGroupExpand(grp.Id)">
                                     <MudIcon Icon="@(isExpanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
                                              Size="Size.Small" />
@@ -729,11 +729,16 @@ else
     // ═══════════════ JS Callbacks ═══════════════
 
     [JSInvokable]
-    public void OnSelectionChanged(int[] assetIds, int[] groupIds)
+    public async Task OnSelectionChanged(int[] assetIds, int[] groupIds)
     {
         _selectedAssetIds = new HashSet<int>(assetIds);
         _selectedGroupIds = new HashSet<int>(groupIds);
-        InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
+        if (groupIds.Length > 0)
+        {
+            try { await JS.InvokeVoidAsync("assetPlacementEditor.scrollListGroupIntoView", groupIds[0]); }
+            catch (JSDisconnectedException) { }
+        }
     }
 
     [JSInvokable]
