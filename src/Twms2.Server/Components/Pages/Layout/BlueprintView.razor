@@ -102,7 +102,9 @@
                     {
                         var plcColor = GetHealthColor(card.Plc.Health);
                         var dr = Math.Max(2.0, card.PlcSize * 0.12);
-                        var plcIx = card.X + 2;
+                        var plcIx = card.Vertical
+                            ? card.X + (card.CardW - card.PlcSize) / 2
+                            : card.X + 2;
                         var plcIy = card.Vertical ? card.Y + 2 : card.Y + (card.CardH - card.PlcSize) / 2;
 
                         @* PLC 카드 영역 클릭 → 자산 상세 *@
@@ -529,47 +531,54 @@
         public List<ChildGroupInfo> Groups = [];
     }
 
+    private class LinePlanItem
+    {
+        public AssetStatusInfo Asset = null!;
+        public bool IsPlc;
+        public bool Vertical;
+        public bool HasIp;
+        public double NatW, NatH;
+        public List<IGrouping<string, AssetStatusInfo>> PlcGroups = new();
+    }
+
     private (List<StandaloneInfo>, List<PlcCardInfo>) LayoutLineAssets(
         TwmsBlueprintRect rect, List<AssetStatusInfo> topLevel)
     {
         var standalones = new List<StandaloneInfo>();
         var plcCards = new List<PlcCardInfo>();
-        var pad = 4.0;
-        var headerH = 20.0;
-        var maxX = rect.X + rect.Width - pad;
-        var maxY = rect.Y + rect.Height - 2;
-        var availW = rect.Width - pad * 2;
-        var availH = rect.Height - headerH - 2;
-        int totalSlots = topLevel.Count;
+        if (topLevel.Count == 0) return (standalones, plcCards);
 
-        if (availH < 2 || totalSlots == 0) return (standalones, plcCards);
+        const double padSide = 4.0;
+        const double padBottom = 4.0;
+        const double headerH = 20.0;
+        const double innerGap = 4.0;
+        const double rowGap = 4.0;
+        const double ipLineH = 10.0;
+        const double ipFontSz = 7.0;
 
-        // 영역 비율에 맞는 최적 아이콘 크기
+        var availW = rect.Width - padSide * 2;
+        var availH = rect.Height - headerH - padBottom;
+        if (availW < 4 || availH < 4) return (standalones, plcCards);
+
+        // 아이콘 크기 결정 (영역 비율 기반)
         var aspectRatio = availW / Math.Max(1, availH);
-        var bestCols = Math.Max(1, (int)Math.Round(Math.Sqrt(totalSlots * aspectRatio)));
-        var cols = Math.Min(bestCols, totalSlots);
-        var rows = (int)Math.Ceiling((double)totalSlots / cols);
-        var gap = 3.0;
-        var cellH = (availH - gap * Math.Max(0, rows - 1)) / Math.Max(1, rows);
-
+        var bestCols = Math.Max(1, (int)Math.Round(Math.Sqrt(topLevel.Count * aspectRatio)));
+        var initCols = Math.Min(bestCols, topLevel.Count);
+        var initRows = (int)Math.Ceiling((double)topLevel.Count / initCols);
+        var cellH = (availH - rowGap * Math.Max(0, initRows - 1)) / Math.Max(1, initRows);
         var sz = Math.Max(6, Math.Min(cellH, 36));
 
-        // PLC 세로 카드: 높이 = 1.45*sz + 16 → sz ≤ (cellH - 16) / 1.45
-        var plcCount = topLevel.Count(a => _plcChildren.ContainsKey(a.AssetId));
-        if (plcCount > 0)
+        var plcTotal = topLevel.Count(a => _plcChildren.ContainsKey(a.AssetId));
+        if (plcTotal > 0)
         {
-            var testHorizW = sz + 80; // 가로 카드 최소 폭 추정
+            var testHorizW = sz + 80;
             if (testHorizW > availW || availH > availW * 1.5)
                 sz = Math.Max(6, Math.Min(sz, (cellH - 16) / 1.45));
         }
-        var childSz = Math.Round(Math.Min(sz * 0.45, sz * 0.5), 1);
-        var ipFontSz = 7.0;
-        var innerGap = 4.0;
-        var ipLineH = 10.0;
+        var childSz = Math.Round(Math.Min(sz * 0.5, 24), 1);
 
-        var x = rect.X + pad;
-        var y = rect.Y + headerH;
-
+        // ── 1) 자연 크기 계산 ──
+        var plans = new List<LinePlanItem>();
         foreach (var asset in topLevel)
         {
             if (_plcChildren.TryGetValue(asset.AssetId, out var children))
@@ -577,122 +586,190 @@
                 var groups = children
                     .GroupBy(c => GetAssetIcon(c.AssetTypeName, c.AugIsRobotPLC))
                     .ToList();
-
-                var ipLen = !string.IsNullOrEmpty(asset.Ip) ? asset.Ip.Length : 0;
+                var hasIp = !string.IsNullOrEmpty(asset.Ip);
+                var ipLen = asset.Ip?.Length ?? 0;
                 var ipTextW = ipLen * ipFontSz * 0.62 + 8;
-                var childrenW = groups.Count * (childSz + gap) + gap + 8;
-                var rightW = Math.Max(Math.Max(childrenW, ipTextW), 40);
-                var horizCardW = sz + innerGap + rightW;
-
-                // 가로 카드가 영역 폭에 안 맞으면 → 세로 배치
-                var useVertical = horizCardW > availW || availH > availW * 1.5;
-
-                if (useVertical)
+                var childrenW = groups.Count > 0
+                    ? groups.Count * childSz + (groups.Count - 1) * innerGap
+                    : 0;
+                var rightW = Math.Max(Math.Max(childrenW + 8, ipTextW), 40);
+                var horizW = sz + innerGap + rightW + 3;
+                var vertW = Math.Max(sz, Math.Max(ipTextW, childrenW));
+                var vertH = sz + (hasIp ? ipLineH : 0) + (groups.Count > 0 ? childSz + 2 : 0) + 4;
+                var useVert = horizW > availW || availH > availW * 1.5;
+                plans.Add(new LinePlanItem
                 {
-                    // ── 세로 배치: PLC 아이콘 위, IP 중간, 자식 아이콘 아래 ──
-                    var childRowH = groups.Count > 0 ? childSz + 2 : 0;
-                    var hasIp = !string.IsNullOrEmpty(asset.Ip);
-                    var cardW = Math.Max(sz, Math.Min(availW, Math.Max(ipTextW, groups.Count * (childSz + gap))));
-                    var cardH = sz + (hasIp ? ipLineH : 0) + childRowH + 4;
-                    var rowH = cardH + gap;
-
-                    if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
-                    if (cardW > availW) cardW = availW;
-
-                    var card = new PlcCardInfo
-                    {
-                        X = x, Y = y, CardW = cardW, CardH = cardH,
-                        PlcSize = sz, Plc = asset, Ip = asset.Ip,
-                        Vertical = true,
-                    };
-
-                    // IP 위치: PLC 아이콘 바로 아래
-                    var belowY = y + sz + 2;
-                    if (hasIp)
-                    {
-                        card.HasIp = true;
-                        card.IpBgX = x + 1;
-                        card.IpBgY = belowY - 1;
-                        card.IpBgW = cardW - 2;
-                        card.IpBgH = ipLineH;
-                        card.IpX = x + 4;
-                        card.IpY = belowY + 7;
-                        card.DivX1 = x + 3;
-                        card.DivX2 = x + cardW - 3;
-                        card.DivY = belowY + ipLineH - 1;
-                        belowY += ipLineH;
-                    }
-
-                    // 자식 아이콘: IP 아래에 가로 배열
-                    var childX = x + 2;
-                    foreach (var grp in groups)
-                    {
-                        if (childX + childSz > x + cardW - 2) break;
-                        var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
-                        card.Groups.Add(new(childX, belowY, childSz,
-                            grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
-                        childX += childSz + gap;
-                    }
-
-                    plcCards.Add(card);
-                    x += cardW + gap;
-                    // 세로 카드가 높으므로 다음 줄 y 보정
-                    if (x > maxX) { x = rect.X + pad; y += rowH; }
-                }
-                else
-                {
-                    // ── 가로 배치: 기존 방식 (PLC 왼쪽, IP+자식 오른쪽) ──
-                    var cardW = horizCardW;
-                    var cardH = sz;
-                    var rowH = sz + gap;
-
-                    if (x + cardW > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
-                    if (cardW > availW) cardW = availW;
-
-                    var hasIpH = !string.IsNullOrEmpty(asset.Ip);
-                    var card = new PlcCardInfo
-                    {
-                        X = x, Y = y, CardW = cardW, CardH = cardH,
-                        PlcSize = sz, Plc = asset, Ip = asset.Ip,
-                        Vertical = false,
-                        HasIp = hasIpH,
-                        IpX = x + sz + 6,
-                        IpY = y + 10,
-                        IpBgX = x + sz + 2,
-                        IpBgY = y + 1,
-                        IpBgW = cardW - sz - 4,
-                        IpBgH = ipLineH + 2,
-                        DivX1 = x + sz + 4,
-                        DivX2 = x + cardW - 4,
-                        DivY = y + ipLineH + 3,
-                    };
-
-                    var childX = x + sz + innerGap;
-                    var childY = y + cardH - childSz - 3;
-                    var childMaxX = x + cardW - 3;
-                    foreach (var grp in groups)
-                    {
-                        if (childX + childSz > childMaxX) break;
-                        var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
-                        card.Groups.Add(new(childX, childY, childSz,
-                            grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
-                        childX += childSz + gap;
-                    }
-
-                    plcCards.Add(card);
-                    x += cardW + gap;
-                }
+                    Asset = asset, IsPlc = true, PlcGroups = groups,
+                    Vertical = useVert, HasIp = hasIp,
+                    NatW = useVert ? vertW : horizW,
+                    NatH = useVert ? vertH : sz,
+                });
             }
             else
             {
-                var rowH = sz + gap;
-                if (x + sz > maxX && x > rect.X + pad) { x = rect.X + pad; y += rowH; }
-                standalones.Add(new(x, y, sz, asset));
-                x += sz + gap;
+                plans.Add(new LinePlanItem { Asset = asset, IsPlc = false, NatW = sz, NatH = sz });
+            }
+        }
+
+        // ── 2) 행으로 포장 (greedy) ──
+        var rowsPacked = new List<List<LinePlanItem>>();
+        var cur = new List<LinePlanItem>();
+        double curW = 0;
+        foreach (var it in plans)
+        {
+            var tryW = cur.Count == 0 ? it.NatW : curW + innerGap + it.NatW;
+            if (tryW > availW && cur.Count > 0)
+            {
+                rowsPacked.Add(cur);
+                cur = new List<LinePlanItem>();
+                tryW = it.NatW;
+            }
+            cur.Add(it);
+            curW = tryW;
+        }
+        if (cur.Count > 0) rowsPacked.Add(cur);
+
+        // ── 3) 수직 중앙 정렬 ──
+        var rowHeights = rowsPacked.Select(r => r.Max(i => i.NatH)).ToList();
+        var totalH = rowHeights.Sum() + rowGap * Math.Max(0, rowsPacked.Count - 1);
+        var yStart = rect.Y + headerH + Math.Max(padBottom, (availH - totalH) / 2);
+
+        // ── 4) 행별 수평 스트레치 + 배치 ──
+        for (int ri = 0; ri < rowsPacked.Count; ri++)
+        {
+            var row = rowsPacked[ri];
+            var natW = row.Sum(i => i.NatW) + innerGap * Math.Max(0, row.Count - 1);
+            var extraW = Math.Max(0, availW - natW);
+            var plcsInRow = row.Count(i => i.IsPlc);
+
+            double perPlcExtra = 0, edgePad = 0, extraInter = 0;
+            if (plcsInRow > 0)
+            {
+                // PLC 카드가 추가 공간을 흡수 → 카드 자체가 넓어짐
+                perPlcExtra = extraW / plcsInRow;
+            }
+            else if (row.Count == 1)
+            {
+                // 단일 항목 → 좌우 여백으로 중앙 정렬
+                edgePad = extraW / 2;
+            }
+            else
+            {
+                // standalone만 있는 행 → 양 끝 + 사이 공백에 균등 분배
+                var slots = row.Count + 1;
+                edgePad = extraW / slots;
+                extraInter = extraW / slots;
+            }
+
+            var rowH = rowHeights[ri];
+            var y = yStart + rowHeights.Take(ri).Sum() + rowGap * ri;
+            var x = rect.X + padSide + edgePad;
+
+            foreach (var it in row)
+            {
+                var itemW = it.NatW + (it.IsPlc ? perPlcExtra : 0);
+                var itemY = y + (rowH - it.NatH) / 2;
+
+                if (it.IsPlc)
+                {
+                    plcCards.Add(BuildPlcCard(it, x, itemY, itemW, sz, childSz, innerGap, ipLineH, ipFontSz));
+                }
+                else
+                {
+                    standalones.Add(new(x + (itemW - sz) / 2, itemY, sz, it.Asset));
+                }
+                x += itemW + innerGap + extraInter;
             }
         }
 
         return (standalones, plcCards);
+    }
+
+    private PlcCardInfo BuildPlcCard(
+        LinePlanItem plan, double x, double y, double cardW,
+        double plcSize, double childSz, double innerGap, double ipLineH, double ipFontSz)
+    {
+        var card = new PlcCardInfo
+        {
+            X = x, Y = y, CardW = cardW,
+            PlcSize = plcSize, Plc = plan.Asset, Ip = plan.Asset.Ip,
+            Vertical = plan.Vertical, HasIp = plan.HasIp,
+        };
+
+        if (plan.Vertical)
+        {
+            var childRowH = plan.PlcGroups.Count > 0 ? childSz + 2 : 0;
+            card.CardH = plcSize + (plan.HasIp ? ipLineH : 0) + childRowH + 4;
+
+            var belowY = y + plcSize + 2;
+            if (plan.HasIp)
+            {
+                var ipTextW = (plan.Asset.Ip?.Length ?? 0) * ipFontSz * 0.62;
+                card.IpBgX = x + 1;
+                card.IpBgY = belowY - 1;
+                card.IpBgW = cardW - 2;
+                card.IpBgH = ipLineH;
+                card.IpX = x + Math.Max(2, (cardW - ipTextW) / 2);
+                card.IpY = belowY + 7;
+                card.DivX1 = x + 3;
+                card.DivX2 = x + cardW - 3;
+                card.DivY = belowY + ipLineH - 1;
+                belowY += ipLineH;
+            }
+
+            // 자식 아이콘: 카드 폭에 맞춰 수평 중앙 정렬
+            var childrenTotalW = plan.PlcGroups.Count * childSz
+                + Math.Max(0, plan.PlcGroups.Count - 1) * innerGap;
+            var childX = x + Math.Max(2, (cardW - childrenTotalW) / 2);
+            foreach (var grp in plan.PlcGroups)
+            {
+                if (childX + childSz > x + cardW - 1) break;
+                var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
+                card.Groups.Add(new(childX, belowY, childSz,
+                    grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
+                childX += childSz + innerGap;
+            }
+        }
+        else
+        {
+            card.CardH = plcSize;
+
+            var rightAreaX = x + plcSize + innerGap;
+            var rightAreaW = Math.Max(0, cardW - plcSize - innerGap - 3);
+
+            if (plan.HasIp)
+            {
+                var ipTextW = (plan.Asset.Ip?.Length ?? 0) * ipFontSz * 0.62;
+                card.IpBgX = x + plcSize + 2;
+                card.IpBgY = y + 1;
+                card.IpBgW = cardW - plcSize - 4;
+                card.IpBgH = ipLineH + 2;
+                card.IpX = rightAreaX + Math.Max(0, (rightAreaW - ipTextW) / 2);
+                card.IpY = y + 10;
+                card.DivX1 = x + plcSize + 4;
+                card.DivX2 = x + cardW - 4;
+                card.DivY = y + ipLineH + 3;
+            }
+
+            // 자식 아이콘: 우측 영역에 수평 중앙 정렬
+            var childrenTotalW = plan.PlcGroups.Count * childSz
+                + Math.Max(0, plan.PlcGroups.Count - 1) * innerGap;
+            var childStartX = rightAreaX + Math.Max(0, (rightAreaW - childrenTotalW) / 2);
+            var childY = y + card.CardH - childSz - 3;
+            var childMaxX = x + cardW - 3;
+
+            var childX = childStartX;
+            foreach (var grp in plan.PlcGroups)
+            {
+                if (childX + childSz > childMaxX) break;
+                var grpIcon = GetAssetIcon(grp.First().AssetTypeName, grp.First().AugIsRobotPLC);
+                card.Groups.Add(new(childX, childY, childSz,
+                    grp.First(), grp.Count(), AggregateHealthColor(grp.ToList()), grpIcon));
+                childX += childSz + innerGap;
+            }
+        }
+
+        return card;
     }
 
 
