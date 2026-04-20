@@ -737,11 +737,36 @@ else
         _selectedAssetIds = new HashSet<int>(assetIds);
         _selectedGroupIds = new HashSet<int>(groupIds);
 
-        if (assetIds.Length > 0)
+        int? lastAssetId = assetIds.Length > 0 ? assetIds[^1] : null;
+        int? lastGroupId = groupIds.Length > 0 ? groupIds[^1] : null;
+
+        await ScrollLastSelectedIntoView(lastAssetId, lastGroupId);
+    }
+
+    [JSInvokable]
+    public async Task OnToggleAssetSelection(int assetId)
+    {
+        _selectedGroupIds.Clear();
+        var added = !_selectedAssetIds.Remove(assetId);
+        if (added) _selectedAssetIds.Add(assetId);
+        await ScrollLastSelectedIntoView(added ? assetId : null, null);
+    }
+
+    [JSInvokable]
+    public async Task OnToggleGroupSelection(int groupId)
+    {
+        _selectedAssetIds.Clear();
+        var added = !_selectedGroupIds.Remove(groupId);
+        if (added) _selectedGroupIds.Add(groupId);
+        await ScrollLastSelectedIntoView(null, added ? groupId : null);
+    }
+
+    private async Task ScrollLastSelectedIntoView(int? lastAssetId, int? lastGroupId)
+    {
+        if (lastAssetId.HasValue)
         {
-            var firstAssetId = assetIds[0];
             var containingGroupId = _groupMembers
-                .Where(kv => kv.Value.Contains(firstAssetId))
+                .Where(kv => kv.Value.Contains(lastAssetId.Value))
                 .Select(kv => (int?)kv.Key)
                 .FirstOrDefault();
             if (containingGroupId.HasValue)
@@ -752,30 +777,12 @@ else
 
         try
         {
-            if (assetIds.Length > 0)
-                await JS.InvokeVoidAsync("assetPlacementEditor.scrollListAssetIntoView", assetIds[0]);
-            else if (groupIds.Length > 0)
-                await JS.InvokeVoidAsync("assetPlacementEditor.scrollListGroupIntoView", groupIds[0]);
+            if (lastAssetId.HasValue)
+                await JS.InvokeVoidAsync("assetPlacementEditor.scrollListAssetIntoView", lastAssetId.Value);
+            else if (lastGroupId.HasValue)
+                await JS.InvokeVoidAsync("assetPlacementEditor.scrollListGroupIntoView", lastGroupId.Value);
         }
         catch (JSDisconnectedException) { }
-    }
-
-    [JSInvokable]
-    public void OnToggleAssetSelection(int assetId)
-    {
-        _selectedGroupIds.Clear();
-        if (!_selectedAssetIds.Remove(assetId))
-            _selectedAssetIds.Add(assetId);
-        InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable]
-    public void OnToggleGroupSelection(int groupId)
-    {
-        _selectedAssetIds.Clear();
-        if (!_selectedGroupIds.Remove(groupId))
-            _selectedGroupIds.Add(groupId);
-        InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]

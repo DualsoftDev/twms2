@@ -1271,11 +1271,18 @@ window.assetPlacementEditor = (() => {
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
+    function scrollListAssetIntoView(assetId) {
+        const el = document.querySelector(`[data-list-asset-id="${assetId}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
     return {
         init, dispose,
         setTool, setSnapConfig,
         zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel,
         scrollToAsset,
         scrollListGroupIntoView,
+        scrollListAssetIntoView,
     };
 })();
