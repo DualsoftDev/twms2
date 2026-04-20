@@ -337,8 +337,8 @@ public class LayoutDbService
     {
         using var conn = _db.Create();
         return await conn.ExecuteScalarAsync<int>("""
-            INSERT INTO TwmsPlacementGroup (LayoutId, Name, X, Y, Width, Height, Color, UpdatedAt)
-            VALUES (@LayoutId, @Name, @X, @Y, @Width, @Height, @Color, CURRENT_TIMESTAMP);
+            INSERT INTO TwmsPlacementGroup (LayoutId, Name, X, Y, Width, Height, Color, Floor, UpdatedAt)
+            VALUES (@LayoutId, @Name, @X, @Y, @Width, @Height, @Color, @Floor, CURRENT_TIMESTAMP);
             SELECT last_insert_rowid();
             """, group);
     }
@@ -347,12 +347,12 @@ public class LayoutDbService
     {
         using var conn = _db.Create();
         await conn.ExecuteAsync("""
-            INSERT INTO TwmsPlacementGroup (Id, LayoutId, Name, X, Y, Width, Height, Color, UpdatedAt)
-            VALUES (@Id, @LayoutId, @Name, @X, @Y, @Width, @Height, @Color, CURRENT_TIMESTAMP)
+            INSERT INTO TwmsPlacementGroup (Id, LayoutId, Name, X, Y, Width, Height, Color, Floor, UpdatedAt)
+            VALUES (@Id, @LayoutId, @Name, @X, @Y, @Width, @Height, @Color, @Floor, CURRENT_TIMESTAMP)
             ON CONFLICT(Id) DO UPDATE SET
                 Name = excluded.Name, X = excluded.X, Y = excluded.Y,
                 Width = excluded.Width, Height = excluded.Height,
-                Color = excluded.Color, UpdatedAt = CURRENT_TIMESTAMP
+                Color = excluded.Color, Floor = excluded.Floor, UpdatedAt = CURRENT_TIMESTAMP
             """, group);
     }
 
@@ -378,12 +378,12 @@ public class LayoutDbService
     {
         using var conn = _db.Create();
         await conn.ExecuteAsync("""
-            INSERT INTO TwmsPlacementGroup (Id, LayoutId, Name, X, Y, Width, Height, Color, UpdatedAt)
-            VALUES (@Id, @LayoutId, @Name, @X, @Y, @Width, @Height, @Color, CURRENT_TIMESTAMP)
+            INSERT INTO TwmsPlacementGroup (Id, LayoutId, Name, X, Y, Width, Height, Color, Floor, UpdatedAt)
+            VALUES (@Id, @LayoutId, @Name, @X, @Y, @Width, @Height, @Color, @Floor, CURRENT_TIMESTAMP)
             ON CONFLICT(Id) DO UPDATE SET
                 Name = excluded.Name, X = excluded.X, Y = excluded.Y,
                 Width = excluded.Width, Height = excluded.Height,
-                Color = excluded.Color, UpdatedAt = CURRENT_TIMESTAMP
+                Color = excluded.Color, Floor = excluded.Floor, UpdatedAt = CURRENT_TIMESTAMP
             """, groups);
     }
 
@@ -432,6 +432,7 @@ public class LayoutDbService
             Groups = groups.Select(g => new LayoutExportGroup
             {
                 Name = g.Name, X = g.X, Y = g.Y, Width = g.Width, Height = g.Height, Color = g.Color,
+                Floor = g.Floor,
                 MemberAssetIds = memberMap.GetValueOrDefault(g.Id) ?? [],
             }).ToList(),
         };
@@ -490,6 +491,7 @@ public class LayoutDbService
             {
                 LayoutId = layoutId, Name = g.Name,
                 X = g.X, Y = g.Y, Width = g.Width, Height = g.Height, Color = g.Color,
+                Floor = g.Floor,
             };
             var newId = await InsertPlacementGroupAsync(newGroup);
             await SetPlacementGroupMembersAsync(newId, validMembers);

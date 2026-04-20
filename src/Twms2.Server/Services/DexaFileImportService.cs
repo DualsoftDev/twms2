@@ -367,15 +367,15 @@ public class DexaFileImportService(TwmDbService twmDb, LayoutDbService layoutDb,
                 var gw = (grp.W / glt.refW) * glt.imgAreaW;
                 var gh = (grp.H / glt.refH) * glt.imgAreaH;
 
-                var floorLabel = grp.Floor.HasValue ? $"{grp.Floor}층" : "";
                 var newGroup = new TwmsPlacementGroup
                 {
                     LayoutId = grpLayoutId,
-                    Name     = floorLabel,
+                    Name     = "",
                     X        = Math.Round(Math.Clamp(gx, 0, VB_W), 2),
                     Y        = Math.Round(Math.Clamp(gy, 0, VB_H), 2),
                     Width    = Math.Round(Math.Max(gw, 10), 2),
                     Height   = Math.Round(Math.Max(gh, 10), 2),
+                    Floor    = grp.Floor ?? 1,
                 };
                 var newGroupId = await layoutDb.InsertPlacementGroupAsync(newGroup);
 

@@ -71,8 +71,23 @@ else
                     <MudMenuItem OnClick="@(() => DistributeSelected("v"))">세로 균등 분배</MudMenuItem>
                 </MudMenu>
             }
-            <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small"
-                           Color="Color.Error" OnClick="UnplaceSelected" />
+            @if (_selectedGroupIds.Count > 0)
+            {
+                <span class="ap-floor-input">
+                    <MudNumericField T="int?" Value="SelectedGroupsSharedFloor"
+                                     ValueChanged="OnSelectedGroupsFloorChanged"
+                                     Min="-20" Max="100" Step="1"
+                                     HideSpinButtons="true" Margin="Margin.Dense"
+                                     Variant="Variant.Outlined"
+                                     Adornment="Adornment.End" AdornmentText="층"
+                                     Placeholder="혼합"
+                                     Style="width: 80px;" />
+                </span>
+            }
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Delete" OnClick="UnplaceSelected">
+                삭제
+            </MudButton>
         }
         @if (_snapshots.Count > 0)
         {
@@ -198,6 +213,15 @@ else
                                     <span class="flex-grow-1 ap-list-name" style="font-size: 0.75rem;">
                                         @GetGroupDisplayLabel(grp.Id, memberIds)
                                     </span>
+                                    <span @onclick:stopPropagation="true" class="ap-floor-input">
+                                        <MudNumericField T="int" Value="grp.Floor"
+                                                         ValueChanged="@((int v) => OnGroupFloorChanged(grp, v))"
+                                                         Min="-20" Max="100" Step="1"
+                                                         HideSpinButtons="true" Margin="Margin.Dense"
+                                                         Variant="Variant.Outlined"
+                                                         Adornment="Adornment.End" AdornmentText="층"
+                                                         Style="width: 64px;" />
+                                    </span>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">@memberIds.Count</MudText>
                                     <span @onclick:stopPropagation="true">
                                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
@@ -309,10 +333,6 @@ else
                             <rect x="@F(grp.X)" y="@F(grp.Y)" width="@F(grp.Width)" height="@F(grp.Height)"
                                   rx="6" fill="@(grpColor)10"
                                   stroke="@grpColor" stroke-width="1.5" stroke-dasharray="6 3" />
-                            <text x="@F(grp.X + 4)" y="@F(grp.Y - 4)" font-size="10"
-                                  fill="@grpColor" class="ap-group-label">
-                                @(string.IsNullOrEmpty(grp.Name) ? $"그룹 #{grp.Id}" : grp.Name)
-                            </text>
                             @* 그룹 내 멤버 자산 아이콘 *@
                             <g clip-path="url(#ap-grp-clip-@grp.Id)">
                                 @{
@@ -441,7 +461,7 @@ else
 
     private record EditorSnapshot(
         Dictionary<int, (double X, double Y, double Scale, bool Visible)> Positions,
-        List<(int Id, string? Name, double X, double Y, double W, double H, string? Color)> Groups,
+        List<(int Id, string? Name, double X, double Y, double W, double H, string? Color, int Floor)> Groups,
         Dictionary<int, List<int>> Members);
 
     // ═══════════════ Lifecycle ═══════════════
@@ -930,6 +950,39 @@ else
         _hasChanges = true;
     }
 
+    private void OnGroupFloorChanged(TwmsPlacementGroup group, int newFloor)
+    {
+        if (newFloor == 0) newFloor = 1;
+        if (group.Floor == newFloor) return;
+        PushUndo();
+        group.Floor = newFloor;
+        _hasChanges = true;
+    }
+
+    private int? SelectedGroupsSharedFloor
+    {
+        get
+        {
+            var floors = _groups.Where(g => _selectedGroupIds.Contains(g.Id))
+                                .Select(g => g.Floor)
+                                .Distinct()
+                                .Take(2)
+                                .ToList();
+            return floors.Count == 1 ? floors[0] : null;
+        }
+    }
+
+    private void OnSelectedGroupsFloorChanged(int? newFloor)
+    {
+        if (newFloor is null) return;
+        var f = newFloor.Value == 0 ? 1 : newFloor.Value;
+        var targets = _groups.Where(g => _selectedGroupIds.Contains(g.Id) && g.Floor != f).ToList();
+        if (targets.Count == 0) return;
+        PushUndo();
+        foreach (var g in targets) g.Floor = f;
+        _hasChanges = true;
+    }
+
     private void RemoveFromGroup(int groupId, int assetId)
     {
         if (_groupMembers.TryGetValue(groupId, out var members))
@@ -991,7 +1044,7 @@ else
     {
         var snap = new EditorSnapshot(
             _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
-            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color, g.Floor)).ToList(),
             _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
         _undoStack.Add(snap);
         if (_undoStack.Count > MaxUndoSteps) _undoStack.RemoveAt(0);
@@ -1004,7 +1057,7 @@ else
         // Save current state to redo
         var current = new EditorSnapshot(
             _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
-            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color, g.Floor)).ToList(),
             _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
         _redoStack.Add(current);
 
@@ -1018,7 +1071,7 @@ else
         if (_redoStack.Count == 0) return;
         var current = new EditorSnapshot(
             _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
-            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+            _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color, g.Floor)).ToList(),
             _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
         _undoStack.Add(current);
 
@@ -1037,7 +1090,7 @@ else
         _groups = snap.Groups.Select(g => new TwmsPlacementGroup
         {
             Id = g.Id, LayoutId = LayoutId, Name = g.Name,
-            X = g.X, Y = g.Y, Width = g.W, Height = g.H, Color = g.Color
+            X = g.X, Y = g.Y, Width = g.W, Height = g.H, Color = g.Color, Floor = g.Floor
         }).ToList();
         _groupMembers = snap.Members.ToDictionary(kv => kv.Key, kv => kv.Value.ToList());
         RebuildIndexes();
@@ -1199,7 +1252,7 @@ else
             // 적용 전 스냅샷 저장
             var snapData = new EditorSnapshot(
                 _positions.ToDictionary(kv => kv.Key, kv => (kv.Value.X, kv.Value.Y, kv.Value.Scale, kv.Value.Visible)),
-                _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color)).ToList(),
+                _groups.Select(g => (g.Id, g.Name, g.X, g.Y, g.Width, g.Height, g.Color, g.Floor)).ToList(),
                 _groupMembers.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()));
             _snapshots.Insert(0, new LayoutSnapshot(DateTime.Now, snapData));
             if (_snapshots.Count > 10) _snapshots.RemoveRange(10, _snapshots.Count - 10);

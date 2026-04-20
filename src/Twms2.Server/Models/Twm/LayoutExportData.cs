@@ -47,5 +47,6 @@ public class LayoutExportGroup
     public double Width { get; set; }
     public double Height { get; set; }
     public string? Color { get; set; }
+    public int Floor { get; set; } = 1;
     public List<int> MemberAssetIds { get; set; } = [];
 }

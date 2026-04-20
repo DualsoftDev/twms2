@@ -269,6 +269,20 @@ public class TwmDbInitializer
             ALTER TABLE TwmsBlueprintConfig ADD COLUMN GridEnabled INTEGER NOT NULL DEFAULT 1;
             ALTER TABLE TwmsBlueprintConfig ADD COLUMN GridSize INTEGER NOT NULL DEFAULT 20;
             """),
+
+        // V28: 배치 그룹 층 정보
+        (28, "TwmsPlacementGroup.Floor 컬럼 추가", """
+            ALTER TABLE TwmsPlacementGroup ADD COLUMN Floor INTEGER NOT NULL DEFAULT 1;
+            """),
+
+        // V29: 기존 Dexa 임포트 그룹의 Name("N층") → Floor 백필
+        (29, "TwmsPlacementGroup.Floor 백필 (Name 파싱)", """
+            UPDATE TwmsPlacementGroup
+            SET Floor = CAST(REPLACE(Name, '층', '') AS INTEGER)
+            WHERE Floor = 1
+              AND Name LIKE '%층'
+              AND CAST(REPLACE(Name, '층', '') AS INTEGER) != 0;
+            """),
     ];
 
     public async Task InitializeAsync()

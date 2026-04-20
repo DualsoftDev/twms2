@@ -14,5 +14,6 @@ public class TwmsPlacementGroup
     public double   Width     { get; set; } = 150;
     public double   Height    { get; set; } = 100;
     public string?  Color     { get; set; }
+    public int      Floor     { get; set; } = 1;
     public DateTime UpdatedAt { get; set; }
 }

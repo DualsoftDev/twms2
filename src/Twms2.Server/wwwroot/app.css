@@ -2378,6 +2378,11 @@ h1:focus {
     overflow-y: auto;
 }
 
+.ap-floor-input .mud-input-control { margin: 0; }
+.ap-floor-input .mud-input-slot { padding: 2px 4px !important; font-size: 0.72rem !important; height: 22px !important; min-height: 22px !important; }
+.ap-floor-input .mud-input-adornment { margin: 0; }
+.ap-floor-input .mud-input-adornment-text { font-size: 0.68rem; }
+
 /* ── SVG 자산 아이콘 ── */
 .ap-asset-icon {
     cursor: grab;
