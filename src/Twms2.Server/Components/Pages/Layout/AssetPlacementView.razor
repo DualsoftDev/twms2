@@ -88,13 +88,14 @@
                        preserveAspectRatio="none" opacity="0.85" />
             }
 
-            @* ── 그룹 clipPath ── *@
+            @* ── 그룹 clipPath (적응형 rx) ── *@
             <defs>
                 @foreach (var grp in PlacementGroups)
                 {
+                    var grx = Math.Min(6.0, Math.Min(grp.Width, grp.Height) / 2);
                     <clipPath id="grp-clip-@grp.Id">
                         <rect x="@F(grp.X)" y="@F(grp.Y)"
-                              width="@F(grp.Width)" height="@F(grp.Height)" rx="6" />
+                              width="@F(grp.Width)" height="@F(grp.Height)" rx="@F(grx)" />
                     </clipPath>
                 }
             </defs>
@@ -112,38 +113,59 @@
                     @* 그룹 배경: 층에 따라 3D 필터 적용 *@
                     @{
                         double gx = grp.X, gy = grp.Y, gw = grp.Width, gh = grp.Height;
-                        // 좌상단/우하단 L-path (둥근 모서리 포함)
-                        var tlPath = $"M {F(gx + 1)} {F(gy + gh - 4)} L {F(gx + 1)} {F(gy + 4)} "
-                                   + $"Q {F(gx + 1)} {F(gy + 1)} {F(gx + 4)} {F(gy + 1)} L {F(gx + gw - 4)} {F(gy + 1)}";
-                        var brPath = $"M {F(gx + gw - 1)} {F(gy + 4)} L {F(gx + gw - 1)} {F(gy + gh - 4)} "
-                                   + $"Q {F(gx + gw - 1)} {F(gy + gh - 1)} {F(gx + gw - 4)} {F(gy + gh - 1)} L {F(gx + 4)} {F(gy + gh - 1)}";
+                        // 적응형 모서리 반경: 작은 그룹도 모서리가 겹치지 않게
+                        var rRx = Math.Min(6.0, Math.Min(gw, gh) / 2);
+                        // 안쪽 path용 반경 (동심 원호, 오프셋만큼 반경 감소)
+                        var r1 = Math.Max(0.5, rRx - 1);
+                        var r2 = Math.Max(0.5, rRx - 3);
+                        // 좌상단 L-path (A=타원호, rect의 rx와 정확히 일치하는 곡률)
+                        var tlPath = $"M {F(gx + 1)} {F(gy + gh - rRx)} L {F(gx + 1)} {F(gy + rRx)} "
+                                   + $"A {F(r1)} {F(r1)} 0 0 1 {F(gx + rRx)} {F(gy + 1)} L {F(gx + gw - rRx)} {F(gy + 1)}";
+                        // 우하단 L-path
+                        var brPath = $"M {F(gx + gw - 1)} {F(gy + rRx)} L {F(gx + gw - 1)} {F(gy + gh - rRx)} "
+                                   + $"A {F(r1)} {F(r1)} 0 0 1 {F(gx + gw - rRx)} {F(gy + gh - 1)} L {F(gx + rRx)} {F(gy + gh - 1)}";
+                        // 안쪽 3px 오프셋 path (이중 하이라이트/그림자)
+                        var tlInner = $"M {F(gx + 3)} {F(gy + gh - rRx)} L {F(gx + 3)} {F(gy + rRx)} "
+                                    + $"A {F(r2)} {F(r2)} 0 0 1 {F(gx + rRx)} {F(gy + 3)} L {F(gx + gw - rRx)} {F(gy + 3)}";
                     }
                     @if (isRaised)
                     {
-                        @* 튀어나옴: 밝은 채움 + 드롭섀도우 + 좌상단 하이라이트 + 우하단 어두운 엣지 *@
+                        @* 튀어나옴: 그룹색 채움 + 드롭섀도우 + 흰/검정 엣지 (clipPath로 오버플로 차단) *@
                         <rect x="@F(gx)" y="@F(gy)" width="@F(gw)" height="@F(gh)"
-                              rx="6" fill="@grpColor" fill-opacity="0.6"
-                              style="filter: drop-shadow(4px 6px 3px rgba(0,0,0,0.85));" />
-                        <path d="@tlPath" fill="none" stroke="#ffffff"
-                              stroke-opacity="0.55" stroke-width="1.4" stroke-linecap="round" />
-                        <path d="@brPath" fill="none" stroke="#000000"
-                              stroke-opacity="0.35" stroke-width="1" stroke-linecap="round" />
+                              rx="@F(rRx)" fill="@grpColor" fill-opacity="0.5"
+                              stroke="@grpColor" stroke-width="0.8" stroke-opacity="0.75"
+                              style="filter: drop-shadow(4px 6px 3px rgba(0,0,0,0.4));" />
+                        <g clip-path="url(#grp-clip-@grp.Id)">
+                            <path d="@tlPath" fill="none" stroke="#ffffff"
+                                  stroke-opacity="0.5" stroke-width="1.3"
+                                  stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="@brPath" fill="none" stroke="#000000"
+                                  stroke-opacity="0.4" stroke-width="1.2"
+                                  stroke-linecap="round" stroke-linejoin="round" />
+                        </g>
                     }
                     else if (isSunken)
                     {
-                        @* 들어감: 어두운 채움 + 좌상단 짙은 내부 그림자 + 우하단 밝은 반사 *@
+                        @* 들어감: 반투명 검정 오버레이 + 이중 검정 그림자 + 그룹색 반사 *@
                         <rect x="@F(gx)" y="@F(gy)" width="@F(gw)" height="@F(gh)"
-                              rx="6" fill="#000" fill-opacity="0.72"
-                              stroke="@grpColor" stroke-width="0.5" stroke-opacity="0.5" />
-                        <path d="@tlPath" fill="none" stroke="#000000"
-                              stroke-opacity="0.95" stroke-width="2.6" stroke-linecap="round" />
-                        <path d="@brPath" fill="none" stroke="#ffffff"
-                              stroke-opacity="0.4" stroke-width="1.4" stroke-linecap="round" />
+                              rx="@F(rRx)" fill="#000" fill-opacity="0.38"
+                              stroke="@grpColor" stroke-width="0.8" stroke-opacity="0.7" />
+                        <g clip-path="url(#grp-clip-@grp.Id)">
+                            <path d="@tlPath" fill="none" stroke="#000000"
+                                  stroke-opacity="0.8" stroke-width="2.8"
+                                  stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="@tlInner" fill="none" stroke="#000000"
+                                  stroke-opacity="0.4" stroke-width="1.8"
+                                  stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="@brPath" fill="none" stroke="@grpColor"
+                                  stroke-opacity="0.85" stroke-width="1.3"
+                                  stroke-linecap="round" stroke-linejoin="round" />
+                        </g>
                     }
                     else
                     {
                         <rect x="@F(gx)" y="@F(gy)" width="@F(gw)" height="@F(gh)"
-                              rx="6"
+                              rx="@F(rRx)"
                               fill="@(grpColor)10"
                               stroke="@grpColor"
                               stroke-width="0.7" stroke-dasharray="6 3" />
