@@ -171,6 +171,7 @@ else
                     {
                         var isChecked = _checkedAssetIds.Contains(asset.AssetId);
                         <div class="ap-list-item @(isChecked ? "checked" : "")"
+                             data-list-asset-id="@asset.AssetId"
                              @onclick="() => ToggleCheck(asset.AssetId)">
                             <MudCheckBox T="bool" Value="isChecked" Size="Size.Small" Color="Color.Success"
                                          ValueChanged="@(v => ToggleCheck(asset.AssetId))"
@@ -235,7 +236,8 @@ else
                                         {
                                             var asset = _allAssets.FirstOrDefault(a => a.AssetId == aid);
                                             if (asset == null) continue;
-                                            <div class="ap-list-item small">
+                                            <div class="ap-list-item small"
+                                                 data-list-asset-id="@asset.AssetId">
                                                 <img src="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
                                                      class="asset-type-icon-sm" />
                                                 <span class="flex-grow-1 ap-list-name">@asset.Name</span>
@@ -265,6 +267,7 @@ else
                         var isSel = _selectedAssetIds.Contains(asset.AssetId);
                         var a = asset;
                         <div class="ap-list-item @(isSel ? "selected" : "")"
+                             data-list-asset-id="@asset.AssetId"
                              @onclick="() => FocusAssetOnCanvas(a.AssetId)">
                             <img src="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
                                  class="asset-type-icon-sm" />
@@ -733,12 +736,28 @@ else
     {
         _selectedAssetIds = new HashSet<int>(assetIds);
         _selectedGroupIds = new HashSet<int>(groupIds);
-        await InvokeAsync(StateHasChanged);
-        if (groupIds.Length > 0)
+
+        if (assetIds.Length > 0)
         {
-            try { await JS.InvokeVoidAsync("assetPlacementEditor.scrollListGroupIntoView", groupIds[0]); }
-            catch (JSDisconnectedException) { }
+            var firstAssetId = assetIds[0];
+            var containingGroupId = _groupMembers
+                .Where(kv => kv.Value.Contains(firstAssetId))
+                .Select(kv => (int?)kv.Key)
+                .FirstOrDefault();
+            if (containingGroupId.HasValue)
+                _expandedGroupIds.Add(containingGroupId.Value);
         }
+
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (assetIds.Length > 0)
+                await JS.InvokeVoidAsync("assetPlacementEditor.scrollListAssetIntoView", assetIds[0]);
+            else if (groupIds.Length > 0)
+                await JS.InvokeVoidAsync("assetPlacementEditor.scrollListGroupIntoView", groupIds[0]);
+        }
+        catch (JSDisconnectedException) { }
     }
 
     [JSInvokable]
