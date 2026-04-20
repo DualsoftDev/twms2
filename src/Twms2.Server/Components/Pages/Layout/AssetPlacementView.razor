@@ -88,7 +88,7 @@
                        preserveAspectRatio="none" opacity="0.85" />
             }
 
-            @* ── 그룹 clipPath 정의 ── *@
+            @* ── 그룹 clipPath / 3D 필터 정의 ── *@
             <defs>
                 @foreach (var grp in PlacementGroups)
                 {
@@ -97,6 +97,42 @@
                               width="@F(grp.Width)" height="@F(grp.Height)" rx="6" />
                     </clipPath>
                 }
+                @* 튀어나온 효과 (외부 그림자: 우하단 어둠 + 좌상단 하이라이트) *@
+                <filter id="apv-outset" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+                    <feOffset dx="3" dy="4" result="offOut" />
+                    <feFlood flood-color="#000" flood-opacity="0.6" />
+                    <feComposite in2="offOut" operator="in" result="darkOut" />
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+                    <feOffset dx="-1.5" dy="-1.5" result="offHi" />
+                    <feFlood flood-color="#fff" flood-opacity="0.15" />
+                    <feComposite in2="offHi" operator="in" result="hiOut" />
+                    <feMerge>
+                        <feMergeNode in="darkOut" />
+                        <feMergeNode in="hiOut" />
+                        <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                </filter>
+                @* 들어간 효과 (내부 그림자: 좌상단 어둠 + 우하단 하이라이트) *@
+                <filter id="apv-inset" x="-5%" y="-5%" width="110%" height="110%">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="2.5" />
+                    <feOffset dx="2.5" dy="3" result="offDk" />
+                    <feComposite in="offDk" in2="SourceAlpha" operator="arithmetic"
+                                 k2="-1" k3="1" result="insDk" />
+                    <feFlood flood-color="#000" flood-opacity="0.75" />
+                    <feComposite in2="insDk" operator="in" result="darkIn" />
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+                    <feOffset dx="-1.5" dy="-1.5" result="offLt" />
+                    <feComposite in="offLt" in2="SourceAlpha" operator="arithmetic"
+                                 k2="-1" k3="1" result="insLt" />
+                    <feFlood flood-color="#fff" flood-opacity="0.18" />
+                    <feComposite in2="insLt" operator="in" result="lightIn" />
+                    <feMerge>
+                        <feMergeNode in="SourceGraphic" />
+                        <feMergeNode in="darkIn" />
+                        <feMergeNode in="lightIn" />
+                    </feMerge>
+                </filter>
             </defs>
 
             @* ── 그룹 컨테이너 + 내부 자산 아이콘 (동적 배치) ── *@
@@ -106,17 +142,31 @@
                 var memberAssets = GetFilteredGroupMemberAssets(grp.Id);
                 if (memberAssets.Count == 0) continue;
                 var grpColor = grp.Color ?? "#4a90d9";
-                var floorClass = grp.Floor >= 2 ? "apv-group-raised"
-                              : grp.Floor < 0 ? "apv-group-sunken"
-                              : "";
-                <g class="apv-group-container @floorClass">
-                    @* 그룹 배경 *@
-                    <rect x="@F(grp.X)" y="@F(grp.Y)"
-                          width="@F(grp.Width)" height="@F(grp.Height)"
-                          rx="6"
-                          fill="@(grpColor)10"
-                          stroke="@grpColor"
-                          stroke-width="0.7" stroke-dasharray="6 3" />
+                var isRaised = grp.Floor >= 2;
+                var isSunken = grp.Floor < 0;
+                <g class="apv-group-container">
+                    @* 그룹 배경: 층에 따라 3D 필터 적용 *@
+                    @if (isRaised)
+                    {
+                        <rect x="@F(grp.X)" y="@F(grp.Y)"
+                              width="@F(grp.Width)" height="@F(grp.Height)"
+                              rx="6" fill="@(grpColor)35" filter="url(#apv-outset)" />
+                    }
+                    else if (isSunken)
+                    {
+                        <rect x="@F(grp.X)" y="@F(grp.Y)"
+                              width="@F(grp.Width)" height="@F(grp.Height)"
+                              rx="6" fill="@(grpColor)25" filter="url(#apv-inset)" />
+                    }
+                    else
+                    {
+                        <rect x="@F(grp.X)" y="@F(grp.Y)"
+                              width="@F(grp.Width)" height="@F(grp.Height)"
+                              rx="6"
+                              fill="@(grpColor)10"
+                              stroke="@grpColor"
+                              stroke-width="0.7" stroke-dasharray="6 3" />
+                    }
 
                     @* 그룹 내 멤버 자산 아이콘 - clipPath로 영역 안에 가둠 *@
                     <g clip-path="url(#grp-clip-@grp.Id)">
