@@ -156,8 +156,12 @@ public static class LayoutHelpers
         }
     }
 
+    /// <summary>층 번호 표시 (지하는 B1/B2, 지상은 1F/2F 형태)</summary>
+    public static string FormatFloorLabel(int floor) =>
+        floor < 0 ? $"B{-floor}" : $"{floor}F";
+
     /// <summary>SVG &lt;title&gt; 툴팁 (자산 간략 정보)</summary>
-    public static MarkupString RenderSvgTitle(AssetStatusInfo asset)
+    public static MarkupString RenderSvgTitle(AssetStatusInfo asset, int? floor = null)
     {
         var online = asset.LatestPing != null
             ? (asset.LatestPing.Reachable ? "온라인" : "오프라인")
@@ -165,7 +169,8 @@ public static class LayoutHelpers
         var health = GetHealthLabel(asset.Health);
         var backup = asset.LastBackupTime?.ToString("yyyy-MM-dd HH:mm") ?? "없음";
         var via = !string.IsNullOrEmpty(asset.AugIpVia) ? $"\n경유IP: {asset.AugIpVia}" : "";
-        var txt = $"{asset.Name}\nIP: {asset.Ip ?? "-"}{via}\n상태: {health}\n{online}\n최근 백업: {backup}";
+        var floorLine = floor.HasValue ? $"\n층: {FormatFloorLabel(floor.Value)}" : "";
+        var txt = $"{asset.Name}\nIP: {asset.Ip ?? "-"}{via}{floorLine}\n상태: {health}\n{online}\n최근 백업: {backup}";
         return new MarkupString($"<title>{System.Net.WebUtility.HtmlEncode(txt)}</title>");
     }
 }

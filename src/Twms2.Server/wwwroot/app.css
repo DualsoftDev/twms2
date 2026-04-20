@@ -2444,6 +2444,17 @@ h1:focus {
     filter: drop-shadow(0 0 6px rgba(0,0,0,0.25));
 }
 
+/* 그룹 층 기반 3D 효과 */
+.apv-group-raised {
+    filter: drop-shadow(2px 4px 3px rgba(0, 0, 0, 0.45));
+}
+
+.apv-group-sunken {
+    filter: brightness(0.7) saturate(0.8)
+            drop-shadow(-1px -1px 2px rgba(0, 0, 0, 0.35));
+    opacity: 0.9;
+}
+
 /* 배치도 필터 */
 .apv-filter-item {
     cursor: pointer;

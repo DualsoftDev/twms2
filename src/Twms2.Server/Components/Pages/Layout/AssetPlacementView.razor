@@ -106,7 +106,10 @@
                 var memberAssets = GetFilteredGroupMemberAssets(grp.Id);
                 if (memberAssets.Count == 0) continue;
                 var grpColor = grp.Color ?? "#4a90d9";
-                <g>
+                var floorClass = grp.Floor >= 2 ? "apv-group-raised"
+                              : grp.Floor < 0 ? "apv-group-sunken"
+                              : "";
+                <g class="apv-group-container @floorClass">
                     @* 그룹 배경 *@
                     <rect x="@F(grp.X)" y="@F(grp.Y)"
                           width="@F(grp.Width)" height="@F(grp.Height)"
@@ -128,7 +131,7 @@
                             <g transform="translate(@F(item.X), @F(item.Y))" class="apv-asset-icon"
                                @onclick="() => NavigateToAsset(item.Asset.AssetId)"
                                @onclick:stopPropagation="true" style="cursor:pointer">
-                                @(RenderSvgTitle(item.Asset))
+                                @(RenderSvgTitle(item.Asset, grp.Floor))
                                 <rect width="@F(item.Size)" height="@F(item.Size)" rx="3"
                                       fill="@bgColor" stroke="@healthColor" stroke-width="1" opacity="0.9" />
                                 <image href="@GetAssetIcon(item.Asset.AssetTypeName, item.Asset.AugIsRobotPLC)"
@@ -157,7 +160,7 @@
                 <g transform="translate(@F(pos.X - sz / 2), @F(pos.Y - sz / 2))" class="apv-asset-icon"
                    @onclick="() => NavigateToAsset(asset.AssetId)"
                    @onclick:stopPropagation="true" style="cursor:pointer">
-                    @(RenderSvgTitle(asset))
+                    @(RenderSvgTitle(asset, AssetFloorMap.GetValueOrDefault(asset.AssetId)))
                     <rect width="@F(sz)" height="@F(sz)" rx="@F(Math.Max(1, 4 * s))"
                           fill="@bgColor" stroke="@healthColor" stroke-width="@F(Math.Max(0.5, 1.5 * s))" opacity="0.9" />
                     <image href="@GetAssetIcon(asset.AssetTypeName, asset.AugIsRobotPLC)"
@@ -303,9 +306,6 @@
             return true;
         }).ToList();
     }
-
-    private static string FormatFloorLabel(int floor) =>
-        floor < 0 ? $"B{-floor}" : $"{floor}F";
 
     private int FilteredVisibleCount
     {
