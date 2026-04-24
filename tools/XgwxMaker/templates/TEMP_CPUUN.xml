@@ -1,0 +1,799 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project Attribute="3145730" Version="513" Comment="" WksNodeCount="15" GUID="4d2882e1-e6dd-476f-9335-3c38cae88b8b" FileVer="4.77.97.1" FileLastWriteTime="2024-05-21 23:44:06">AUTOLAND광명2<NetworkConfiguration>
+		<NetworkList>
+			<Network Type="NETWORK ITEM:UNKNOWN" Name="기본 네트워크" NetworkType=""></Network>
+		</NetworkList>
+	</NetworkConfiguration>
+	<SystemVariable HMIGUID=""></SystemVariable>
+	<Configurations>
+		<Configuration Version="259" Attribute="272152417" Comment="" Kind="1" Type="111" FindGlobal="1" FindSymbol="1" WriteSignature="773e53b3-4446-4204-b905-4558a1d0de61" Encrytption="" Encrytption_UDF="" UploadProhibit="75" GUID="130eccba-6f51-42c4-bde9-84076017c2fb" SD_UploadProhibit="74" SD_Password="" SD_MacLimit="">LSPLC<Options Details="{&#xA;   &quot;m_nExtBaseFormat&quot; : 0,&#xA;   &quot;m_nOptMultiUserRunEdit&quot; : 0,&#xA;   &quot;m_nOptNotUseExternalVar&quot; : 0,&#xA;   &quot;m_nOptNotUsedMCS&quot; : 1,&#xA;   &quot;m_nOptOnlineEditAllocSize&quot; : 400,&#xA;   &quot;m_nOptOnlineEditTypeK3&quot; : 0,&#xA;   &quot;m_nOptPartitionMode&quot; : 0,&#xA;   &quot;m_nOptPulsePercent&quot; : 10,&#xA;   &quot;m_nOptReservedAllocSize&quot; : 400,&#xA;   &quot;m_nOptTextEncoding&quot; : 0,&#xA;   &quot;m_nOptUseFBOnlineEdit&quot; : 0,&#xA;   &quot;m_nOptVariableStorage&quot; : 0&#xA;}&#xA;"></Options>
+			<Parameters>
+				<Parameter Type="BASIC PARAMETER"><XGIBasicParam bp_ver="100" head="1145128264" size="400" pmt_reserved1_0="0" pmt_reserved1_1="0" pmt_reserved1_2="0" pmt_reserved1_3="0" pmt_reserved1_4="0" OsVersion="1" CPUType="43009" STATIC_PERIOD_MODE="0" STATIC_PERIOD_TIME="10" RESTART_METHOD="43521" REMOTE_ACCESS_PERMIT="43522" RESET_DISABLE="0" O_RESET_DISABLE="1" DCLEAR_DISABLE="1" O_DCLEAR_DISABLE="1" BASIC_MOD_RESERVED_0="0" BASIC_MOD_RESERVED_1="0" BASIC_MOD_RESERVED_2="0" BASIC_MOD_RESERVED_3="0" BASIC_MOD_RESERVED_4="0" BASIC_MOD_RESERVED_5="0" BASIC_MOD_RESERVED_6="0" BASIC_MOD_RESERVED_7="0" BASIC_MOD_RESERVED_8="0" BASIC_MOD_RESERVED_9="0" SCAN_WD_TIME_0="500" SCAN_WD_TIME_1="500" SCAN_WD_TIME_2="500" SCAN_WD_TIME_3="500" STANDARD_INPUT_FILTER_TIME="3" BASIC_TIME_RESERVED_0="0" BASIC_TIME_RESERVED_1="0" BASIC_TIME_RESERVED_2="0" BASIC_TIME_RESERVED_3="0" BASIC_TIME_RESERVED_4="0" BASIC_TIME_RESERVED_5="0" BASIC_TIME_RESERVED_6="0" BASIC_TIME_RESERVED_7="0" BASIC_TIME_RESERVED_8="0" BASIC_TIME_RESERVED_9="0" BASIC_TIME_RESERVED_10="0" DEBUG_OUTPUT_PARAMETER="0" ERROR_MODE_OUTPUT_PARAMETER="0" RUN2STOP_OUTPUT_PARAMETER="0" STOP2RUN_OUTPUT_PARAMETER="0" ERROR_MODE_LATCH_PARAMETER="0" OUTPUT_PARAMETER_RESERVED_0="3426" OUTPUT_PARAMETER_RESERVED_1="0" OUTPUT_PARAMETER_RESERVED_2="0" OUTPUT_PARAMETER_RESERVED_3="0" OUTPUT_PARAMETER_RESERVED_4="0" SOE_RETAIN_HISTORY="43544" SOE_PARAMETER_RESERVED_0="0" SOE_PARAMETER_RESERVED_1="0" SOE_PARAMETER_RESERVED_2="0" SOE_PARAMETER_RESERVED_3="0" SOE_PARAMETER_RESERVED_4="0" RETAIN_SET_MODE="43552" M_AREA_INIT="0" M_AREA_SIZE_0="0" M_AREA_SIZE_1="0" M_AREA_SIZE_2="0" M_AREA_SIZE_3="0" M_AREA_LATCH1_START="0" M_AREA_LATCH1_END="32768" RETAIN_SET_G1_MODE="43554" RESERVE_G1="0" M_AREA_LATCH_G1_START="0" M_AREA_LATCH_G1_END="32768" RETAIN_SET_G2_MODE="43554" RESERVE_G2="0" M_AREA_LATCH_G2_START="50200" M_AREA_LATCH_G2_END="50500" RETAIN_SET_G3_MODE="0" RESERVE_G3="0" M_AREA_LATCH_G3_START="0" M_AREA_LATCH_G3_END="0" RETAIN_SET_G4_MODE="0" RESERVE_G4="0" M_AREA_LATCH_G4_START="0" M_AREA_LATCH_G4_END="0" BASIC_RETAIN_RESERVED_0="0" BASIC_RETAIN_RESERVED_1="0" BASIC_RETAIN_RESERVED_2="0" BASIC_RETAIN_RESERVED_3="0" BASIC_RETAIN_RESERVED_4="0" BASIC_RETAIN_RESERVED_5="0" BASIC_RETAIN_RESERVED_6="0" BASIC_RETAIN_RESERVED_7="0" BASIC_RETAIN_RESERVED_8="0" BASIC_RETAIN_RESERVED_9="0" BASIC_RETAIN_RESERVED_10="0" BASIC_RETAIN_RESERVED_11="0" BASIC_RETAIN_RESERVED_12="0" BASIC_RETAIN_RESERVED_13="0" BASIC_RETAIN_RESERVED_14="0" BASIC_RETAIN_RESERVED_15="0" BASIC_RETAIN_RESERVED_16="0" BASIC_RETAIN_RESERVED_17="0" BASIC_RETAIN_RESERVED_18="0" BASIC_RETAIN_RESERVED_19="0" BASIC_RETAIN_RESERVED_20="0" BASIC_RETAIN_RESERVED_21="0" BASIC_RETAIN_RESERVED_22="0" BASIC_RETAIN_RESERVED_23="0" BASIC_RETAIN_RESERVED_24="0" BASIC_RETAIN_RESERVED_25="0" TIMER_RANGE_RESERVED_0="0" TIMER_RANGE_RESERVED_1="0" TIMER_RANGE_RESERVED_2="0" TIMER_RANGE_RESERVED_3="0" TIMER_RANGE_RESERVED_4="0" TIMER_RANGE_RESERVED_5="0" TIMER_RANGE_RESERVED_6="0" TIMER_RANGE_RESERVED_7="0" TIMER_RANGE_RESERVED_8="0" TIMER_RANGE_RESERVED_9="0" TIMER_RANGE_RESERVED_10="0" TIMER_RANGE_RESERVED_11="0" TIMER_RANGE_RESERVED_12="0" TIMER_RANGE_RESERVED_13="0" TIMER_RANGE_RESERVED_14="0" TIMER_RANGE_RESERVED_15="0" CHECK_FUSE_ERROR="43572" FUSE_ERROR_MODE="43573" CHECK_IO_ERROR="43574" IO_ERROR_MODE="43575" CHECK_EXT_BASE_ERROR="0" EXT_BASE_ERROR_MODE="0" ERROR_REACTION_RESERVED_0="0" ERROR_REACTION_RESERVED_1="0" ERROR_REACTION_RESERVED_2="0" ERROR_REACTION_RESERVED_3="0" ERROR_REACTION_RESERVED_4="0" ERROR_REACTION_RESERVED_5="0" ERROR_REACTION_RESERVED_6="0" ERROR_REACTION_RESERVED_7="0" ERROR_REACTION_RESERVED_8="0" ERROR_REACTION_RESERVED_9="0" ERROR_REACTION_RESERVED_10="0" ERROR_REACTION_RESERVED_11="0" ERROR_REACTION_RESERVED_12="0" ERROR_REACTION_RESERVED_13="0" ERROR_REACTION_RESERVED_14="0" ERROR_REACTION_RESERVED_15="0" ERROR_REACTION_RESERVED_16="0" ERROR_REACTION_RESERVED_17="0" ERROR_REACTION_RESERVED_18="0" ERROR_REACTION_RESERVED_19="0" ERROR_REACTION_RESERVED_20="0" ERROR_REACTION_RESERVED_21="0" CHECK_SP_ERROR="43576" SP_ERROR_MODE="43577" CHECK_CP_ERROR="43578" CP_ERROR_MODE="43579" MODBUS_STATION="63" MODBUS_BAUDRATE="4434" MODBUS_DATABIT="43592" MODBUS_PARITY="43602" MODBUS_STOPBIT="43617" MODBUS_TRX_MODE="43632" DI_START_DEVICE_TYPE="73" DO_START_DEVICE_TYPE="81" AI_START_DEVICE_TYPE="77" AO_START_DEVICE_TYPE="77" DI_DEVICE_OFFSET="0" DO_DEVICE_OFFSET="0" AI_DEVICE_OFFSET="2000" AO_DEVICE_OFFSET="4000" pmt_reserved2_0="0" pmt_reserved2_1="0" pmt_reserved2_2="0" pmt_reserved2_3="0" pmt_reserved2_4="0" pmt_reserved2_5="0" check_sum="3231926082" tail="1414483782"></XGIBasicParam>
+				</Parameter>
+				<Parameter Type="FENET PARAMETER"><Safety_Comm RcvWaitTime="15" RetransTime="100" GlofaSocketCnt="3" DriverType="2" IPAddress="1861920960" Gateway="33204416" Subnet="16777215" EnableHostTable="0"><Safety_Comm_DI DeviceType="73" DataType="88" Size="0" Addr="0"></Safety_Comm_DI>
+						<Safety_Comm_DO DeviceType="81" DataType="88" Size="0" Addr="0"></Safety_Comm_DO>
+						<Safety_Comm_AI DeviceType="77" DataType="87" Size="0" Addr="0"></Safety_Comm_AI>
+						<Safety_Comm_AO DeviceType="77" DataType="87" Size="0" Addr="100"></Safety_Comm_AO>
+						<Safety_Comm_HostIp></Safety_Comm_HostIp>
+					</Safety_Comm>
+				</Parameter>
+				<Parameter Type="IO PARAMETER"><BaseInfo>
+						<Base Base="0" SlotCount="12"></Base>
+						<Base Base="1" SlotCount="12"></Base>
+						<Base Base="2" SlotCount="12"></Base>
+						<Base Base="3" SlotCount="12"></Base>
+						<Base Base="4" SlotCount="12"></Base>
+						<Base Base="5" SlotCount="12"></Base>
+						<Base Base="6" SlotCount="12"></Base>
+						<Base Base="7" SlotCount="12"></Base>
+					</BaseInfo>
+					<MotionParamInfo Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWeHQde4AAADAAMAAAAGgACGYGYT4WF3JFOFCQ4dB17g=</MotionParamInfo>
+				</Parameter>
+			</Parameters>
+			<GlobalVariables>
+				<GlobalVariable Version="Ver 1.0" EIPGUID="5d54f9ac-adad-4221-8335-9cf52656e642" EIPChangedID="0" HMIGUID="d31e2f2e-99c5-4c2f-80d1-66ed3188b953" MultiUserRunEdit="0" MotionGUID="264efe31-c409-4702-a226-00dc1691d3a4" Count="0"><Symbols></Symbols>
+					<TempVar Count="0"></TempVar>
+					<HMIFlags></HMIFlags>
+					<DirectVarComment Count="0"></DirectVarComment>
+				</GlobalVariable>
+			</GlobalVariables>
+			<Tasks>
+				<Task Version="257" Type="0" Attribute="2" Kind="0" Priority="0" TaskIndex="0" Device="" DeviceType="0" WordValue="0" WordCondition="0" BitCondition="0">스캔 프로그램</Task>
+			</Tasks>
+			<POU>
+				<Programs></Programs>
+				<UserFunctions></UserFunctions>
+				<UserDataTypes></UserDataTypes>
+				<UserLibrary></UserLibrary>
+			</POU>
+			<OnlineElements>
+				<ProgramTable Type="2" Version="0"></ProgramTable>
+				<NCProgramTable></NCProgramTable>
+				<TaskTable></TaskTable>
+				<UploadTable>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+					<Element Position="0" Size="36" CheckSum="2147484649"></Element>
+				</UploadTable>
+				<LabelCodeTable>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+					<Element Value="10155"></Element>
+				</LabelCodeTable>
+				<UsedFunctionCodeTable>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+					<Element Index="3584" Info="4027056119"></Element>
+				</UsedFunctionCodeTable>
+				<ForNextCodeTable>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+					<Element ForOffset="9265" NextOffset="9338"></Element>
+				</ForNextCodeTable>
+				<SubroutineAllocationTable>
+					<StringTable><TableItem Index="1" Value="^UDFB@Festo_PtP_Drives_EIP"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="2" Value="^UDFB@FB401_Mode_Line_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="3" Value="^UDFB@FB402_Mode_Stn_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="4" Value="^UDFB@FB406_Car_Type_Move_Line_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="5" Value="^UDFB@FB407_Car_Type_Move_Stn_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="6" Value="^UDFB@FB409_Car_Type_Clear_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="7" Value="^UDFB@FB421_Com_Cylinder_1_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="8" Value="^UDFB@FB422_Com_Cylinder_2_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="9" Value="^UDFB@FB423_Com_Cylinder_3_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="10" Value="^UDFB@FB424_Com_Cylinder_4_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="11" Value="^UDFB@FB428_Com_Cylinder_4_v1_S151"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="12" Value="^UDFB@FB425_Com_Cylinder_6_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="13" Value="^UDFB@FB426_Com_Cylinder_8_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="14" Value="^UDFB@FB427_Com_Cylinder_10_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="15" Value="^UDFB@FB470_HMI_BType_Modify_LS"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="16" Value="^UDFB@FB477_CP_TRIP"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="17" Value="^UDFB@FB500_CYCLE_TIME_CHK"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="18" Value="^UDFB@FB501_CYCLE_TIME_AVE_v2"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="19" Value="^UDFB@FB515_Priority"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="20" Value="^UDFB@FB541_Wind_Mill_3PosSensor_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="21" Value="^UDFB@FB542_Wind_Mill_4PosSensor_v1"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="22" Value="^UDFB@FB546_GATEBOX_V2"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="23" Value="^UDFB@FB600_FEEDBACK_ERR"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="24" Value="^UDFB@FB620_FESTO_POSI"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="25" Value="^UDFB@FB601_FESTO_SERVO_EMCA"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="26" Value="^UDFB@FB513_PLT_STATUS_v2"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="27" Value="^UDFB@FB625_Pallet_LC"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="28" Value="^UDFB@FB405_Car_Type_v_AG2_230912"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="29" Value="^UDFB@FB602_FESTO_SERVO_CMMT_SYNC"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="30" Value="^UDFB@FB602_FESTO_SERVO_CMMT_SYNC_H"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="31" Value="^UDFB@FB602_FESTO_SERVO_CMMT_SYNC_S151_H"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="32" Value="^UDFB@FB602_FESTO_SERVO_CMMT_SYNC_S154_H"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="33" Value="^UDFB@FB502_LS_IS7_INVERTER_V2"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="34" Value="^UDFB@FB518_PLT_BT_Clear"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="35" Value="^UDFB@FB496_Robot_Kawasaki_v3"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="36" Value="^UDFB@버퍼어드레스계산"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="37" Value="^UDFB@버퍼카운터"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="38" Value="^UDFB@지시DATA_유무"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="39" Value="^UDFB@취출예정_BODY_삭제"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="40" Value="^UDFB@취출예정BODY_검사"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="41" Value="^UDFB@FB810_MES_Track_LINE_STATUS_AG240123"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="42" Value="^UDFB@FB811_MES_Track_STN_STATUS_AG240123"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="43" Value="^UDFB@FB812_MES_Track_STN_CTYPE_CT_AG240123"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="44" Value="^UDFB@FB813_MES_Track_RBT_STATUS_CT_AG240123"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="45" Value="^UDFB@FB478_MC_COUNT_WARNING"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="46" Value="^UDFB@FB819_Melody_QWCD_LC_Type"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="47" Value="^UDFB@FB810_MES_Track_LINE_STATUS_AG240522_메인콜수정"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="48" Value="^UDFB@FB811_MES_Track_STN_STATUS_AG240522_메인콜수정"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="49" Value="^UDFB@FB517_PLT_QR_RACK"></TableItem>
+					</StringTable>
+					<StringTable><TableItem Index="50" Value="^UDFB@FB598_Robot_Weld_Count_v1_KIA_AG240308"></TableItem>
+					</StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+				</SubroutineAllocationTable>
+				<LabelAllocationTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable><TableItem Index="0" Value="End@FB515_Priority"></TableItem>
+					</StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+				</LabelAllocationTable>
+				<PulseAllocationTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+				</PulseAllocationTable>
+				<ForAllocationTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+				</ForAllocationTable>
+				<XGCommSettings Connnections="00000103020188130000010100C20100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000031302E3134332E35322E323034000000D20700000000000000000000000000000000000000000000000000000000020200000000000000003134302E32302E3232312E313537000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000">
+					<SafetySignature dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWesUlJwAAALIAMQAQAAAASAAISGgzTTWAg8XckU4UJDrFJScAAAA</SafetySignature>
+					<RWItem_StateMemento dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWUQfwC0AAA/eAMAkQAFgAAMkEQAAAaAAMUwAARlDR6jCORCSUTE8ftkCizYu
+/i7kinChIIg/gFoAAAA=</RWItem_StateMemento>
+				</XGCommSettings>
+				<TrendMonitoring>
+					<TraceConfiguration MaxSample="1000" MaxDisplaySample="1000" SamplingFrequency="1000">
+						<BitDeviceList></BitDeviceList>
+						<TrendDeviceList></TrendDeviceList>
+						<XYDeviceList></XYDeviceList>
+					</TraceConfiguration>
+					<GraphConfiguration ShowGrid="1" AxisOption="65807" BitLegendPos="1" TrendLegendPos="1" XYLegendPos="1" MinValue="0.0000000000000000" MaxValue="100.0000000000000000">
+						<BitGraphGroup></BitGraphGroup>
+						<TrendGraphGroup></TrendGraphGroup>
+					</GraphConfiguration>
+					<WindowConfiguration ViewGraph="7" ViewBitValue="0" ViewTrendValue="0" VieXYValue="0"></WindowConfiguration>
+				</TrendMonitoring>
+				<DataRepository></DataRepository>
+				<UsedLibraryForPlatV2 Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWeOe3YsAAABAAEAQIAAhAIKDF3JFOFCQ457diw==</UsedLibraryForPlatV2>
+				<RetainValue Compressed="0" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">//7/BlYAZQByADEALgAwAAAAAAAAAAAA</RetainValue>
+			</OnlineElements>
+			<XGPD>
+				<XGPD_CONFIG_INFO_GROUP></XGPD_CONFIG_INFO_GROUP>
+				<XGPD_HS_LINK_GROUP></XGPD_HS_LINK_GROUP>
+				<XGPD_P2P_GROUP></XGPD_P2P_GROUP>
+			</XGPD>
+			<Properties Value=""></Properties>
+		</Configuration>
+	</Configurations>
+	<SpecialModules></SpecialModules>
+</Project>

@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project Attribute="3145730" Version="513" Comment="" WksNodeCount="14" GUID="b27ad84d-2db2-4958-8171-64629a10ebad" FileVer="4.77.97.1" FileLastWriteTime="2024-05-21 23:44:06">ROBOT_EXAMPLE<NetworkConfiguration>
+		<NetworkList>
+			<Network Type="NETWORK ITEM:UNKNOWN" Name="기본 네트워크" NetworkType=""></Network>
+		</NetworkList>
+	</NetworkConfiguration>
+	<SystemVariable HMIGUID=""></SystemVariable>
+	<Configurations>
+		<Configuration Version="529" Attribute="272119649" Comment="" Kind="1" Type="104" FindGlobal="1" FindSymbol="1" WriteSignature="773e53b3-4446-4204-b905-4558a1d0de61" Encrytption="" Encrytption_UDF="" UploadProhibit="75" GUID="6895a9ea-3c67-4832-84e2-46cdd54835e2" SD_UploadProhibit="74" SD_Password="" SD_MacLimit="">LSPLC<Options Details="{&#xA;   &quot;m_nExtBaseFormat&quot; : 0,&#xA;   &quot;m_nOptMultiUserRunEdit&quot; : 0,&#xA;   &quot;m_nOptNotUseExternalVar&quot; : 0,&#xA;   &quot;m_nOptNotUsedMCS&quot; : 1,&#xA;   &quot;m_nOptOnlineEditAllocSize&quot; : 400,&#xA;   &quot;m_nOptOnlineEditTypeK3&quot; : 0,&#xA;   &quot;m_nOptPartitionMode&quot; : 0,&#xA;   &quot;m_nOptPulsePercent&quot; : 10,&#xA;   &quot;m_nOptReservedAllocSize&quot; : 400,&#xA;   &quot;m_nOptTextEncoding&quot; : 0,&#xA;   &quot;m_nOptUseFBOnlineEdit&quot; : 0,&#xA;   &quot;m_nOptVariableStorage&quot; : 0&#xA;}&#xA;"></Options>
+			<Parameters>
+				<Parameter Type="BASIC PARAMETER"><XGIBasicParam bp_ver="100" head="1145128264" size="400" pmt_reserved1_0="0" pmt_reserved1_1="0" pmt_reserved1_2="0" pmt_reserved1_3="0" pmt_reserved1_4="0" OsVersion="1" CPUType="43009" STATIC_PERIOD_MODE="0" STATIC_PERIOD_TIME="10" RESTART_METHOD="43521" REMOTE_ACCESS_PERMIT="43522" RESET_DISABLE="0" O_RESET_DISABLE="0" DCLEAR_DISABLE="0" O_DCLEAR_DISABLE="0" BASIC_MOD_RESERVED_0="0" BASIC_MOD_RESERVED_1="0" BASIC_MOD_RESERVED_2="0" BASIC_MOD_RESERVED_3="0" BASIC_MOD_RESERVED_4="0" BASIC_MOD_RESERVED_5="0" BASIC_MOD_RESERVED_6="0" BASIC_MOD_RESERVED_7="0" BASIC_MOD_RESERVED_8="0" BASIC_MOD_RESERVED_9="0" SCAN_WD_TIME_0="500" SCAN_WD_TIME_1="500" SCAN_WD_TIME_2="500" SCAN_WD_TIME_3="500" STANDARD_INPUT_FILTER_TIME="3" BASIC_TIME_RESERVED_0="0" BASIC_TIME_RESERVED_1="0" BASIC_TIME_RESERVED_2="0" BASIC_TIME_RESERVED_3="0" BASIC_TIME_RESERVED_4="0" BASIC_TIME_RESERVED_5="0" BASIC_TIME_RESERVED_6="0" BASIC_TIME_RESERVED_7="0" BASIC_TIME_RESERVED_8="0" BASIC_TIME_RESERVED_9="0" BASIC_TIME_RESERVED_10="0" DEBUG_OUTPUT_PARAMETER="0" ERROR_MODE_OUTPUT_PARAMETER="0" RUN2STOP_OUTPUT_PARAMETER="0" STOP2RUN_OUTPUT_PARAMETER="0" ERROR_MODE_LATCH_PARAMETER="0" OUTPUT_PARAMETER_RESERVED_0="3782" OUTPUT_PARAMETER_RESERVED_1="41896" OUTPUT_PARAMETER_RESERVED_2="6777" OUTPUT_PARAMETER_RESERVED_3="41160" OUTPUT_PARAMETER_RESERVED_4="6777" SOE_RETAIN_HISTORY="43544" SOE_PARAMETER_RESERVED_0="0" SOE_PARAMETER_RESERVED_1="0" SOE_PARAMETER_RESERVED_2="0" SOE_PARAMETER_RESERVED_3="0" SOE_PARAMETER_RESERVED_4="0" RETAIN_SET_MODE="43552" M_AREA_INIT="0" M_AREA_SIZE_0="64" M_AREA_SIZE_1="64" M_AREA_SIZE_2="64" M_AREA_SIZE_3="64" M_AREA_LATCH1_START="2500" M_AREA_LATCH1_END="5500" RETAIN_SET_G1_MODE="0" RESERVE_G1="0" M_AREA_LATCH_G1_START="0" M_AREA_LATCH_G1_END="16383" RETAIN_SET_G2_MODE="0" RESERVE_G2="0" M_AREA_LATCH_G2_START="0" M_AREA_LATCH_G2_END="0" RETAIN_SET_G3_MODE="0" RESERVE_G3="0" M_AREA_LATCH_G3_START="0" M_AREA_LATCH_G3_END="0" RETAIN_SET_G4_MODE="0" RESERVE_G4="0" M_AREA_LATCH_G4_START="0" M_AREA_LATCH_G4_END="0" BASIC_RETAIN_RESERVED_0="0" BASIC_RETAIN_RESERVED_1="0" BASIC_RETAIN_RESERVED_2="0" BASIC_RETAIN_RESERVED_3="0" BASIC_RETAIN_RESERVED_4="0" BASIC_RETAIN_RESERVED_5="0" BASIC_RETAIN_RESERVED_6="0" BASIC_RETAIN_RESERVED_7="0" BASIC_RETAIN_RESERVED_8="0" BASIC_RETAIN_RESERVED_9="0" BASIC_RETAIN_RESERVED_10="0" BASIC_RETAIN_RESERVED_11="0" BASIC_RETAIN_RESERVED_12="0" BASIC_RETAIN_RESERVED_13="0" BASIC_RETAIN_RESERVED_14="0" BASIC_RETAIN_RESERVED_15="0" BASIC_RETAIN_RESERVED_16="0" BASIC_RETAIN_RESERVED_17="0" BASIC_RETAIN_RESERVED_18="0" BASIC_RETAIN_RESERVED_19="0" BASIC_RETAIN_RESERVED_20="0" BASIC_RETAIN_RESERVED_21="0" BASIC_RETAIN_RESERVED_22="0" BASIC_RETAIN_RESERVED_23="0" BASIC_RETAIN_RESERVED_24="0" BASIC_RETAIN_RESERVED_25="0" TIMER_RANGE_RESERVED_0="0" TIMER_RANGE_RESERVED_1="0" TIMER_RANGE_RESERVED_2="0" TIMER_RANGE_RESERVED_3="0" TIMER_RANGE_RESERVED_4="0" TIMER_RANGE_RESERVED_5="0" TIMER_RANGE_RESERVED_6="0" TIMER_RANGE_RESERVED_7="0" TIMER_RANGE_RESERVED_8="0" TIMER_RANGE_RESERVED_9="0" TIMER_RANGE_RESERVED_10="0" TIMER_RANGE_RESERVED_11="0" TIMER_RANGE_RESERVED_12="0" TIMER_RANGE_RESERVED_13="0" TIMER_RANGE_RESERVED_14="0" TIMER_RANGE_RESERVED_15="0" CHECK_FUSE_ERROR="43572" FUSE_ERROR_MODE="43573" CHECK_IO_ERROR="43574" IO_ERROR_MODE="43575" CHECK_EXT_BASE_ERROR="0" EXT_BASE_ERROR_MODE="0" ERROR_REACTION_RESERVED_0="0" ERROR_REACTION_RESERVED_1="0" ERROR_REACTION_RESERVED_2="0" ERROR_REACTION_RESERVED_3="0" ERROR_REACTION_RESERVED_4="0" ERROR_REACTION_RESERVED_5="0" ERROR_REACTION_RESERVED_6="0" ERROR_REACTION_RESERVED_7="0" ERROR_REACTION_RESERVED_8="0" ERROR_REACTION_RESERVED_9="0" ERROR_REACTION_RESERVED_10="0" ERROR_REACTION_RESERVED_11="0" ERROR_REACTION_RESERVED_12="0" ERROR_REACTION_RESERVED_13="0" ERROR_REACTION_RESERVED_14="0" ERROR_REACTION_RESERVED_15="0" ERROR_REACTION_RESERVED_16="0" ERROR_REACTION_RESERVED_17="0" ERROR_REACTION_RESERVED_18="0" ERROR_REACTION_RESERVED_19="0" ERROR_REACTION_RESERVED_20="0" ERROR_REACTION_RESERVED_21="0" CHECK_SP_ERROR="43576" SP_ERROR_MODE="43577" CHECK_CP_ERROR="43578" CP_ERROR_MODE="43579" MODBUS_STATION="63" MODBUS_BAUDRATE="4434" MODBUS_DATABIT="43592" MODBUS_PARITY="43602" MODBUS_STOPBIT="43617" MODBUS_TRX_MODE="43632" DI_START_DEVICE_TYPE="73" DO_START_DEVICE_TYPE="81" AI_START_DEVICE_TYPE="77" AO_START_DEVICE_TYPE="77" DI_DEVICE_OFFSET="0" DO_DEVICE_OFFSET="0" AI_DEVICE_OFFSET="2000" AO_DEVICE_OFFSET="4000" pmt_reserved2_0="0" pmt_reserved2_1="0" pmt_reserved2_2="0" pmt_reserved2_3="0" pmt_reserved2_4="0" pmt_reserved2_5="0" check_sum="4126543185" tail="1414483782"></XGIBasicParam>
+				</Parameter>
+				<Parameter Type="IO PARAMETER"><BaseInfo>
+						<Base Base="0" SlotCount="8"></Base>
+						<Base Base="1" SlotCount="12"></Base>
+						<Base Base="2" SlotCount="12"></Base>
+						<Base Base="3" SlotCount="12"></Base>
+						<Base Base="4" SlotCount="12"></Base>
+						<Base Base="5" SlotCount="12"></Base>
+						<Base Base="6" SlotCount="12"></Base>
+						<Base Base="7" SlotCount="12"></Base>
+					</BaseInfo>
+				</Parameter>
+			</Parameters>
+			<GlobalVariables>
+				<GlobalVariable Version="Ver 1.0" EIPGUID="6f087c4c-a6b3-4306-add0-1601084e5f8a" EIPChangedID="0" HMIGUID="64dfbcd9-1cfd-4c02-aead-c186194089bf" MultiUserRunEdit="0" MotionGUID="53fae18a-7210-4b3a-8482-412aecfac2c5" Count="0"><Symbols></Symbols>
+					<TempVar Count="0"></TempVar>
+					<HMIFlags></HMIFlags>
+					<DirectVarComment Count="0"></DirectVarComment>
+				</GlobalVariable>
+			</GlobalVariables>
+			<Tasks>
+				<Task Version="257" Type="0" Attribute="2" Kind="0" Priority="0" TaskIndex="0" Device="" DeviceType="0" WordValue="0" WordCondition="0" BitCondition="0">스캔 프로그램</Task>
+			</Tasks>
+			<POU>
+				<Programs></Programs>
+				<UserFunctions></UserFunctions>
+				<UserDataTypes></UserDataTypes>
+				<UserLibrary></UserLibrary>
+			</POU>
+			<OnlineElements>
+				<ProgramTable Type="2" Version="0"></ProgramTable>
+				<NCProgramTable></NCProgramTable>
+				<TaskTable></TaskTable>
+				<UploadTable>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+					<Element Position="0" Size="24" CheckSum="0"></Element>
+				</UploadTable>
+				<LabelCodeTable>
+					<Element Value="0"></Element>
+				</LabelCodeTable>
+				<UsedFunctionCodeTable>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+					<Element Index="3584" Info="4026564599"></Element>
+				</UsedFunctionCodeTable>
+				<ForNextCodeTable></ForNextCodeTable>
+				<SubroutineAllocationTable>
+					<StringTable><TableItem Index="0" Value="^UDFB@이상코드"></TableItem>
+					</StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+				</SubroutineAllocationTable>
+				<LabelAllocationTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+					<StringTable></StringTable>
+				</LabelAllocationTable>
+				<PulseAllocationTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+				</PulseAllocationTable>
+				<ForAllocationTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+					<PulseTable></PulseTable>
+				</ForAllocationTable>
+				<XGCommSettings Connnections="00000003030188130000010100C20100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000031302E3134332E35322E323034000000D207000000000000000000000000000000000000000000000000000000000206000000000000000031302E322E332E3400000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000">
+					<SafetySignature dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWesUlJwAAALIAMQAQAAAASAAISGgzTTWAg8XckU4UJDrFJScAAAA</SafetySignature>
+					<RWItem_StateMemento dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWUQfwC0AAA/eAMAkQAFgAAMkEQAAAaAAMUwAARlDR6jCORCSUTE8ftkCizYu
+/i7kinChIIg/gFoAAAA=</RWItem_StateMemento>
+				</XGCommSettings>
+				<TrendMonitoring>
+					<TraceConfiguration MaxSample="1000" MaxDisplaySample="1000" SamplingFrequency="1000">
+						<BitDeviceList></BitDeviceList>
+						<TrendDeviceList></TrendDeviceList>
+						<XYDeviceList></XYDeviceList>
+					</TraceConfiguration>
+					<GraphConfiguration ShowGrid="1" AxisOption="65807" BitLegendPos="1" TrendLegendPos="1" XYLegendPos="1" MinValue="0.0000000000000000" MaxValue="100.0000000000000000">
+						<BitGraphGroup></BitGraphGroup>
+						<TrendGraphGroup></TrendGraphGroup>
+					</GraphConfiguration>
+					<WindowConfiguration ViewGraph="7" ViewBitValue="0" ViewTrendValue="0" VieXYValue="0"></WindowConfiguration>
+				</TrendMonitoring>
+				<DataRepository></DataRepository>
+				<UsedLibraryForPlatV2 Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWeOe3YsAAABAAEAQIAAhAIKDF3JFOFCQ457diw==</UsedLibraryForPlatV2>
+				<RetainValue Compressed="0" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">//7/BlYAZQByADEALgAwAAAAAAAAAAAA</RetainValue>
+			</OnlineElements>
+			<XGPD>
+				<XGPD_CONFIG_INFO_GROUP></XGPD_CONFIG_INFO_GROUP>
+				<XGPD_HS_LINK_GROUP>
+					<XGPD_HS_LINK SelfStationNo="0" Type="23041" Base="0" Slot="2" Index="0" TxRXCycle="3" LinkType="FEnet" CpuErrLC="0" CpuStopLC="0" CommErrLC="0" ByteType="0" RxTimeout="0" EnableExtBlk="0" StatusFlagArea="" Find="291876352" BlockInfoCount="128" BlockInfo_0="2" BlockInfo_1="2" BlockInfo_2="2" BlockInfo_3="255" BlockInfo_4="255" BlockInfo_5="255" BlockInfo_6="255" BlockInfo_7="255" BlockInfo_8="255" BlockInfo_9="255" BlockInfo_10="255" BlockInfo_11="255" BlockInfo_12="255" BlockInfo_13="255" BlockInfo_14="255" BlockInfo_15="255" BlockInfo_16="255" BlockInfo_17="255" BlockInfo_18="255" BlockInfo_19="255" BlockInfo_20="255" BlockInfo_21="255" BlockInfo_22="255" BlockInfo_23="255" BlockInfo_24="255" BlockInfo_25="255" BlockInfo_26="255" BlockInfo_27="255" BlockInfo_28="255" BlockInfo_29="255" BlockInfo_30="255" BlockInfo_31="255" BlockInfo_32="255" BlockInfo_33="255" BlockInfo_34="255" BlockInfo_35="255" BlockInfo_36="255" BlockInfo_37="255" BlockInfo_38="255" BlockInfo_39="255" BlockInfo_40="255" BlockInfo_41="255" BlockInfo_42="255" BlockInfo_43="255" BlockInfo_44="255" BlockInfo_45="255" BlockInfo_46="255" BlockInfo_47="255" BlockInfo_48="255" BlockInfo_49="255" BlockInfo_50="255" BlockInfo_51="255" BlockInfo_52="255" BlockInfo_53="255" BlockInfo_54="255" BlockInfo_55="255" BlockInfo_56="255" BlockInfo_57="255" BlockInfo_58="255" BlockInfo_59="255" BlockInfo_60="255" BlockInfo_61="255" BlockInfo_62="255" BlockInfo_63="255" BlockInfo_64="255" BlockInfo_65="255" BlockInfo_66="255" BlockInfo_67="255" BlockInfo_68="255" BlockInfo_69="255" BlockInfo_70="255" BlockInfo_71="255" BlockInfo_72="255" BlockInfo_73="255" BlockInfo_74="255" BlockInfo_75="255" BlockInfo_76="255" BlockInfo_77="255" BlockInfo_78="255" BlockInfo_79="255" BlockInfo_80="255" BlockInfo_81="255" BlockInfo_82="255" BlockInfo_83="255" BlockInfo_84="255" BlockInfo_85="255" BlockInfo_86="255" BlockInfo_87="255" BlockInfo_88="255" BlockInfo_89="255" BlockInfo_90="255" BlockInfo_91="255" BlockInfo_92="255" BlockInfo_93="255" BlockInfo_94="255" BlockInfo_95="255" BlockInfo_96="255" BlockInfo_97="255" BlockInfo_98="255" BlockInfo_99="255" BlockInfo_100="255" BlockInfo_101="255" BlockInfo_102="255" BlockInfo_103="255" BlockInfo_104="255" BlockInfo_105="255" BlockInfo_106="255" BlockInfo_107="255" BlockInfo_108="255" BlockInfo_109="255" BlockInfo_110="255" BlockInfo_111="255" BlockInfo_112="255" BlockInfo_113="255" BlockInfo_114="255" BlockInfo_115="255" BlockInfo_116="255" BlockInfo_117="255" BlockInfo_118="255" BlockInfo_119="255" BlockInfo_120="255" BlockInfo_121="255" BlockInfo_122="255" BlockInfo_123="255" BlockInfo_124="255" BlockInfo_125="255" BlockInfo_126="255" BlockInfo_127="255"><XGPD_HS_LINK_BLK BlockIndex="0" BlockId="1" MasterSlaveType="0" StationNo="1" TxRxType="2" LinkType="23041" StationType="1" ModuleSelectTypeRnet="0" TxSize="10" RxSize="0" MasterNO="-1" SelfStationNO="-1" NewBlkDPnet="0" BlockUse="1" ConnType="" DataType="" SlaveType="" TxAddress="%QW12.8.0" RxAddress="" TxDataType="" RxDataType="" TxVarScope="" RxVarScope="" ModuleType="" RemoteIO="0"></XGPD_HS_LINK_BLK>
+						<XGPD_HS_LINK_BLK BlockIndex="1" BlockId="1" MasterSlaveType="1" StationNo="0" TxRxType="1" LinkType="23041" StationType="1" ModuleSelectTypeRnet="0" TxSize="0" RxSize="10" MasterNO="-1" SelfStationNO="-1" NewBlkDPnet="0" BlockUse="1" ConnType="" DataType="" SlaveType="" TxAddress="" RxAddress="%IW12.8.0" TxDataType="" RxDataType="" TxVarScope="" RxVarScope="" ModuleType="" RemoteIO="0"></XGPD_HS_LINK_BLK>
+						<XGPD_HS_LINK_BLK BlockIndex="2" BlockId="51" MasterSlaveType="1" StationNo="0" TxRxType="1" LinkType="23041" StationType="1" ModuleSelectTypeRnet="0" TxSize="0" RxSize="10" MasterNO="-1" SelfStationNO="-1" NewBlkDPnet="0" BlockUse="1" ConnType="" DataType="" SlaveType="" TxAddress="" RxAddress="%IW10.15.0" TxDataType="" RxDataType="" TxVarScope="" RxVarScope="" ModuleType="" RemoteIO="0"></XGPD_HS_LINK_BLK>
+					</XGPD_HS_LINK>
+					<XGPD_HS_LINK SelfStationNo="2" Type="23041" Base="0" Slot="5" Index="1" TxRXCycle="3" LinkType="FEnet" CpuErrLC="0" CpuStopLC="0" CommErrLC="0" ByteType="0" RxTimeout="0" EnableExtBlk="0" StatusFlagArea="" Find="1024" BlockInfoCount="128" BlockInfo_0="2" BlockInfo_1="2" BlockInfo_2="255" BlockInfo_3="255" BlockInfo_4="255" BlockInfo_5="255" BlockInfo_6="255" BlockInfo_7="255" BlockInfo_8="255" BlockInfo_9="255" BlockInfo_10="255" BlockInfo_11="255" BlockInfo_12="255" BlockInfo_13="255" BlockInfo_14="255" BlockInfo_15="255" BlockInfo_16="255" BlockInfo_17="255" BlockInfo_18="255" BlockInfo_19="255" BlockInfo_20="255" BlockInfo_21="255" BlockInfo_22="255" BlockInfo_23="255" BlockInfo_24="255" BlockInfo_25="255" BlockInfo_26="255" BlockInfo_27="255" BlockInfo_28="255" BlockInfo_29="255" BlockInfo_30="255" BlockInfo_31="255" BlockInfo_32="255" BlockInfo_33="255" BlockInfo_34="255" BlockInfo_35="255" BlockInfo_36="255" BlockInfo_37="255" BlockInfo_38="255" BlockInfo_39="255" BlockInfo_40="255" BlockInfo_41="255" BlockInfo_42="255" BlockInfo_43="255" BlockInfo_44="255" BlockInfo_45="255" BlockInfo_46="255" BlockInfo_47="255" BlockInfo_48="255" BlockInfo_49="255" BlockInfo_50="255" BlockInfo_51="255" BlockInfo_52="255" BlockInfo_53="255" BlockInfo_54="255" BlockInfo_55="255" BlockInfo_56="255" BlockInfo_57="255" BlockInfo_58="255" BlockInfo_59="255" BlockInfo_60="255" BlockInfo_61="255" BlockInfo_62="255" BlockInfo_63="255" BlockInfo_64="255" BlockInfo_65="255" BlockInfo_66="255" BlockInfo_67="255" BlockInfo_68="255" BlockInfo_69="255" BlockInfo_70="255" BlockInfo_71="255" BlockInfo_72="255" BlockInfo_73="255" BlockInfo_74="255" BlockInfo_75="255" BlockInfo_76="255" BlockInfo_77="255" BlockInfo_78="255" BlockInfo_79="255" BlockInfo_80="255" BlockInfo_81="255" BlockInfo_82="255" BlockInfo_83="255" BlockInfo_84="255" BlockInfo_85="255" BlockInfo_86="255" BlockInfo_87="255" BlockInfo_88="255" BlockInfo_89="255" BlockInfo_90="255" BlockInfo_91="255" BlockInfo_92="255" BlockInfo_93="255" BlockInfo_94="255" BlockInfo_95="255" BlockInfo_96="255" BlockInfo_97="255" BlockInfo_98="255" BlockInfo_99="255" BlockInfo_100="255" BlockInfo_101="255" BlockInfo_102="255" BlockInfo_103="255" BlockInfo_104="255" BlockInfo_105="255" BlockInfo_106="255" BlockInfo_107="255" BlockInfo_108="255" BlockInfo_109="255" BlockInfo_110="255" BlockInfo_111="255" BlockInfo_112="255" BlockInfo_113="255" BlockInfo_114="255" BlockInfo_115="255" BlockInfo_116="255" BlockInfo_117="255" BlockInfo_118="255" BlockInfo_119="255" BlockInfo_120="255" BlockInfo_121="255" BlockInfo_122="255" BlockInfo_123="255" BlockInfo_124="255" BlockInfo_125="255" BlockInfo_126="255" BlockInfo_127="255"><XGPD_HS_LINK_BLK BlockIndex="0" BlockId="1" MasterSlaveType="0" StationNo="0" TxRxType="2" LinkType="23041" StationType="1" ModuleSelectTypeRnet="0" TxSize="10" RxSize="0" MasterNO="-1" SelfStationNO="-1" NewBlkDPnet="0" BlockUse="1" ConnType="" DataType="" SlaveType="" TxAddress="%QW18.12.0" RxAddress="" TxDataType="" RxDataType="" TxVarScope="" RxVarScope="" ModuleType="" RemoteIO="0"></XGPD_HS_LINK_BLK>
+						<XGPD_HS_LINK_BLK BlockIndex="1" BlockId="1" MasterSlaveType="1" StationNo="0" TxRxType="1" LinkType="23041" StationType="1" ModuleSelectTypeRnet="0" TxSize="0" RxSize="10" MasterNO="-1" SelfStationNO="-1" NewBlkDPnet="0" BlockUse="1" ConnType="" DataType="" SlaveType="" TxAddress="" RxAddress="%IW18.12.0" TxDataType="" RxDataType="" TxVarScope="" RxVarScope="" ModuleType="" RemoteIO="0"></XGPD_HS_LINK_BLK>
+					</XGPD_HS_LINK>
+				</XGPD_HS_LINK_GROUP>
+				<XGPD_P2P_GROUP>
+					<XGPD_PTP_INFO Type="23041" Base="0" Slot="0" Index="0" EIPTag="0" Find="0"><XGPD_PTP_INFO_BASIC Station="0" BlockInfoCount="64" BlockInfo_0="0" BlockInfo_1="0" BlockInfo_2="0" BlockInfo_3="0" BlockInfo_4="0" BlockInfo_5="0" BlockInfo_6="0" BlockInfo_7="0" BlockInfo_8="0" BlockInfo_9="0" BlockInfo_10="0" BlockInfo_11="0" BlockInfo_12="0" BlockInfo_13="0" BlockInfo_14="0" BlockInfo_15="0" BlockInfo_16="0" BlockInfo_17="0" BlockInfo_18="0" BlockInfo_19="0" BlockInfo_20="0" BlockInfo_21="0" BlockInfo_22="0" BlockInfo_23="0" BlockInfo_24="0" BlockInfo_25="0" BlockInfo_26="0" BlockInfo_27="0" BlockInfo_28="0" BlockInfo_29="0" BlockInfo_30="0" BlockInfo_31="0" BlockInfo_32="0" BlockInfo_33="0" BlockInfo_34="0" BlockInfo_35="0" BlockInfo_36="0" BlockInfo_37="0" BlockInfo_38="0" BlockInfo_39="0" BlockInfo_40="0" BlockInfo_41="0" BlockInfo_42="0" BlockInfo_43="0" BlockInfo_44="0" BlockInfo_45="0" BlockInfo_46="0" BlockInfo_47="0" BlockInfo_48="0" BlockInfo_49="0" BlockInfo_50="0" BlockInfo_51="0" BlockInfo_52="0" BlockInfo_53="0" BlockInfo_54="0" BlockInfo_55="0" BlockInfo_56="0" BlockInfo_57="0" BlockInfo_58="0" BlockInfo_59="0" BlockInfo_60="0" BlockInfo_61="0" BlockInfo_62="0" BlockInfo_63="0" EDSUploadBlockCount="0"></XGPD_PTP_INFO_BASIC>
+						<XGPD_PTP_BLK_GROUP></XGPD_PTP_BLK_GROUP>
+						<XGPD_PTP_CHANNEL_GROUP></XGPD_PTP_CHANNEL_GROUP>
+						<XGPD_FRAME_GRP_LIST_INFO CardId="0" Copy="0"></XGPD_FRAME_GRP_LIST_INFO>
+						<XGPD_EMAIL_INFO Name="" MailAddr="" Pop3Ip="0" SmtpIp="0" MailId="" Pw="" ScanTime="10" EmailEnable="0" EventScanTime="10" Event="0" EventAddress_0="0" EventAddress_1="0" EventAddress_2="0" EventMsg_0="0" EventMsg_1="0" EventMsg_2="0">
+							<XGPD_EMAIL_ADDRESS_GROUP></XGPD_EMAIL_ADDRESS_GROUP>
+							<XGPD_EMAIL_MSG_GROUP></XGPD_EMAIL_MSG_GROUP>
+						</XGPD_EMAIL_INFO>
+					</XGPD_PTP_INFO>
+				</XGPD_P2P_GROUP>
+			</XGPD>
+			<Properties Value=""></Properties>
+		</Configuration>
+	</Configurations>
+	<SpecialModules></SpecialModules>
+</Project>
