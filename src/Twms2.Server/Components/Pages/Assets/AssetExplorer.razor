@@ -21,7 +21,7 @@ else
 {
     @if (_selectedAsset != null)
     {
-        <AssetDetail Asset="_selectedAsset" OnSaved="OnAssetSaved" />
+        <AssetDetail @key="_selectedAsset.AssetId" Asset="_selectedAsset" OnSaved="OnAssetSaved" />
     }
     else
     {
