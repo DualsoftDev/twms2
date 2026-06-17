@@ -204,7 +204,7 @@ public class DexaReadService
         {
             using var conn = _dexaDb.Create();
             var result = await conn.QueryAsync<User>(
-                "SELECT id, userName AS Name, isAdmin AS Admin FROM [user]");
+                "SELECT id, username AS Name, isAdmin AS Admin FROM [user]");
             return result.ToList();
         }
         catch (Exception ex)
