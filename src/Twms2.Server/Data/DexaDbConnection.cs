@@ -179,7 +179,7 @@ public class DexaDbConnection
             ["assetType"] = ["id", "userFriendlyName", "fake"],
             ["trigger"] = ["id", "name", "cronSpec", "enable", "deleted", "description"],
             ["schedule"] = ["id", "assetId", "triggerId", "deleted"],
-            ["user"] = ["id", "userName", "isAdmin"],
+            ["user"] = ["id", "username", "isAdmin", "password"],
             ["permission"] = ["id", "uid", "assetId"],
             ["action.base"] = ["id", "started", "finished", "memo"],
             ["action.schedule"] = ["actionId", "assetId", "version", "contentsChanged", "nthSucceeded"],
