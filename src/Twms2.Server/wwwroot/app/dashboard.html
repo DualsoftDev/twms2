@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>대시보드 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">대시보드</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">자산 백업 · 네트워크 실시간 모니터링</p>
+      </div>
+      <div id="dash-clock" class="nm-flat-sm" style="padding:8px 16px;border-radius:12px;display:flex;align-items:center;gap:8px;">
+        <span class="w-2 h-2 rounded-full status-led" style="background:var(--health-backedup);"></span>
+        <span class="font-label-mono text-on-surface" style="font-size:12px;">SYSTEMS ONLINE</span>
+      </div>
+    </div>
+
+    <!-- KPI 행 -->
+    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(4,1fr);">
+      <a href="/history?tab=1" style="text-decoration:none;"><div class="kpi-card">
+        <div class="kpi-icon kpi-icon-primary"><span class="material-symbols-outlined">dns</span></div>
+        <div class="kpi-body"><span class="kpi-label">전체</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-total">–</span><span class="kpi-unit">EA</span></div></div>
+      </div></a>
+      <a href="/history?tab=1&health=backedup" style="text-decoration:none;"><div class="kpi-card">
+        <div class="kpi-icon kpi-icon-success"><span class="material-symbols-outlined">cloud_upload</span></div>
+        <div class="kpi-body"><span class="kpi-label">백업 갱신</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-backed">–</span></div>
+          <span class="kpi-pct kpi-pct-success" id="kpi-backed-pct"></span></div>
+      </div></a>
+      <a href="/history?tab=1&health=unchanged" style="text-decoration:none;"><div class="kpi-card">
+        <div class="kpi-icon kpi-icon-info"><span class="material-symbols-outlined">remove_circle_outline</span></div>
+        <div class="kpi-body"><span class="kpi-label">변경 없음</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-unchanged">–</span></div>
+          <span class="kpi-pct kpi-pct-info" id="kpi-unchanged-pct"></span></div>
+      </div></a>
+      <a href="/history?tab=1&health=failed" style="text-decoration:none;"><div class="kpi-card">
+        <div class="kpi-icon kpi-icon-error"><span class="material-symbols-outlined fill">warning</span></div>
+        <div class="kpi-body"><span class="kpi-label">주의 필요</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-failed" style="color:var(--health-failed);">–</span></div>
+          <span class="kpi-pct kpi-pct-error" id="kpi-failed-pct"></span></div>
+      </div></a>
+    </div>
+
+    <!-- 분포도 + 타입별 -->
+    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(12,1fr);">
+      <div class="nm-card" style="grid-column:span 9;">
+        <div class="panel-header">
+          <span class="panel-title">전체 자산 분포도</span>
+          <div class="legend-area">
+            <div class="legend-group"><span class="legend-label">[백업]</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--health-backedup);"></span>갱신</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--health-failed);"></span>실패</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--health-unchanged);"></span>변경없음</span>
+              <span class="legend-item"><span class="legend-dot inprogress"></span>작업중</span></div>
+            <div class="legend-group"><span class="legend-label">[네트워크]</span>
+              <span class="legend-item"><span class="legend-dot offline"></span>오프라인</span></div>
+          </div>
+        </div>
+        <div id="heatmap" class="heatmap-grid"></div>
+      </div>
+      <div class="nm-card" style="grid-column:span 3;">
+        <div class="panel-header"><span class="panel-title">타입별 현황</span></div>
+        <div id="type-stats" class="seg-list"></div>
+      </div>
+    </div>
+
+    <!-- 주의자산 + 최근작업 + 라인별 -->
+    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(12,1fr);">
+      <div class="nm-card" style="grid-column:span 6;">
+        <div class="panel-header"><span class="panel-title">주의 필요 자산
+          <span style="font-size:12px;font-weight:500;color:var(--c-on-surface-variant);margin-left:6px;">연속 3회 이상 실패</span></span></div>
+        <div id="attention"></div>
+      </div>
+      <div class="nm-card" style="grid-column:span 3;">
+        <div class="panel-header"><span class="panel-title">최근 작업</span></div>
+        <div id="activities" class="activity-list"></div>
+      </div>
+      <div class="nm-card" style="grid-column:span 3;">
+        <div class="panel-header"><span class="panel-title">라인별 현황</span></div>
+        <div id="line-stats" class="seg-list"></div>
+      </div>
+    </div>
+
+    <!-- 타임라인 -->
+    <div class="nm-card mb-element-gap">
+      <div class="panel-header">
+        <span class="panel-title">작업 현황</span>
+        <div style="display:flex;align-items:center;gap:12px;font-size:12px;color:var(--c-on-surface-variant);">
+          <span class="legend-item"><span class="legend-dot" style="background:var(--health-backedup);"></span>성공</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--health-failed);"></span>실패</span>
+          <span class="legend-item"><span class="legend-dot inprogress"></span>진행중</span>
+          <span id="today-label" class="font-label-mono"></span>
+        </div>
+      </div>
+      <div id="timeline"></div>
+    </div>
+
+    <!-- 드라이브 용량 -->
+    <div class="nm-card" style="margin-bottom:24px;">
+      <div class="panel-header"><span class="panel-title">DEXA DB 드라이브 용량</span></div>
+      <div id="drive"></div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/dashboard.js"></script>
+</body>
+</html>

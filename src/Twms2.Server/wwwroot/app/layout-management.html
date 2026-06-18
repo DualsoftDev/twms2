@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>레이아웃 관리 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 레이아웃 관리 페이지 전용 (theme.css 미수록 컨트롤) ── */
+    /* 액션 버튼 (history.html 의 hist-btn 톤 재사용) */
+    .lm-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 12px; cursor: pointer;
+      font-size: 13px; font-weight: 700; border: none; text-decoration: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .lm-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .lm-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .lm-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .lm-btn .material-symbols-outlined { font-size: 18px; }
+    .lm-btn-primary { color: var(--c-primary); }
+    .lm-btn-danger:hover:not(:disabled) { color: var(--health-failed); }
+
+    /* 작은 아이콘 버튼 (테이블 액션) */
+    .lm-iconbtn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 10px; border-radius: 9px; cursor: pointer; border: none;
+      font-size: 12px; font-weight: 700; text-decoration: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .lm-iconbtn:hover { color: var(--c-primary); }
+    .lm-iconbtn:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .lm-iconbtn .material-symbols-outlined { font-size: 16px; }
+    .lm-iconbtn-edit { color: var(--c-primary); }
+    .lm-iconbtn-danger:hover { color: var(--health-failed); }
+
+    /* 테이블 컨테이너 (history.html hist-table-wrap 톤) */
+    .lm-table-wrap {
+      border-radius: 16px; padding: 6px 12px; overflow-x: auto;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low);
+    }
+    .lm-table-wrap .nm-table td { white-space: nowrap; vertical-align: middle; }
+    .lm-table-wrap .nm-table th { white-space: nowrap; }
+    .lm-name { font-weight: 600; color: var(--c-on-surface); }
+    .lm-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+
+    /* 도면 썸네일 */
+    .lm-thumb { height: 40px; border-radius: 4px; object-fit: cover; cursor: pointer; }
+    .lm-thumb-none { color: var(--c-outline); font-size: 22px; }
+
+    .lm-empty { padding: 24px; color: var(--c-on-surface-variant); font-size: 14px; text-align: center; }
+
+    /* ── 모달 (입력 / 확인 / 순서변경 공용) ── */
+    .lm-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 9000;
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .lm-overlay.show { display: flex; }
+    .lm-modal {
+      background: var(--c-surface); border-radius: 18px; padding: 24px;
+      width: 100%; max-width: 460px;
+      box-shadow: 8px 8px 18px var(--nm-dark), -8px -8px 18px var(--nm-light);
+    }
+    .lm-modal-title { font-size: 18px; font-weight: 800; color: var(--c-on-surface); margin-bottom: 6px; }
+    .lm-modal-msg { font-size: 14px; color: var(--c-on-surface-variant); margin-bottom: 16px; white-space: pre-line; }
+    .lm-modal-input {
+      width: 100%; background: var(--c-surface); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px; padding: 10px 14px;
+      font-size: 14px; font-family: inherit; margin-bottom: 18px;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .lm-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+    /* 순서 변경 목록 (LayoutReorderDialog 이식) */
+    .lm-reorder-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+    .lm-reorder-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px;
+      background: var(--c-surface); color: var(--c-on-surface); font-weight: 600; font-size: 14px;
+      box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light);
+    }
+    .lm-reorder-item .lm-reorder-idx { font-family: 'JetBrains Mono', monospace; color: var(--c-on-surface-variant); font-size: 12px; min-width: 20px; }
+    .lm-reorder-item .lm-reorder-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .lm-reorder-move { display: inline-flex; gap: 4px; }
+    .lm-reorder-move button {
+      width: 28px; height: 28px; border-radius: 8px; border: none; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 4px var(--nm-dark), -2px -2px 4px var(--nm-light);
+    }
+    .lm-reorder-move button:hover:not(:disabled) { color: var(--c-primary); }
+    .lm-reorder-move button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .lm-reorder-move button .material-symbols-outlined { font-size: 18px; }
+  </style>
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <a href="/admin" class="lm-iconbtn" title="관리자로"><span class="material-symbols-outlined">arrow_back</span></a>
+        <div>
+          <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">레이아웃 관리</h2>
+          <p class="text-on-surface-variant" style="margin:4px 0 0;">도면 · 라인 영역 · 자산 배치 구성 단위</p>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="lm-btn lm-btn-primary" id="lm-create"><span class="material-symbols-outlined">add</span>새 레이아웃</button>
+        <button class="lm-btn" id="lm-reorder"><span class="material-symbols-outlined">swap_vert</span>순서 변경</button>
+      </div>
+    </div>
+
+    <div class="nm-card">
+      <div class="lm-table-wrap"><table class="nm-table" id="lm-table"></table></div>
+    </div>
+  </div>
+
+  <!-- 입력 모달 (생성 / 복제 / 이름변경) -->
+  <div class="lm-overlay" id="lm-input-overlay">
+    <div class="lm-modal">
+      <div class="lm-modal-title" id="lm-input-title">제목</div>
+      <div class="lm-modal-msg" id="lm-input-msg"></div>
+      <input type="text" class="lm-modal-input" id="lm-input-field" />
+      <div class="lm-modal-actions">
+        <button class="lm-btn" id="lm-input-cancel">취소</button>
+        <button class="lm-btn lm-btn-primary" id="lm-input-ok"><span class="material-symbols-outlined">check</span>확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 확인 모달 (삭제) -->
+  <div class="lm-overlay" id="lm-confirm-overlay">
+    <div class="lm-modal">
+      <div class="lm-modal-title" id="lm-confirm-title">확인</div>
+      <div class="lm-modal-msg" id="lm-confirm-msg"></div>
+      <div class="lm-modal-actions">
+        <button class="lm-btn" id="lm-confirm-cancel">취소</button>
+        <button class="lm-btn lm-btn-danger" id="lm-confirm-ok"><span class="material-symbols-outlined">delete</span>삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 순서 변경 모달 -->
+  <div class="lm-overlay" id="lm-reorder-overlay">
+    <div class="lm-modal">
+      <div class="lm-modal-title">레이아웃 순서 변경</div>
+      <div class="lm-modal-msg">위/아래 버튼으로 순서를 조정한 뒤 저장하세요.</div>
+      <ul class="lm-reorder-list" id="lm-reorder-list"></ul>
+      <div class="lm-modal-actions">
+        <button class="lm-btn" id="lm-reorder-cancel">취소</button>
+        <button class="lm-btn lm-btn-primary" id="lm-reorder-ok"><span class="material-symbols-outlined">check</span>저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/layout-management.js"></script>
+</body>
+</html>

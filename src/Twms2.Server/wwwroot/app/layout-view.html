@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>레이아웃 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 레이아웃(도면 보기) 페이지 전용 (theme.css 미수록 컨트롤) ── */
+
+    /* 레이아웃 선택 탭 (history .hist-tab 톤 재사용) */
+    .lv-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .lv-tab {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 18px; border-radius: 14px; cursor: pointer;
+      font-weight: 700; font-size: 14px; color: var(--c-on-surface-variant);
+      background: var(--c-surface); border: none;
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.2s ease;
+    }
+    .lv-tab:hover { color: var(--c-primary); }
+    .lv-tab.active {
+      color: var(--c-primary);
+      box-shadow: inset 4px 4px 8px var(--nm-dark), inset -4px -4px 8px var(--nm-light);
+    }
+
+    /* 뷰 모드 토글 (라인별/개별) — 세그먼트 */
+    .lv-seg { display: inline-flex; border-radius: 12px; overflow: hidden;
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light); }
+    .lv-seg-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant); transition: all 0.15s ease;
+    }
+    .lv-seg-btn + .lv-seg-btn { border-left: 1px solid var(--c-outline-variant); }
+    .lv-seg-btn.active {
+      color: var(--c-primary);
+      box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light);
+    }
+    .lv-seg-btn .material-symbols-outlined { font-size: 18px; }
+
+    /* 범례 */
+    .lv-legend { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      padding: 12px 16px; margin-bottom: 16px; }
+    .lv-legend-item { display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; color: var(--c-on-surface); }
+    .lv-legend-dot { width: 12px; height: 12px; border-radius: 4px; }
+    .lv-legend-hint { font-size: 12px; color: var(--c-on-surface-variant); }
+
+    /* 도면 뷰포트 (인셋) — SVG viewBox 0 0 1000 600 호스트 */
+    .lv-viewport {
+      position: relative; width: 100%; aspect-ratio: 1000 / 600;
+      border-radius: 20px; overflow: hidden;
+      box-shadow: inset 4px 4px 8px var(--nm-dark), inset -4px -4px 8px var(--nm-light);
+    }
+    .lv-viewport svg { display: block; width: 100%; height: 100%; }
+
+    /* SVG 내부 라벨/마커 공통 */
+    .lv-asset-icon { transition: opacity 0.15s ease; }
+    .lv-asset-icon:hover { opacity: 1 !important; }
+
+    .lv-empty { padding: 32px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }
+    .lv-loading { padding: 32px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }
+  </style>
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">레이아웃</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">도면 · 자산 배치 · 상태 모니터링</p>
+      </div>
+      <!-- 뷰 모드 토글: 라인별(도면) / 개별(배치도) -->
+      <div class="lv-seg" id="lv-viewmode">
+        <button class="lv-seg-btn active" data-view="0"><span class="material-symbols-outlined">map</span>라인별</button>
+        <button class="lv-seg-btn" data-view="1"><span class="material-symbols-outlined">grid_view</span>개별</button>
+      </div>
+    </div>
+
+    <!-- 레이아웃 선택 탭 (레이아웃 2개 이상일 때만 표시) -->
+    <div class="lv-tabs" id="lv-layout-tabs" style="display:none;"></div>
+
+    <!-- 범례 -->
+    <div class="nm-flat lv-legend" id="lv-legend">
+      <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-backedup);"></span>갱신</span>
+      <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-unchanged);"></span>유지</span>
+      <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-failed);"></span>실패</span>
+      <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-inprogress);"></span>작업중</span>
+      <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-unknown);"></span>내역없음</span>
+      <div class="hist-spacer" style="flex:1 1 auto;"></div>
+      <span class="lv-legend-hint" id="lv-count"></span>
+    </div>
+
+    <!-- 도면/배치도 뷰 -->
+    <div class="nm-card" style="padding:14px;">
+      <div class="lv-viewport" id="lv-viewport">
+        <div class="lv-loading">불러오는 중…</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/layout-view.js"></script>
+</body>
+</html>

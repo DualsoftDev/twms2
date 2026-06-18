@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DEXA 설정 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── DEXA 설정(관리) 페이지 전용 (theme.css 미수록 컨트롤) ── */
+    /* 액션 버튼 (history.html 의 .hist-btn 톤 재사용) */
+    .ac-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 12px; cursor: pointer;
+      font-size: 13px; font-weight: 700; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .ac-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .ac-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ac-btn .material-symbols-outlined { font-size: 18px; }
+    .ac-btn-primary { color: var(--c-primary); }
+    .ac-btn-warning:hover:not(:disabled) { color: var(--health-inprogress); }
+    .ac-btn-danger:hover:not(:disabled) { color: var(--health-failed); }
+
+    /* 아이콘 버튼 (작업 열) */
+    .ac-iconbtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: all 0.15s ease; text-decoration: none;
+    }
+    .ac-iconbtn:hover:not(:disabled) { color: var(--c-primary); }
+    .ac-iconbtn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-iconbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ac-iconbtn .material-symbols-outlined { font-size: 18px; }
+    .ac-iconbtn-success:hover:not(:disabled) { color: var(--health-backedup); }
+    .ac-iconbtn-info:hover:not(:disabled) { color: var(--c-primary); }
+    .ac-iconbtn-danger:hover:not(:disabled) { color: var(--health-failed); }
+
+    /* 인셋 입력 (history .hist-input 톤) */
+    .ac-input {
+      background: var(--c-surface); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px;
+      padding: 8px 12px; font-size: 13px; font-family: inherit; width: 100%;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .ac-input::placeholder { color: var(--c-outline); }
+    select.ac-input { cursor: pointer; }
+
+    /* cron 표현식 링크 (스케줄 셀) */
+    .ac-cron-link {
+      color: var(--c-primary); font-weight: 700; cursor: pointer;
+      text-decoration: none; border-bottom: 1px dashed transparent;
+    }
+    .ac-cron-link:hover { border-bottom-color: var(--c-primary); }
+
+    .ac-checkbox { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--c-on-surface-variant); cursor: pointer; user-select: none; }
+    .ac-checkbox input { width: 16px; height: 16px; accent-color: var(--c-primary); cursor: pointer; }
+
+    .ac-table-wrap {
+      border-radius: 16px; padding: 6px 12px; overflow-x: auto;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low);
+    }
+    .ac-table-wrap .nm-table td { white-space: nowrap; }
+    .ac-table-wrap .nm-table td.wrap { white-space: normal; max-width: 260px; }
+    .ac-empty { padding: 18px; color: var(--c-on-surface-variant); font-size: 14px; }
+    .ac-loading { padding: 18px; color: var(--c-on-surface-variant); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .ac-actions { display: inline-flex; gap: 6px; align-items: center; }
+
+    /* 인라인 스피너 */
+    .ac-spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--c-outline-variant); border-top-color: var(--health-inprogress);
+      animation: ac-spin 0.8s linear infinite; display: inline-block;
+    }
+    @keyframes ac-spin { to { transform: rotate(360deg); } }
+
+    /* 모달 (트리거 추가 / cron 수정) */
+    .ac-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+      display: none; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .ac-modal-backdrop.open { display: flex; }
+    .ac-modal {
+      background: var(--c-surface); border-radius: 24px; padding: 28px;
+      width: 100%; max-width: 460px; margin: 16px;
+      box-shadow: 8px 8px 18px var(--nm-dark), -8px -8px 18px var(--nm-light);
+    }
+    .ac-modal h3 { font-weight: 800; font-size: 1.1rem; color: var(--c-on-surface); margin: 0 0 18px; }
+    .ac-field { margin-bottom: 14px; }
+    .ac-field label { display: block; font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); margin-bottom: 6px; }
+    .ac-field .ac-hint { font-size: 11px; color: var(--c-outline); margin-top: 4px; }
+    .ac-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+    .ac-deviation {
+      display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px;
+      border-radius: 12px; font-size: 12px; color: var(--c-on-surface-variant);
+      background: var(--c-surface-container-low);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      margin-top: 10px;
+    }
+    .ac-deviation .material-symbols-outlined { font-size: 18px; color: var(--health-inprogress); flex-shrink: 0; }
+  </style>
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">DEXA 설정</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">에이전트 · 백업 트리거 관리</p>
+      </div>
+    </div>
+
+    <!-- ─── 에이전트 목록 ─── -->
+    <div class="nm-card mb-element-gap">
+      <div class="panel-header">
+        <span class="panel-title">에이전트 목록</span>
+        <div style="display:flex;align-items:center;gap:14px;">
+          <label class="ac-checkbox"><input type="checkbox" id="show-offline" />오프라인 에이전트도 보기</label>
+          <button class="ac-btn" id="agents-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+        </div>
+      </div>
+      <div id="agents-host">
+        <div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>
+      </div>
+      <div class="ac-deviation">
+        <span class="material-symbols-outlined">info</span>
+        <span>에이전트 <strong>재시작</strong> 기능은 DEXA 서버와의 실시간(Akka) 연결이 필요하여 정적 페이지에서는 제공되지 않습니다. 재시작은 기존 관리 콘솔을 이용하세요.</span>
+      </div>
+    </div>
+
+    <!-- ─── 트리거 목록 ─── -->
+    <div class="nm-card" style="margin-bottom:24px;">
+      <div class="panel-header">
+        <span class="panel-title">트리거 목록</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="ac-btn ac-btn-primary" id="trigger-add"><span class="material-symbols-outlined">add</span>트리거 추가</button>
+          <button class="ac-btn" id="triggers-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+        </div>
+      </div>
+      <div id="triggers-host">
+        <div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>
+      </div>
+      <div class="ac-deviation">
+        <span class="material-symbols-outlined">info</span>
+        <span>트리거↔자산 <strong>매핑 편집</strong>은 자산 선택 UI가 필요하여 이번 정적 페이지에서는 매핑 개수만 표시(읽기 전용)합니다.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 모달: 트리거 추가 ─── -->
+  <div class="ac-modal-backdrop" id="add-modal">
+    <div class="ac-modal">
+      <h3>트리거 추가</h3>
+      <div class="ac-field">
+        <label for="add-name">이름</label>
+        <input type="text" class="ac-input" id="add-name" placeholder="예: 야간 정기 백업" />
+      </div>
+      <div class="ac-field">
+        <label for="add-cron">Cron 표현식</label>
+        <input type="text" class="ac-input" id="add-cron" placeholder="0 0 2 * * ?" />
+        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드). 예) 매일 02:00 → 0 0 2 * * ?</div>
+      </div>
+      <div class="ac-field">
+        <label for="add-desc">설명 (선택)</label>
+        <input type="text" class="ac-input" id="add-desc" placeholder="설명" />
+      </div>
+      <div class="ac-modal-actions">
+        <button class="ac-btn" data-close="add-modal">취소</button>
+        <button class="ac-btn ac-btn-primary" id="add-save"><span class="material-symbols-outlined">save</span>추가</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 모달: 스케줄(cron) 수정 ─── -->
+  <div class="ac-modal-backdrop" id="cron-modal">
+    <div class="ac-modal">
+      <h3>스케줄 수정</h3>
+      <div class="ac-field">
+        <label id="cron-trigger-label">트리거</label>
+        <input type="text" class="ac-input" id="cron-value" placeholder="0 0 2 * * ?" />
+        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드).</div>
+      </div>
+      <div class="ac-modal-actions">
+        <button class="ac-btn" data-close="cron-modal">취소</button>
+        <button class="ac-btn ac-btn-primary" id="cron-save"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/admin-config.js"></script>
+</body>
+</html>

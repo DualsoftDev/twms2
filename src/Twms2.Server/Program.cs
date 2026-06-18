@@ -3,6 +3,7 @@ using Twms2.Dexa;
 using Twms2.Server.Components;
 using Twms2.Server.Data;
 using Twms2.Server.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.FileProviders;
 using MudBlazor.Services;
@@ -50,9 +51,25 @@ builder.Services.AddRazorComponents()
         opts.MaximumReceiveMessageSize = 16 * 1024 * 1024;
     });
 
+// 정적 페이지(wwwroot/app/*) 데이터 API — 격리형 호스팅(/api/*). 기존 서비스를 얇게 래핑(신규 로직 없음).
+builder.Services.AddControllers();
+
 // 인증 (Blazor Server 전용 — 더미 스킴으로 [Authorize] 미들웨어 에러 방지)
+// + 정적 페이지/API 공용 쿠키 스킴(TwmsApiCookie): 서명된 HttpOnly 쿠키로 서버측 신원 검증 → 쓰기 API 보호.
 builder.Services.AddAuthentication("DexaAuth")
-    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Twms2.Server.Services.DexaAuthHandler>("DexaAuth", null);
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Twms2.Server.Services.DexaAuthHandler>("DexaAuth", null)
+    .AddCookie(Twms2.Server.Controllers.AuthController.Scheme, options =>
+    {
+        options.Cookie.Name = "twms_auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.ExpireTimeSpan = TimeSpan.FromHours(12);
+        options.SlidingExpiration = true;
+        // API/정적 페이지는 로그인 페이지 리다이렉트 대신 상태코드로 응답
+        options.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
+        options.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
+    });
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, AuthStateProvider>();
@@ -133,6 +150,30 @@ if (app.Configuration.GetSection("Kestrel:Endpoints:Https").Exists())
 }
 
 app.UseAntiforgery();
+
+// ── 민감 산출물 보호 게이트 ──
+// 백업 ZIP(/api/download/backup/*)·DEXA 리포트 HTML(/report/*) 은 장비 프로그램/설정 덤프라
+// 익명 접근 금지(로그인 필요). HTML 내비게이션은 /login 으로, 그 외(다운로드/리소스)는 401.
+// UseAuthentication 보다 앞서 등록되므로 쿠키 스킴을 직접 인증한다.
+app.Use(async (context, next) =>
+{
+    var p = context.Request.Path.Value ?? "";
+    if (p.StartsWith("/report", StringComparison.OrdinalIgnoreCase)
+        || p.StartsWith("/api/download/backup", StringComparison.OrdinalIgnoreCase))
+    {
+        var r = await context.AuthenticateAsync(Twms2.Server.Controllers.AuthController.Scheme);
+        if (!r.Succeeded || r.Principal?.Identity?.IsAuthenticated != true)
+        {
+            if (HttpMethods.IsGet(context.Request.Method)
+                && context.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase))
+                context.Response.Redirect($"/login?returnUrl={Uri.EscapeDataString(p + context.Request.QueryString)}");
+            else
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+    }
+    await next();
+});
 
 // DEXA Report 정적 파일 서빙 (C:\ProgramData\LS\DEXA\Storage\Report → /report)
 // 파일명에 # 문자가 포함된 경우 처리: HTML 내 href/src의 #을 %23으로 치환
@@ -311,6 +352,93 @@ app.UseStaticFiles(new StaticFileOptions
     FileProvider = new PhysicalFileProvider(TwmsDataPath.Manuals),
     RequestPath = "/manuals"
 });
+
+// 인증/인가 미들웨어 (쿠키 스킴 검증 + 컨트롤러 [Authorize] 적용)
+app.UseAuthentication();
+app.UseAuthorization();
+
+// ── 페이지 인증 게이트 (선택적 로그인) ──
+// 대시보드 등 모니터링/조회 페이지는 모두 공개 — 로그인을 강제하지 않는다(첫 화면=대시보드).
+// 로그인은 헤더의 "로그인" 버튼으로 사용자가 직접 진입. /admin/* 과 /schedules 만 Admin 로그인 필요
+// (미인증/비관리자가 URL로 직접 접근하면 /login 으로). 정적 자산은 Accept!=text/html 이라 통과.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? "";
+    var isHtmlNav = HttpMethods.IsGet(context.Request.Method)
+        && context.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase);
+    var adminPath = path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/schedules", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/settings", StringComparison.OrdinalIgnoreCase);
+    // 로그인만 필요(역할 무관) — 자산 테이블 편집기(원본 [Authorize]).
+    var loginPath = path.Equals("/assets/table", StringComparison.OrdinalIgnoreCase);
+    if (isHtmlNav && (adminPath || loginPath))
+    {
+        var result = await context.AuthenticateAsync(Twms2.Server.Controllers.AuthController.Scheme);
+        var authed = result.Succeeded && result.Principal?.Identity?.IsAuthenticated == true;
+        if (!authed)
+        {
+            context.Response.Redirect($"/login?returnUrl={Uri.EscapeDataString(path + context.Request.QueryString)}");
+            return;
+        }
+        if (adminPath && result.Principal?.IsInRole("Admin") != true)
+        {
+            context.Response.Redirect($"/login?returnUrl={Uri.EscapeDataString(path + context.Request.QueryString)}");
+            return;
+        }
+    }
+    await next();
+});
+
+// ── 격리형 호스팅: 정적 페이지 canonical 라우트 ──
+// GET 요청을 wwwroot/app/*.html 로 short-circuit(Blazor 라우터보다 먼저). 미들웨어이므로
+// 딕셔너리에서 줄을 지우면 즉시 Blazor 로 원복(.razor 페이지는 폴백으로 그대로 보존).
+var staticRoutes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+{
+    ["/"] = "dashboard.html",
+    ["/overview"] = "dashboard.html",
+    ["/login"] = "login.html",
+    ["/history"] = "history.html",
+    ["/admin"] = "admin.html",
+    ["/settings"] = "settings.html",
+    ["/status"] = "status.html",
+    ["/schedules"] = "schedules.html",
+    ["/assets"] = "asset-explorer.html",
+    ["/assets/table"] = "asset-table.html",
+    ["/layout"] = "layout-view.html",
+    ["/admin/config"] = "admin-config.html",
+    ["/admin/users"] = "admin-users.html",
+    ["/admin/database"] = "admin-database.html",
+    // 주의: 정확매칭이라 "/admin/layout" 만 정적, "/admin/layout/{id}"(LayoutEditor)는 Blazor 폴백 유지.
+    ["/admin/layout"] = "layout-management.html",
+};
+// 파라미터 라우트(/assets/{int}, /qr/{int})는 정확매칭 딕셔너리로 불가 → 정규식으로 asset-detail.html 매핑.
+// (정확매칭을 먼저 보므로 /assets·/assets/table 은 위 딕셔너리가 우선.)
+var assetDetailRx = new System.Text.RegularExpressions.Regex(
+    @"^/(?:assets|qr)/\d+/?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+var staticAppRoot = Path.Combine(
+    app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "app");
+app.Use(async (context, next) =>
+{
+    if (HttpMethods.IsGet(context.Request.Method))
+    {
+        var reqPath = context.Request.Path.Value ?? string.Empty;
+        string? file = null;
+        if (staticRoutes.TryGetValue(reqPath, out var mapped)) file = mapped;
+        else if (assetDetailRx.IsMatch(reqPath)) file = "asset-detail.html";
+
+        var path = file is null ? null : Path.Combine(staticAppRoot, file);
+        if (path is not null && File.Exists(path))
+        {
+            context.Response.ContentType = "text/html; charset=utf-8";
+            await context.Response.SendFileAsync(path);
+            return;
+        }
+    }
+    await next();
+});
+
+// /api/* 컨트롤러 — Blazor 컴포넌트 엔드포인트보다 먼저 매핑.
+app.MapControllers();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
