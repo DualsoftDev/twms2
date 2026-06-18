@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>스케줄 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 스케줄 페이지 전용 (theme.css 미수록 컨트롤) ── */
+    /* 액션 버튼 (history.html 톤) */
+    .sch-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 12px; cursor: pointer;
+      font-size: 13px; font-weight: 700; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .sch-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .sch-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .sch-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .sch-btn .material-symbols-outlined { font-size: 18px; }
+    .sch-btn-primary { color: var(--c-primary); }
+
+    /* 아이콘 버튼 (작업 열) */
+    .sch-iconbtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: all 0.15s ease; text-decoration: none;
+    }
+    .sch-iconbtn:hover:not(:disabled) { color: var(--c-primary); }
+    .sch-iconbtn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .sch-iconbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .sch-iconbtn .material-symbols-outlined { font-size: 18px; }
+    .sch-iconbtn-info:hover:not(:disabled) { color: var(--health-unchanged); }
+    .sch-iconbtn-success:hover:not(:disabled) { color: var(--health-backedup); }
+    .sch-iconbtn-error:hover:not(:disabled) { color: var(--health-failed); }
+
+    /* 스케줄(cron) 링크 셀 */
+    .sch-cron-link { color: var(--c-primary); font-weight: 700; cursor: pointer; text-decoration: none; }
+    .sch-cron-link:hover { text-decoration: underline; }
+    .sch-asset-link { cursor: pointer; }
+
+    /* 테이블 컨테이너 (인셋) */
+    .sch-table-wrap {
+      border-radius: 16px; padding: 6px 12px; overflow-x: auto;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low);
+    }
+    .sch-table-wrap .nm-table td { white-space: nowrap; vertical-align: middle; }
+    .sch-table-wrap .nm-table td.wrap { white-space: normal; max-width: 280px; }
+    .sch-empty { padding: 20px; color: var(--c-on-surface-variant); font-size: 14px; }
+
+    /* 인셋 입력 (history hist-input 톤) */
+    .sch-input {
+      background: var(--c-surface); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px;
+      padding: 9px 12px; font-size: 14px; font-family: inherit; width: 100%;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .sch-input::placeholder { color: var(--c-outline); }
+    select.sch-input { cursor: pointer; }
+    .sch-field-label { font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); margin-bottom: 6px; display: block; }
+    .sch-field { margin-bottom: 16px; }
+
+    /* 세그먼트 버튼 그룹 (cron 프리셋) */
+    .sch-seg { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+    .sch-seg-btn {
+      padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; border-radius: 10px;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .sch-seg-btn.active {
+      color: var(--c-primary);
+      box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light);
+    }
+
+    .sch-cron-preview {
+      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      color: var(--c-on-surface); margin-top: 8px;
+      padding: 8px 12px; border-radius: 10px;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .sch-cron-readable { font-size: 13px; color: var(--c-primary); font-weight: 700; margin-top: 6px; }
+
+    /* ── 모달 (뉴모피즘) ── */
+    .sch-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: none; align-items: center; justify-content: center; z-index: 200; padding: 24px;
+    }
+    .sch-modal-backdrop.show { display: flex; }
+    .sch-modal {
+      background: var(--c-surface); border-radius: 24px; padding: 24px;
+      width: min(560px, 100%); max-height: 88vh; overflow-y: auto;
+      box-shadow: 8px 8px 18px var(--nm-dark), -8px -8px 18px var(--nm-light);
+    }
+    .sch-modal-title { font-weight: 800; font-size: 1.1rem; color: var(--c-on-surface); margin: 0 0 18px; }
+    .sch-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
+    /* 자산 매핑: 라인 그룹 */
+    .sch-group { border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low); }
+    .sch-group-header { display: flex; align-items: center; gap: 8px; font-weight: 700;
+      color: var(--c-on-surface); margin-bottom: 6px; cursor: pointer; }
+    .sch-group-count { font-size: 12px; font-weight: 600; color: var(--c-on-surface-variant); }
+    .sch-asset-row { display: flex; align-items: center; gap: 8px; padding: 3px 0 3px 26px;
+      font-size: 13px; color: var(--c-on-surface); cursor: pointer; }
+    .sch-asset-row .sch-ip { font-size: 11px; color: var(--c-on-surface-variant); }
+    .sch-check { width: 17px; height: 17px; accent-color: var(--c-primary); cursor: pointer; flex-shrink: 0; }
+    .sch-map-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .sch-map-scroll { max-height: 50vh; overflow-y: auto; }
+  </style>
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">스케줄</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">백업 트리거 · cron 스케줄 · 자산 매핑</p>
+      </div>
+    </div>
+
+    <!-- 트리거 목록 -->
+    <div class="nm-card">
+      <div class="panel-header">
+        <span class="panel-title">트리거 목록</span>
+        <div style="display:flex;gap:10px;">
+          <button class="sch-btn sch-btn-primary" id="btn-add"><span class="material-symbols-outlined">add</span>트리거 추가</button>
+          <button class="sch-btn" id="btn-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+        </div>
+      </div>
+      <div class="sch-table-wrap"><table class="nm-table" id="trigger-table"></table></div>
+    </div>
+  </div>
+
+  <!-- ─── 모달: 트리거 추가 ─── -->
+  <div class="sch-modal-backdrop" id="modal-add">
+    <div class="sch-modal">
+      <h3 class="sch-modal-title">트리거 추가</h3>
+      <div class="sch-field">
+        <label class="sch-field-label" for="add-name">트리거 이름</label>
+        <input class="sch-input" id="add-name" type="text" placeholder="예: 야간 정기 백업" />
+      </div>
+      <div class="sch-field">
+        <label class="sch-field-label" for="add-desc">설명</label>
+        <input class="sch-input" id="add-desc" type="text" placeholder="(선택)" />
+      </div>
+      <div class="sch-field" id="add-cron-host"></div>
+      <div class="sch-modal-actions">
+        <button class="sch-btn" data-close>취소</button>
+        <button class="sch-btn sch-btn-primary" id="add-submit"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 모달: 스케줄(cron) 수정 ─── -->
+  <div class="sch-modal-backdrop" id="modal-cron">
+    <div class="sch-modal">
+      <h3 class="sch-modal-title">스케줄 수정</h3>
+      <p class="text-on-surface-variant" style="margin:0 0 16px;font-size:13px;">
+        트리거 <strong id="cron-trigger-name"></strong>의 스케줄을 수정합니다.
+      </p>
+      <div class="sch-field" id="edit-cron-host"></div>
+      <div class="sch-modal-actions">
+        <button class="sch-btn" data-close>취소</button>
+        <button class="sch-btn sch-btn-primary" id="cron-submit"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 모달: 자산 매핑 ─── -->
+  <div class="sch-modal-backdrop" id="modal-assets">
+    <div class="sch-modal" style="width:min(640px,100%);">
+      <h3 class="sch-modal-title">자산 매핑</h3>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span class="text-on-surface" style="font-size:14px;">
+          트리거 <strong id="assets-trigger-name"></strong>에 연결할 자산을 선택하세요.
+        </span>
+        <span style="flex:1 1 auto;"></span>
+        <span class="chip chip-info" id="assets-selcount">0개 선택</span>
+      </div>
+      <div class="sch-map-toolbar">
+        <button class="sch-btn" id="assets-all">전체 선택</button>
+        <button class="sch-btn" id="assets-none">전체 해제</button>
+      </div>
+      <div class="sch-map-scroll" id="assets-groups"></div>
+      <div class="sch-modal-actions">
+        <button class="sch-btn" data-close>취소</button>
+        <button class="sch-btn sch-btn-primary" id="assets-submit"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/schedules.js"></script>
+</body>
+</html>

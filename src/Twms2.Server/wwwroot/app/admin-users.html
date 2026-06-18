@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>사용자 관리 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 사용자 관리 페이지 전용 (theme.css 미수록 컨트롤) ── */
+    .au-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .au-spacer { flex: 1 1 auto; }
+    /* 인셋 검색 (history.html 톤과 동일) */
+    .au-search { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px;
+      border-radius: 10px; background: var(--c-surface);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .au-search .material-symbols-outlined { color: var(--c-outline); font-size: 20px; }
+    .au-search input { background: transparent; border: none; outline: none;
+      color: var(--c-on-surface); font-size: 13px; width: 180px; font-family: inherit; }
+    .au-search input::placeholder { color: var(--c-outline); }
+    /* 새로고침 버튼 (nm-flat 톤 + press) */
+    .au-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+      border-radius: 12px; cursor: pointer; border: none; font-weight: 700; font-size: 13px;
+      color: var(--c-primary); background: var(--c-surface);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all .15s ease; }
+    .au-btn:hover { color: var(--c-primary); }
+    .au-btn:active { box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light); }
+    .au-btn .material-symbols-outlined { font-size: 18px; }
+    .au-btn[disabled] { opacity: .55; cursor: default; pointer-events: none; }
+    .au-id { font-family: 'JetBrains Mono', monospace; color: var(--c-on-surface-variant); }
+    .au-empty { padding: 24px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }
+    /* 인디터미네이트 로딩 바 (MudProgressLinear 대체) */
+    .au-loadbar { height: 4px; border-radius: 4px; overflow: hidden; margin-bottom: 16px;
+      background: var(--c-surface-variant); }
+    .au-loadbar > div { height: 100%; width: 35%; border-radius: 4px; background: var(--c-primary);
+      animation: au-slide 1.1s infinite ease-in-out; }
+    @keyframes au-slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+    .au-admin-ico { color: var(--c-primary); font-size: 20px; vertical-align: middle; }
+  </style>
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">사용자 관리</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">DEXA 사용자 계정 · 권한 현황 (읽기 전용)</p>
+      </div>
+    </div>
+
+    <!-- KPI 행 -->
+    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(3,1fr);">
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-primary"><span class="material-symbols-outlined">group</span></div>
+        <div class="kpi-body"><span class="kpi-label">전체 사용자</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-total">–</span><span class="kpi-unit">명</span></div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-info"><span class="material-symbols-outlined">admin_panel_settings</span></div>
+        <div class="kpi-body"><span class="kpi-label">관리자</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-admin">–</span><span class="kpi-unit">명</span></div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-success"><span class="material-symbols-outlined">person</span></div>
+        <div class="kpi-body"><span class="kpi-label">일반 사용자</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-normal">–</span><span class="kpi-unit">명</span></div></div>
+      </div>
+    </div>
+
+    <!-- 사용자 목록 -->
+    <div class="nm-card" style="margin-bottom:24px;">
+      <div class="panel-header">
+        <span class="panel-title">사용자 목록</span>
+        <div class="au-toolbar">
+          <div class="au-search">
+            <span class="material-symbols-outlined">search</span>
+            <input id="au-search-input" type="text" placeholder="이름 검색" autocomplete="off" />
+          </div>
+          <button id="au-refresh" class="au-btn" type="button">
+            <span class="material-symbols-outlined">refresh</span>새로고침
+          </button>
+        </div>
+      </div>
+      <div id="au-loading" class="au-loadbar" style="display:none;"><div></div></div>
+      <div id="au-table"></div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/admin-users.js"></script>
+</body>
+</html>

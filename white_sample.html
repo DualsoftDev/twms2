@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kia Industrial - Plant Control Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary-fixed": "#001848",
+                    "outline-variant": "#c3c6d6",
+                    "tertiary": "#7b2600",
+                    "tertiary-container": "#a33500",
+                    "surface": "#f6f9ff",
+                    "tertiary-fixed-dim": "#ffb59b",
+                    "background": "#f6f9ff",
+                    "on-primary-container": "#c4d2ff",
+                    "on-primary": "#ffffff",
+                    "error": "#ba1a1a",
+                    "on-secondary-fixed-variant": "#38485d",
+                    "on-secondary-fixed": "#0b1c30",
+                    "surface-dim": "#d5dae1",
+                    "primary-container": "#0052cc",
+                    "secondary-container": "#d0e1fb",
+                    "secondary-fixed-dim": "#b7c8e1",
+                    "surface-bright": "#f6f9ff",
+                    "primary-fixed": "#dae2ff",
+                    "primary": "#003d9b",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "inverse-on-surface": "#ecf1f8",
+                    "surface-container-high": "#e4e9f0",
+                    "tertiary-fixed": "#ffdbcf",
+                    "on-tertiary-fixed-variant": "#812800",
+                    "surface-container-lowest": "#ffffff",
+                    "on-background": "#171c21",
+                    "on-surface": "#171c21",
+                    "on-tertiary-fixed": "#380d00",
+                    "surface-container": "#e9eef5",
+                    "secondary-fixed": "#d3e4fe",
+                    "secondary": "#505f76",
+                    "on-tertiary-container": "#ffc6b2",
+                    "inverse-primary": "#b2c5ff",
+                    "primary-fixed-dim": "#b2c5ff",
+                    "surface-variant": "#dee3ea",
+                    "surface-container-highest": "#dee3ea",
+                    "on-error": "#ffffff",
+                    "surface-container-low": "#eff4fb",
+                    "inverse-surface": "#2b3136",
+                    "error-container": "#ffdad6",
+                    "on-secondary-container": "#54647a",
+                    "surface-tint": "#0c56d0",
+                    "on-surface-variant": "#434654",
+                    "on-primary-fixed-variant": "#0040a2",
+                    "outline": "#737685",
+                    "on-error-container": "#93000a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "20px",
+                    "unit": "8px",
+                    "container-padding": "24px",
+                    "element-gap": "16px"
+            },
+            "fontFamily": {
+                    "body-md": ["Hanken Grotesk"],
+                    "display": ["Hanken Grotesk"],
+                    "label-mono": ["JetBrains Mono"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "label-mono": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #f6f9ff;
+            color: #171c21;
+        }
+
+        .neumorphic-convex {
+            box-shadow: -6px -6px 12px #FFFFFF, 6px 6px 12px #A3B1C6;
+        }
+
+        .neumorphic-concave {
+            box-shadow: inset -4px -4px 8px #FFFFFF, inset 4px 4px 8px #A3B1C6;
+        }
+
+        .neumorphic-convex-sm {
+            box-shadow: -4px -4px 8px #FFFFFF, 4px 4px 8px #A3B1C6;
+        }
+
+        .neumorphic-concave-sm {
+            box-shadow: inset -2px -2px 5px #FFFFFF, inset 2px 2px 5px #A3B1C6;
+        }
+
+        .status-led {
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .transition-soft {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .active-nav-link {
+            box-shadow: inset -4px -4px 8px #FFFFFF, inset 4px 4px 8px #A3B1C6;
+            background-color: #f6f9ff;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="font-body-md overflow-x-hidden">
+<!-- Side Navigation -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-surface flex flex-col p-container-padding gap-element-gap z-50 shadow-[-6px_-6px_12px_#FFFFFF,6px_6px_12px_#A3B1C6]">
+<div class="mb-10">
+<h1 class="font-display text-headline-lg font-extrabold text-primary">Kia Industrial</h1>
+<p class="text-on-surface-variant text-sm opacity-70">Plant Control Center</p>
+</div>
+<nav class="flex flex-col gap-4 flex-1">
+<a class="flex items-center gap-4 p-4 text-primary font-bold active-nav-link rounded-xl transition-soft" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-4 p-4 text-secondary hover:shadow-[-4px_-4px_8px_#FFFFFF,4px_4px_8px_#A3B1C6] transition-soft rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary-container">precision_manufacturing</span>
+<span>Production</span>
+</a>
+<a class="flex items-center gap-4 p-4 text-secondary hover:shadow-[-4px_-4px_8px_#FFFFFF,4px_4px_8px_#A3B1C6] transition-soft rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary-container">inventory_2</span>
+<span>Inventory</span>
+</a>
+<a class="flex items-center gap-4 p-4 text-secondary hover:shadow-[-4px_-4px_8px_#FFFFFF,4px_4px_8px_#A3B1C6] transition-soft rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary-container">local_shipping</span>
+<span>Logistics</span>
+</a>
+<a class="flex items-center gap-4 p-4 text-secondary hover:shadow-[-4px_-4px_8px_#FFFFFF,4px_4px_8px_#A3B1C6] transition-soft rounded-xl group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary-container">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<button class="neumorphic-convex flex items-center justify-center gap-2 p-4 text-primary font-bold rounded-xl active:scale-95 transition-soft">
+<span class="material-symbols-outlined">analytics</span>
+<span>System Check</span>
+</button>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 min-h-screen relative">
+<!-- Top App Bar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-20 bg-surface flex justify-between items-center px-container-padding z-40 shadow-[-4px_-4px_10px_#FFFFFF,4px_4px_10px_#A3B1C6]">
+<div class="flex items-center gap-6 w-full max-w-xl">
+<div class="neumorphic-concave flex items-center px-4 py-2 rounded-full w-full">
+<span class="material-symbols-outlined text-outline">search</span>
+<input class="bg-transparent border-none focus:ring-0 w-full text-body-md font-body-md" placeholder="Search industrial assets..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="neumorphic-convex-sm p-2 rounded-full hover:shadow-[inset_-2px_-2px_5px_#FFFFFF,inset_2px_2px_5px_#A3B1C6] transition-soft group">
+<span class="material-symbols-outlined text-on-surface-variant group-active:scale-90 transition-transform">notifications</span>
+</button>
+<button class="neumorphic-convex-sm p-2 rounded-full hover:shadow-[inset_-2px_-2px_5px_#FFFFFF,inset_2px_2px_5px_#A3B1C6] transition-soft group">
+<span class="material-symbols-outlined text-on-surface-variant group-active:scale-90 transition-transform">help</span>
+</button>
+<button class="neumorphic-convex-sm p-2 rounded-full hover:shadow-[inset_-2px_-2px_5px_#FFFFFF,inset_2px_2px_5px_#A3B1C6] transition-soft group">
+<span class="material-symbols-outlined text-on-surface-variant group-active:scale-90 transition-transform">logout</span>
+</button>
+</div>
+<div class="flex items-center gap-3 pl-6 border-l border-outline-variant/30">
+<div class="text-right">
+<p class="font-bold text-primary text-sm">Manager Avatar</p>
+<p class="text-on-surface-variant text-xs">Operations Head</p>
+</div>
+<div class="w-10 h-10 rounded-full neumorphic-convex overflow-hidden border-2 border-surface p-0.5">
+<img alt="Operations Head Portrait" class="w-full h-full object-cover rounded-full" data-alt="A professional portrait of a senior industrial plant manager wearing a clean-cut navy polo shirt. He has a friendly yet authoritative expression, set against a blurred background of a modern, high-tech manufacturing facility. The lighting is crisp and cool, reflecting a clean industrial aesthetic consistent with the light-mode UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7zgnVQ1mtqOyJvAAKqYHlggDPlZCvJzJiSxVoahc3U54HmLYvlONtwbTBO0b-8cYhrvchZlJQDHWSz52LgzUHPbm5gHkPab32DPxtC0zUh1cq0gkSDb8rCRaFNempi15uKsuV85wDBirgax92wKPTaDwyUnlr_mL3aogenQ9GED-BS-kpWwlk2pVc9HkDUO8Chz1TscXA8qFCyle4DgcchVpi77sJ-2JrUek8FWMbfaCXTHtT_yYHRmzFmwwbb4LMeMx4LA8VG2YQ"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Dashboard Content -->
+<div class="pt-28 p-container-padding space-y-element-gap">
+<!-- Headline -->
+<div class="flex justify-between items-end mb-4">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-primary">Operational Dashboard</h2>
+<p class="text-on-surface-variant">Real-time monitoring of Plant 04: Hwaseong, KR</p>
+</div>
+<div class="flex gap-4">
+<div class="neumorphic-convex-sm px-4 py-2 rounded-xl flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-green-500 status-led"></span>
+<span class="text-label-mono font-label-mono text-on-surface">SYSTEMS NOMINAL</span>
+</div>
+</div>
+</div>
+<!-- KPI Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-element-gap">
+<!-- Total Assets Card -->
+<div class="neumorphic-convex p-6 rounded-3xl group transition-soft hover:translate-y-[-2px]">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 neumorphic-concave-sm rounded-2xl text-primary">
+<span class="material-symbols-outlined">precision_manufacturing</span>
+</div>
+<span class="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">+2.4%</span>
+</div>
+<p class="text-on-surface-variant text-sm font-medium">Total Active Assets</p>
+<h3 class="text-headline-lg font-display text-primary mt-1">1,402</h3>
+<div class="mt-4 w-full h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[85%] rounded-full"></div>
+</div>
+</div>
+<!-- Backup Status Card -->
+<div class="neumorphic-convex p-6 rounded-3xl group transition-soft hover:translate-y-[-2px]">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 neumorphic-concave-sm rounded-2xl text-tertiary">
+<span class="material-symbols-outlined">cloud_sync</span>
+</div>
+<span class="text-xs font-bold text-on-surface-variant bg-surface-variant px-2 py-1 rounded-full">Synced</span>
+</div>
+<p class="text-on-surface-variant text-sm font-medium">Backup Status</p>
+<h3 class="text-headline-lg font-display text-primary mt-1">99.9%</h3>
+<div class="mt-4 flex gap-2">
+<span class="text-xs text-on-surface-variant">Last backup: 14m ago</span>
+</div>
+</div>
+<!-- Urgent Actions Card -->
+<div class="neumorphic-convex p-6 rounded-3xl group transition-soft hover:translate-y-[-2px] border-l-4 border-error/20">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 neumorphic-concave-sm rounded-2xl text-error">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">warning</span>
+</div>
+<span class="text-xs font-bold text-error px-2 py-1 rounded-full animate-pulse">Action Required</span>
+</div>
+<p class="text-on-surface-variant text-sm font-medium">Urgent Actions</p>
+<h3 class="text-headline-lg font-display text-error mt-1">04</h3>
+<div class="mt-4 flex gap-2">
+<button class="text-xs font-bold text-primary underline underline-offset-4 decoration-primary/30">View Critical Logs</button>
+</div>
+</div>
+</div>
+<!-- Main Distribution & Status Section -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-element-gap">
+<!-- Production Line Status (Large Area) -->
+<div class="lg:col-span-2 neumorphic-convex p-8 rounded-[40px] flex flex-col">
+<div class="flex justify-between items-center mb-8">
+<h4 class="text-headline-lg font-bold text-primary">Asset Distribution Grid</h4>
+<div class="flex gap-2">
+<button class="neumorphic-concave-sm px-4 py-2 rounded-full text-xs font-bold text-primary">WEEKLY</button>
+<button class="neumorphic-convex-sm px-4 py-2 rounded-full text-xs font-bold text-on-surface-variant">MONTHLY</button>
+</div>
+</div>
+<div class="flex-1 grid grid-cols-4 grid-rows-2 gap-4">
+<!-- Asset Card 1 -->
+<div class="col-span-2 row-span-1 neumorphic-concave rounded-3xl p-6 relative overflow-hidden group">
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+<p class="text-label-mono font-label-mono text-primary uppercase">Main Assembly A1</p>
+</div>
+<h5 class="text-2xl font-bold text-on-surface">Optimal Efficiency</h5>
+<p class="text-sm text-on-surface-variant mt-2">Robotic welding systems running at 94% throughput with zero calibration errors detected in last 24h cycle.</p>
+</div>
+<div class="absolute -right-4 -bottom-4 opacity-10 transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-[120px]">engineering</span>
+</div>
+</div>
+<!-- Asset Card 2 -->
+<div class="col-span-1 row-span-1 neumorphic-convex rounded-3xl p-6 flex flex-col justify-between">
+<div class="text-on-surface-variant text-sm font-bold">Chassis Forge</div>
+<div class="text-3xl font-display font-black text-primary">82%</div>
+<div class="text-xs text-on-surface-variant">Temp: 1420°C</div>
+</div>
+<!-- Asset Card 3 -->
+<div class="col-span-1 row-span-2 neumorphic-convex rounded-3xl p-6 flex flex-col gap-4">
+<p class="text-label-mono font-label-mono text-primary uppercase text-center mb-2">Paint Shop</p>
+<div class="flex-1 neumorphic-concave rounded-2xl flex flex-col items-center justify-center p-4">
+<span class="material-symbols-outlined text-primary text-4xl mb-2">format_paint</span>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-full w-[65%]"></div>
+</div>
+<span class="text-xs mt-2 font-bold">Capacity: 65%</span>
+</div>
+<div class="flex-1 neumorphic-concave rounded-2xl flex flex-col items-center justify-center p-4">
+<span class="material-symbols-outlined text-secondary text-4xl mb-2">palette</span>
+<span class="text-xs font-bold">Active: Arctic White</span>
+</div>
+</div>
+<!-- Asset Card 4 -->
+<div class="col-span-1 row-span-1 neumorphic-convex rounded-3xl p-6 flex flex-col justify-between">
+<div class="text-on-surface-variant text-sm font-bold">EV Battery Lab</div>
+<div class="text-3xl font-display font-black text-green-600">Stable</div>
+<div class="text-xs text-on-surface-variant">Voltage: 800V Peak</div>
+</div>
+<!-- Asset Card 5 -->
+<div class="col-span-2 row-span-1 neumorphic-concave rounded-3xl p-6 bg-surface-container-low flex items-center gap-6">
+<div class="w-20 h-20 rounded-2xl neumorphic-convex flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-4xl">memory</span>
+</div>
+<div>
+<h6 class="font-bold text-on-surface">Edge Processing Unit 09</h6>
+<p class="text-sm text-on-surface-variant">Analyzing vibration patterns in motor assembly line. AI prediction: 98% health.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Production Line Status Column -->
+<div class="space-y-element-gap">
+<div class="neumorphic-convex p-8 rounded-[40px] h-full">
+<div class="flex items-center justify-between mb-6">
+<h4 class="font-bold text-primary">Shift Logs</h4>
+<span class="material-symbols-outlined text-on-surface-variant">list</span>
+</div>
+<div class="space-y-6">
+<!-- Shift Item -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center">
+<div class="w-3 h-3 rounded-full bg-primary status-led"></div>
+<div class="w-0.5 flex-1 bg-outline-variant/30 my-1"></div>
+</div>
+<div>
+<p class="text-xs text-on-surface-variant font-label-mono uppercase">06:00 AM</p>
+<p class="text-sm font-bold text-on-surface">Shift Transition A -&gt; B</p>
+<p class="text-xs text-on-surface-variant">100% station handoff verified.</p>
+</div>
+</div>
+<!-- Shift Item -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center">
+<div class="w-3 h-3 rounded-full bg-tertiary-container status-led"></div>
+<div class="w-0.5 flex-1 bg-outline-variant/30 my-1"></div>
+</div>
+<div>
+<p class="text-xs text-on-surface-variant font-label-mono uppercase">08:45 AM</p>
+<p class="text-sm font-bold text-on-surface">Scheduled Maintenance</p>
+<p class="text-xs text-on-surface-variant">Robotic Arm 12 - Calibration complete.</p>
+</div>
+</div>
+<!-- Shift Item -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center">
+<div class="w-3 h-3 rounded-full bg-error status-led"></div>
+<div class="w-0.5 flex-1 bg-outline-variant/30 my-1"></div>
+</div>
+<div>
+<p class="text-xs text-on-surface-variant font-label-mono uppercase">10:12 AM</p>
+<p class="text-sm font-bold text-error">Input Delay Detected</p>
+<p class="text-xs text-on-surface-variant">Logistics bottleneck at Gate 4.</p>
+</div>
+</div>
+<!-- Shift Item -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center">
+<div class="w-3 h-3 rounded-full bg-green-500 status-led"></div>
+<div class="w-0.5 flex-1 bg-transparent my-1"></div>
+</div>
+<div>
+<p class="text-xs text-on-surface-variant font-label-mono uppercase">11:30 AM</p>
+<p class="text-sm font-bold text-on-surface">Peak Output Reached</p>
+<p class="text-xs text-on-surface-variant">EV line exceeding hourly target.</p>
+</div>
+</div>
+</div>
+<button class="mt-10 w-full neumorphic-concave py-4 rounded-2xl text-primary font-bold text-sm hover:neumorphic-convex transition-soft">
+                            Download Full Plant Report
+                        </button>
+</div>
+</div>
+</div>
+<!-- Bottom Section: Detailed Asset List -->
+<div class="neumorphic-convex p-8 rounded-[40px] mb-8">
+<div class="flex justify-between items-center mb-8">
+<h4 class="text-headline-lg font-bold text-primary">Production Live Feed</h4>
+<div class="flex gap-4">
+<button class="neumorphic-convex-sm p-3 rounded-xl">
+<span class="material-symbols-outlined">tune</span>
+</button>
+<button class="neumorphic-convex-sm p-3 rounded-xl">
+<span class="material-symbols-outlined">download</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-separate border-spacing-y-4">
+<thead class="text-on-surface-variant uppercase text-xs font-label-mono">
+<tr>
+<th class="px-6 py-2">Asset Identity</th>
+<th class="px-6 py-2">Location</th>
+<th class="px-6 py-2">Status</th>
+<th class="px-6 py-2">Last Audit</th>
+<th class="px-6 py-2 text-right">Action</th>
+</tr>
+</thead>
+<tbody>
+<!-- Table Row 1 -->
+<tr class="neumorphic-convex rounded-2xl group hover:scale-[1.01] transition-transform">
+<td class="px-6 py-5 rounded-l-2xl">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl neumorphic-concave flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">car_repair</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">KIA-EV6-ASM-01</p>
+<p class="text-xs text-on-surface-variant">Assembly Module</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-5 text-on-surface-variant text-sm">Zone 04 / Row 12</td>
+<td class="px-6 py-5">
+<span class="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold">OPERATIONAL</span>
+</td>
+<td class="px-6 py-5 text-on-surface-variant text-sm font-label-mono">2023-10-24 14:20</td>
+<td class="px-6 py-5 text-right rounded-r-2xl">
+<button class="neumorphic-convex-sm px-4 py-2 rounded-lg text-xs font-bold text-primary hover:neumorphic-concave transition-soft">DETAILS</button>
+</td>
+</tr>
+<!-- Table Row 2 -->
+<tr class="neumorphic-convex rounded-2xl group hover:scale-[1.01] transition-transform">
+<td class="px-6 py-5 rounded-l-2xl">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl neumorphic-concave flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">KIA-BAT-TST-09</p>
+<p class="text-xs text-on-surface-variant">Testing Rig</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-5 text-on-surface-variant text-sm">Zone 01 / Lab A</td>
+<td class="px-6 py-5">
+<span class="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">STANDBY</span>
+</td>
+<td class="px-6 py-5 text-on-surface-variant text-sm font-label-mono">2023-10-24 11:05</td>
+<td class="px-6 py-5 text-right rounded-r-2xl">
+<button class="neumorphic-convex-sm px-4 py-2 rounded-lg text-xs font-bold text-primary hover:neumorphic-concave transition-soft">DETAILS</button>
+</td>
+</tr>
+<!-- Table Row 3 -->
+<tr class="neumorphic-convex rounded-2xl group hover:scale-[1.01] transition-transform">
+<td class="px-6 py-5 rounded-l-2xl">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl neumorphic-concave flex items-center justify-center text-error">
+<span class="material-symbols-outlined">settings_suggest</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">KIA-ROB-WLD-12</p>
+<p class="text-xs text-on-surface-variant">Welding Unit</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-5 text-on-surface-variant text-sm">Zone 04 / Row 08</td>
+<td class="px-6 py-5">
+<span class="px-3 py-1 rounded-full bg-error-container text-error text-xs font-bold uppercase">Maintenance</span>
+</td>
+<td class="px-6 py-5 text-on-surface-variant text-sm font-label-mono">2023-10-23 09:12</td>
+<td class="px-6 py-5 text-right rounded-r-2xl">
+<button class="neumorphic-convex-sm px-4 py-2 rounded-lg text-xs font-bold text-primary hover:neumorphic-concave transition-soft">DETAILS</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- System Visualizer (Floating Atmosphere) -->
+<div class="fixed bottom-8 right-8 pointer-events-none">
+<div class="w-48 h-48 neumorphic-convex rounded-full overflow-hidden flex items-center justify-center border-4 border-surface p-2">
+<div class="relative w-full h-full rounded-full overflow-hidden bg-surface-container-low flex items-center justify-center">
+
+<div class="relative z-10 text-center">
+<p class="text-[10px] font-label-mono text-on-surface-variant uppercase">Network Load</p>
+<p class="text-2xl font-black text-primary">24.2ms</p>
+<p class="text-[8px] text-green-600 font-bold">LATENCY: LOW</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+        // Micro-interactions for neumorphic states
+        document.querySelectorAll('.neumorphic-convex, .neumorphic-convex-sm').forEach(element => {
+            element.addEventListener('mousedown', () => {
+                element.style.transform = 'scale(0.98)';
+                element.classList.remove('neumorphic-convex', 'neumorphic-convex-sm');
+                element.classList.add('neumorphic-concave-sm');
+            });
+            element.addEventListener('mouseup', () => {
+                element.style.transform = 'scale(1)';
+                element.classList.remove('neumorphic-concave-sm');
+                if (element.classList.contains('p-2')) {
+                    element.classList.add('neumorphic-convex-sm');
+                } else {
+                    element.classList.add('neumorphic-convex');
+                }
+            });
+            element.addEventListener('mouseleave', () => {
+                element.style.transform = 'scale(1)';
+                element.classList.remove('neumorphic-concave-sm');
+                if (element.classList.contains('p-2')) {
+                    element.classList.add('neumorphic-convex-sm');
+                } else {
+                    element.classList.add('neumorphic-convex');
+                }
+            });
+        });
+    </script>
+</body></html>

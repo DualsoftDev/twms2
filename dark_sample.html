@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>KIA INDUSTRIAL DARK OPS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        :root {
+            /* Neumorphic Dark Tokens - Deep Navy Palette */
+            --bg-color: #0b1c30; /* secondary-fixed-dim / on-secondary-fixed base */
+            --shadow-light: rgba(255, 255, 255, 0.03);
+            --shadow-dark: rgba(0, 0, 0, 0.6);
+            --accent-glow: rgba(0, 61, 155, 0.4);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #ecf1f8; /* inverse-on-surface */
+            overflow-x: hidden;
+        }
+
+        /* Neumorphic Convex (Raised) */
+        .nm-flat {
+            background: var(--bg-color);
+            box-shadow: 8px 8px 16px var(--shadow-dark), 
+                        -8px -8px 16px var(--shadow-light);
+        }
+
+        /* Neumorphic Concave (Pressed/Inset) */
+        .nm-inset {
+            background: var(--bg-color);
+            box-shadow: inset 6px 6px 12px var(--shadow-dark), 
+                        inset -6px -6px 12px var(--shadow-light);
+        }
+
+        /* Neumorphic Active State */
+        .nm-active {
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), 
+                        inset -4px -4px 8px var(--shadow-light);
+        }
+
+        /* LED Pulse Effect */
+        .led-pulse {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { filter: drop-shadow(0 0 2px currentColor); opacity: 0.8; }
+            50% { filter: drop-shadow(0 0 8px currentColor); opacity: 1; }
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed": "#001848",
+                        "outline-variant": "#c3c6d6",
+                        "tertiary": "#7b2600",
+                        "tertiary-container": "#a33500",
+                        "surface": "#0b1c30",
+                        "tertiary-fixed-dim": "#ffb59b",
+                        "background": "#0b1c30",
+                        "on-primary-container": "#c4d2ff",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "on-secondary-fixed": "#0b1c30",
+                        "surface-dim": "#081424",
+                        "primary-container": "#0052cc",
+                        "secondary-container": "#1d2e45",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "surface-bright": "#16273b",
+                        "primary-fixed": "#dae2ff",
+                        "primary": "#b2c5ff",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#ecf1f8",
+                        "surface-container-high": "#132338",
+                        "tertiary-fixed": "#ffdbcf",
+                        "on-tertiary-fixed-variant": "#812800",
+                        "surface-container-lowest": "#050d17",
+                        "on-background": "#ecf1f8",
+                        "on-surface": "#ecf1f8",
+                        "on-tertiary-fixed": "#380d00",
+                        "surface-container": "#0e1e32",
+                        "secondary-fixed": "#d3e4fe",
+                        "secondary": "#a3b1c6",
+                        "on-tertiary-container": "#ffc6b2",
+                        "inverse-primary": "#003d9b",
+                        "primary-fixed-dim": "#b2c5ff",
+                        "surface-variant": "#434654",
+                        "surface-container-highest": "#1c2c42",
+                        "on-error": "#ffffff",
+                        "surface-container-low": "#0b1c30",
+                        "inverse-surface": "#ecf1f8",
+                        "error-container": "#93000a",
+                        "on-secondary-container": "#d0e1fb",
+                        "surface-tint": "#b2c5ff",
+                        "on-surface-variant": "#c3c6d6",
+                        "on-primary-fixed-variant": "#b2c5ff",
+                        "outline": "#737685",
+                        "on-error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "20px",
+                        "unit": "8px",
+                        "container-padding": "24px",
+                        "element-gap": "16px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"],
+                        "label-mono": ["JetBrains Mono"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "label-mono": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="font-body-md bg-background text-on-background">
+<!-- SideNavBar (Predicted Component) -->
+<aside class="h-screen w-64 fixed left-0 top-0 flex flex-col p-container-padding gap-element-gap z-50 bg-surface nm-flat">
+<div class="mb-8">
+<h1 class="font-display text-headline-lg font-extrabold text-primary">KIA</h1>
+<p class="text-body-md text-secondary opacity-70">Industrial Ops</p>
+</div>
+<nav class="flex-1 flex flex-col gap-4">
+<!-- Overview - ACTIVE -->
+<a class="flex items-center gap-4 px-4 py-3 text-primary font-bold nm-active rounded-xl transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<!-- Production -->
+<a class="flex items-center gap-4 px-4 py-3 text-secondary hover:text-primary transition-all duration-300 rounded-xl" href="#">
+<span class="material-symbols-outlined" data-icon="precision_manufacturing">precision_manufacturing</span>
+<span>Production</span>
+</a>
+<!-- Inventory -->
+<a class="flex items-center gap-4 px-4 py-3 text-secondary hover:text-primary transition-all duration-300 rounded-xl" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span>Inventory</span>
+</a>
+<!-- Logistics -->
+<a class="flex items-center gap-4 px-4 py-3 text-secondary hover:text-primary transition-all duration-300 rounded-xl" href="#">
+<span class="material-symbols-outlined" data-icon="local_shipping">local_shipping</span>
+<span>Logistics</span>
+</a>
+<!-- Settings -->
+<a class="flex items-center gap-4 px-4 py-3 text-secondary hover:text-primary transition-all duration-300 rounded-xl" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="mt-auto nm-inset p-4 rounded-2xl flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img alt="Manager Avatar" class="w-full h-full object-cover" data-alt="A professional male manager in a dark industrial control room setting. He is wearing a modern tech-focused uniform and looking confidently towards the viewer. The background features blurred high-tech monitors showing data streams in deep blue and glowing white light, maintaining a sophisticated dark-mode aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlDeG61ZDJGp874a0zugITvRA6Mcwqv58EVSNzehsxkW3gqMU6LvdvtiKl0d6NmHl9tUoF2mIxEiIF76bq9YVnPQsptXOQsF2v8jq49slLkIO-0HtizxIizZUmr0PvNpJhZyqkVYgG4-L7LjZR01XWgeCIsz8jzpwTSDwVxu41_r3oqkQU1jkAj596yXT9zloy2ZapYrIvUcuq4RFPQik_jyJW354BrTtqgoq9cZkUZ4cy9afZu7BwH1UJZHkijPiJyofYt56E3PdP"/>
+</div>
+<div class="flex flex-col">
+<span class="text-label-mono text-on-surface font-bold">K. Park</span>
+<span class="text-[10px] text-secondary">Plant Director</span>
+</div>
+</div>
+</aside>
+<!-- TopAppBar (Predicted Component) -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-20 flex justify-between items-center px-container-padding z-40 bg-surface">
+<div class="flex items-center gap-6">
+<div class="nm-inset px-4 py-2 rounded-full w-80 flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-md w-full text-on-surface" placeholder="Search plant assets..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex gap-4">
+<button class="w-10 h-10 rounded-full flex items-center justify-center nm-flat hover:scale-95 transition-transform text-secondary">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center nm-flat hover:scale-95 transition-transform text-secondary">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center nm-flat hover:scale-95 transition-transform text-error">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="ml-64 mt-20 p-container-padding min-h-screen">
+<!-- Welcome Section -->
+<div class="flex justify-between items-end mb-element-gap">
+<div>
+<h2 class="font-headline-lg text-on-surface">Plant Control Center</h2>
+<p class="text-body-md text-secondary">Monitoring Gwangju Assembly Plant 1 • Active Shift: Alpha</p>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-2 rounded-xl font-bold text-primary nm-flat flex items-center gap-2 hover:nm-active transition-all">
+<span class="material-symbols-outlined text-[18px]" data-icon="refresh">refresh</span>
+                    Sync System
+                </button>
+<button class="px-6 py-2 rounded-xl font-bold bg-primary text-on-primary-fixed nm-flat hover:opacity-90 transition-all">
+                    Generate Report
+                </button>
+</div>
+</div>
+<!-- KPI Grid -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-gutter mb-gutter">
+<!-- KPI 1 -->
+<div class="nm-flat p-6 rounded-3xl flex flex-col gap-2 relative overflow-hidden">
+<div class="flex justify-between items-start">
+<span class="text-secondary font-bold">Hourly Yield</span>
+<span class="material-symbols-outlined text-primary" data-icon="speed">speed</span>
+</div>
+<div class="text-[32px] font-black text-on-surface">1,242 <span class="text-body-md font-normal text-secondary">Units</span></div>
+<div class="flex items-center gap-1 text-[12px] text-green-400">
+<span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span>
+                    4.2% vs target
+                </div>
+<div class="absolute bottom-0 left-0 w-full h-1 bg-primary/20">
+<div class="h-full bg-primary" style="width: 82%;"></div>
+</div>
+</div>
+<!-- KPI 2 -->
+<div class="nm-flat p-6 rounded-3xl flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<span class="text-secondary font-bold">OEE Status</span>
+<span class="material-symbols-outlined text-tertiary-fixed-dim" data-icon="settings_suggest">settings_suggest</span>
+</div>
+<div class="text-[32px] font-black text-on-surface">94.8%</div>
+<div class="flex items-center gap-1 text-[12px] text-green-400">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle">check_circle</span>
+                    Optimal range
+                </div>
+</div>
+<!-- KPI 3 -->
+<div class="nm-flat p-6 rounded-3xl flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<span class="text-secondary font-bold">Energy Draw</span>
+<span class="material-symbols-outlined text-primary" data-icon="bolt">bolt</span>
+</div>
+<div class="text-[32px] font-black text-on-surface">14.2 <span class="text-body-md font-normal text-secondary">MW/h</span></div>
+<div class="flex items-center gap-1 text-[12px] text-yellow-400">
+<span class="material-symbols-outlined text-[14px]" data-icon="trending_down">trending_down</span>
+                    -2.1% (Saving)
+                </div>
+</div>
+<!-- KPI 4 -->
+<div class="nm-flat p-6 rounded-3xl flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<span class="text-secondary font-bold">Uptime</span>
+<span class="material-symbols-outlined text-green-400 led-pulse" data-icon="fiber_manual_record" style="font-variation-settings: 'FILL' 1;">fiber_manual_record</span>
+</div>
+<div class="text-[32px] font-black text-on-surface">99.98%</div>
+<div class="flex items-center gap-1 text-[12px] text-secondary">
+                    Next PM in 48h
+                </div>
+</div>
+</div>
+<!-- Main Dashboard Content Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter h-full">
+<!-- Asset Distribution Grid (Bento Style) -->
+<div class="lg:col-span-2 grid grid-cols-2 gap-gutter">
+<!-- Large Status Visualization -->
+<div class="col-span-2 nm-flat rounded-[40px] p-8 flex flex-col gap-6 min-h-[400px] relative overflow-hidden">
+<div class="flex justify-between items-center z-10">
+<div>
+<h3 class="text-headline-lg font-black text-on-surface">Production Flow</h3>
+<p class="text-secondary">Real-time assembly line sequencing</p>
+</div>
+<div class="flex gap-2">
+<span class="px-4 py-1 rounded-full nm-inset text-label-mono text-primary">LIVE VIEW</span>
+</div>
+</div>
+<div class="flex-1 nm-inset rounded-3xl relative p-4 flex items-center justify-center overflow-hidden">
+<!-- Abstract Grid Background for Chart -->
+<div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(#ffffff 1px, transparent 1px); background-size: 32px 32px;"></div>
+<!-- Visual Mock of a wave graph -->
+<div class="w-full h-48 flex items-end justify-between px-8 gap-2">
+<div class="w-full bg-primary/20 rounded-t-lg transition-all duration-700 hover:bg-primary/40" style="height: 60%"></div>
+<div class="w-full bg-primary/40 rounded-t-lg transition-all duration-700 hover:bg-primary/60" style="height: 85%"></div>
+<div class="w-full bg-primary/30 rounded-t-lg transition-all duration-700 hover:bg-primary/50" style="height: 45%"></div>
+<div class="w-full bg-primary/60 rounded-t-lg transition-all duration-700 hover:bg-primary/80" style="height: 95%"></div>
+<div class="w-full bg-primary/25 rounded-t-lg transition-all duration-700 hover:bg-primary/45" style="height: 70%"></div>
+<div class="w-full bg-primary/50 rounded-t-lg transition-all duration-700 hover:bg-primary/70" style="height: 80%"></div>
+<div class="w-full bg-primary/40 rounded-t-lg transition-all duration-700 hover:bg-primary/60" style="height: 55%"></div>
+<div class="w-full bg-primary/70 rounded-t-lg transition-all duration-700 hover:bg-primary/90" style="height: 100%"></div>
+</div>
+<!-- Data Markers -->
+<div class="absolute top-10 right-10 flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-primary shadow-[0_0_8px_#b2c5ff]"></span>
+<span class="text-label-mono text-[10px]">MAIN LINE</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-secondary"></span>
+<span class="text-label-mono text-[10px]">SUB ASSEMBLY</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Secondary Stats -->
+<div class="nm-flat rounded-3xl p-6 flex flex-col gap-4">
+<h4 class="font-bold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="inventory">inventory</span>
+                        Raw Materials
+                    </h4>
+<div class="flex flex-col gap-3">
+<div class="flex justify-between items-center text-sm">
+<span class="text-secondary">Steel Coil A-42</span>
+<span class="text-on-surface">62%</span>
+</div>
+<div class="w-full h-2 nm-inset rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 62%"></div>
+</div>
+<div class="flex justify-between items-center text-sm mt-2">
+<span class="text-secondary">Polymers R-19</span>
+<span class="text-on-surface">18%</span>
+</div>
+<div class="w-full h-2 nm-inset rounded-full overflow-hidden">
+<div class="h-full bg-tertiary-container" style="width: 18%"></div>
+</div>
+</div>
+</div>
+<div class="nm-flat rounded-3xl p-6 flex flex-col gap-4 bg-surface-container-high">
+<div class="flex items-center justify-between">
+<h4 class="font-bold text-on-surface">Plant Health</h4>
+<span class="text-label-mono text-[10px] text-green-400">OPTIMAL</span>
+</div>
+<div class="flex-1 flex items-center justify-center">
+<div class="relative w-24 h-24 rounded-full nm-flat flex items-center justify-center">
+<div class="absolute inset-2 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+<span class="text-headline-lg font-black text-primary">8.4</span>
+</div>
+</div>
+<p class="text-[10px] text-center text-secondary">System integrity score calculated across 1,204 sensors.</p>
+</div>
+</div>
+<!-- Status by Production Line (Right Sidebar Column) -->
+<div class="flex flex-col gap-gutter">
+<div class="nm-flat rounded-[40px] p-8 flex flex-col gap-6 h-full">
+<div class="flex justify-between items-center">
+<h3 class="text-headline-lg font-black text-on-surface">Asset List</h3>
+<span class="material-symbols-outlined text-secondary" data-icon="filter_list">filter_list</span>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Line Item 1 -->
+<div class="p-4 rounded-2xl nm-inset flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl nm-flat flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="robot_2">robot_2</span>
+</div>
+<div>
+<div class="text-on-surface font-bold text-sm">Welding Unit G1</div>
+<div class="text-[10px] text-secondary">Active • 42.1°C</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-green-400 led-pulse" style="font-variation-settings: 'FILL' 1;"></span>
+</div>
+<!-- Line Item 2 -->
+<div class="p-4 rounded-2xl nm-inset flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl nm-flat flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="conveyor_belt">conveyor_belt</span>
+</div>
+<div>
+<div class="text-on-surface font-bold text-sm">Conveyor System 4</div>
+<div class="text-[10px] text-secondary">Active • Normal Load</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-green-400 led-pulse" style="font-variation-settings: 'FILL' 1;"></span>
+</div>
+<!-- Line Item 3 -->
+<div class="p-4 rounded-2xl nm-inset flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl nm-flat flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary-container" data-icon="warning">warning</span>
+</div>
+<div>
+<div class="text-on-surface font-bold text-sm">Paint Spray R3</div>
+<div class="text-[10px] text-tertiary-fixed-dim">Maintenance Required</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-tertiary-container led-pulse" style="font-variation-settings: 'FILL' 1;"></span>
+</div>
+<!-- Line Item 4 -->
+<div class="p-4 rounded-2xl nm-inset flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl nm-flat flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="stamping">precision_manufacturing</span>
+</div>
+<div>
+<div class="text-on-surface font-bold text-sm">Stamping Press B</div>
+<div class="text-[10px] text-secondary">Idle • Shift Change</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-yellow-400 led-pulse" style="font-variation-settings: 'FILL' 1;"></span>
+</div>
+</div>
+<div class="mt-auto nm-flat rounded-3xl p-4 flex items-center justify-center gap-4 bg-surface-bright">
+<div class="text-center">
+<div class="text-label-mono text-secondary text-[10px]">TOTAL ASSETS</div>
+<div class="text-headline-lg font-black text-on-surface">1,042</div>
+</div>
+<div class="w-[1px] h-10 bg-outline-variant/20"></div>
+<div class="text-center">
+<div class="text-label-mono text-secondary text-[10px]">OFFLINE</div>
+<div class="text-headline-lg font-black text-tertiary-container">03</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB Interaction -->
+<button class="fixed bottom-10 right-10 w-16 h-16 rounded-full nm-flat bg-primary text-on-primary-fixed flex items-center justify-center z-50 hover:scale-110 active:nm-inset transition-all group">
+<span class="material-symbols-outlined text-[32px] group-hover:rotate-90 transition-transform" data-icon="add">add</span>
+</button>
+<script>
+        // Micro-interaction for buttons
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mousedown', () => {
+                if (btn.classList.contains('nm-flat')) {
+                    btn.style.boxShadow = 'inset 4px 4px 8px rgba(0, 0, 0, 0.6), inset -4px -4px 8px rgba(255, 255, 255, 0.03)';
+                }
+            });
+            btn.addEventListener('mouseup', () => {
+                if (btn.classList.contains('nm-flat')) {
+                    btn.style.boxShadow = '8px 8px 16px rgba(0, 0, 0, 0.6), -8px -8px 16px rgba(255, 255, 255, 0.03)';
+                }
+            });
+        });
+
+        // Simple real-time clock indicator for the dashboard header
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            // This is just for atmosphere, we can inject it if needed
+            console.log(`System Time: ${timeStr} | ${dateStr}`);
+        }
+        setInterval(updateTime, 1000);
+    </script>
+</body></html>

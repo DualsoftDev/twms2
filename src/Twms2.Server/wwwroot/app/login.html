@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>로그인 — TWMS</title>
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+</head>
+<body class="font-body-md">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div class="nm-card" style="width:100%;max-width:380px;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <h1 class="font-display text-primary" style="font-size:40px;font-weight:800;margin:0;line-height:1;">TWMS</h1>
+        <p class="text-on-surface-variant" style="margin:6px 0 0;font-size:14px;">Total Web Management System</p>
+      </div>
+
+      <form id="login-form" style="display:flex;flex-direction:column;gap:16px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;" class="nm-inset">
+          <span class="material-symbols-outlined text-on-surface-variant">person</span>
+          <input id="userName" type="text" autocomplete="username" placeholder="사용자 ID"
+                 style="background:transparent;border:none;outline:none;width:100%;color:var(--c-on-surface);font-size:15px;" />
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;" class="nm-inset">
+          <span class="material-symbols-outlined text-on-surface-variant">lock</span>
+          <input id="password" type="password" autocomplete="current-password" placeholder="비밀번호"
+                 style="background:transparent;border:none;outline:none;width:100%;color:var(--c-on-surface);font-size:15px;" />
+        </label>
+
+        <div id="login-error" class="chip chip-error" style="display:none;justify-content:center;padding:10px;border-radius:12px;"></div>
+
+        <button id="login-btn" type="submit" class="nm-press"
+                style="margin-top:4px;padding:14px;border-radius:14px;border:none;background:var(--c-primary);color:var(--c-on-primary);font-weight:700;font-size:15px;cursor:pointer;box-shadow:6px 6px 12px var(--nm-dark),-6px -6px 12px var(--nm-light);">
+          로그인
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const form = document.getElementById('login-form');
+      const errBox = document.getElementById('login-error');
+      const btn = document.getElementById('login-btn');
+      const params = new URLSearchParams(location.search);
+      const returnUrl = params.get('returnUrl') || '/';
+
+      function showErr(msg) { errBox.textContent = msg; errBox.style.display = 'flex'; }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errBox.style.display = 'none';
+        const userName = document.getElementById('userName').value.trim();
+        const password = document.getElementById('password').value;
+        if (!userName) { showErr('사용자 ID를 입력하세요.'); return; }
+        btn.disabled = true; btn.textContent = '로그인 중...';
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ userName, password }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            location.href = returnUrl.startsWith('/') ? returnUrl : '/';
+          } else {
+            showErr(data.message || '로그인에 실패했습니다.');
+            btn.disabled = false; btn.textContent = '로그인';
+          }
+        } catch (ex) {
+          showErr('연결 오류: ' + ex.message);
+          btn.disabled = false; btn.textContent = '로그인';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

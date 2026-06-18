@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>상태 모니터 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 상태 모니터 페이지 전용 (theme.css 미수록 컨트롤 — history.html 톤 재사용) ── */
+    .hist-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .hist-divider { width: 1px; height: 24px; background: var(--c-outline-variant); opacity: 0.5; margin: 0 2px; }
+    .hist-spacer { flex: 1 1 auto; }
+
+    .hist-input {
+      background: var(--c-surface); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px;
+      padding: 8px 12px; font-size: 13px; font-family: inherit;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .hist-input::placeholder { color: var(--c-outline); }
+    select.hist-input { cursor: pointer; }
+    .hist-search { display: inline-flex; align-items: center; gap: 8px; padding-left: 12px; }
+    .hist-search .material-symbols-outlined { color: var(--c-outline); font-size: 20px; }
+    .hist-search input { background: transparent; border: none; outline: none; color: var(--c-on-surface); font-size: 13px; width: 180px; }
+
+    .hist-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 12px; cursor: pointer;
+      font-size: 13px; font-weight: 700; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .hist-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .hist-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .hist-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .hist-btn .material-symbols-outlined { font-size: 18px; }
+
+    .hist-count { font-size: 13px; color: var(--c-on-surface-variant); margin-bottom: 10px; font-weight: 600; }
+
+    /* 테이블 컨테이너 (스크롤 + 인셋) */
+    .hist-table-wrap {
+      border-radius: 16px; padding: 6px 12px; overflow-x: auto;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low);
+    }
+    .hist-table-wrap .nm-table th { white-space: nowrap; cursor: pointer; user-select: none; }
+    .hist-table-wrap .nm-table th.nosort { cursor: default; }
+    .hist-table-wrap .nm-table th .sort-arrow { font-size: 12px; opacity: 0.6; vertical-align: middle; }
+    .hist-table-wrap .nm-table td { white-space: nowrap; }
+    .hist-table-wrap .nm-table tbody tr { cursor: pointer; }
+    .hist-table-wrap .nm-table tbody tr:hover td { background: var(--c-surface-container-high); }
+    .hist-table-wrap .nm-table tbody tr.selected td { background: var(--c-surface-container-high); }
+    .hist-empty { padding: 20px; color: var(--c-on-surface-variant); font-size: 14px; }
+
+    /* 상태/온라인 점 */
+    .st-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .st-dot.online { background: var(--health-backedup); box-shadow: 0 0 6px var(--health-backedup); }
+    .st-dot.offline { background: var(--health-unknown); }
+    .st-inline { display: inline-flex; align-items: center; gap: 6px; }
+    .st-ping-ok { color: var(--health-backedup); font-weight: 700; }
+    .st-ping-bad { color: var(--health-failed); font-weight: 700; }
+    .st-ping-unk { color: var(--c-on-surface-variant); }
+
+    /* 본문 레이아웃: 테이블 + 상세 패널 */
+    .st-layout { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+    .st-layout.with-detail { grid-template-columns: minmax(0, 1fr) 360px; }
+    @media (max-width: 1100px) { .st-layout.with-detail { grid-template-columns: 1fr; } }
+
+    /* 상세 패널 */
+    .st-detail { position: sticky; top: 80px; }
+    .st-detail-close {
+      width: 32px; height: 32px; border-radius: 9999px; border: none; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light);
+    }
+    .st-detail-close:hover { color: var(--c-primary); }
+    .st-detail-close:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .st-field { padding: 10px 0; border-bottom: 1px solid var(--c-outline-variant); }
+    .st-field:last-child { border-bottom: none; }
+    .st-field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--c-on-surface-variant); font-weight: 700; margin-bottom: 4px; }
+    .st-field-value { font-size: 14px; color: var(--c-on-surface); }
+  </style>
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">상태 모니터</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">자산 백업 상태 · 에이전트 · 네트워크 Ping</p>
+      </div>
+      <div id="st-clock" class="nm-flat-sm" style="padding:8px 16px;border-radius:12px;display:flex;align-items:center;gap:8px;">
+        <span class="w-2 h-2 rounded-full status-led" style="background:var(--health-backedup);"></span>
+        <span class="font-label-mono text-on-surface" style="font-size:12px;">30s POLL</span>
+      </div>
+    </div>
+
+    <div class="st-layout" id="st-layout">
+      <!-- 테이블 카드 -->
+      <div class="nm-card">
+        <div class="hist-filter">
+          <div class="nm-inset hist-search" style="border-radius:10px;">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="st-search" placeholder="자산명 / IP 검색" />
+          </div>
+          <div class="hist-divider"></div>
+          <select class="hist-input" id="st-type" style="width:150px;"><option value="">전체 타입</option></select>
+          <select class="hist-input" id="st-health" style="width:140px;">
+            <option value="">전체 상태</option>
+            <option value="backedup">백업 갱신</option>
+            <option value="unchanged">변경 없음</option>
+            <option value="failed">작업 실패</option>
+            <option value="inprogress">작업중</option>
+            <option value="unknown">내역 없음</option>
+          </select>
+          <select class="hist-input" id="st-online" style="width:130px;">
+            <option value="">에이전트 전체</option>
+            <option value="online">온라인</option>
+            <option value="offline">오프라인</option>
+          </select>
+          <div class="hist-spacer"></div>
+          <button class="hist-btn" id="st-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+        </div>
+        <div class="hist-count" id="st-count"></div>
+        <div class="hist-table-wrap"><table class="nm-table" id="st-table"></table></div>
+      </div>
+
+      <!-- 상세 패널 (행 클릭 시 표시) -->
+      <div class="nm-card st-detail" id="st-detail" style="display:none;">
+        <div class="panel-header">
+          <span class="panel-title" id="st-detail-name">자산 상세</span>
+          <button class="st-detail-close" id="st-detail-close" title="닫기"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="st-detail-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/status.js"></script>
+</body>
+</html>

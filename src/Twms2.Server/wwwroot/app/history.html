@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>자산 통합조회 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 자산 통합조회 페이지 전용 (theme.css 미수록 컨트롤) ── */
+    /* 탭 바: 대시보드 nm-flat 톤 + 활성 탭 inset */
+    .hist-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .hist-tab {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 18px; border-radius: 14px; cursor: pointer;
+      font-weight: 700; font-size: 14px; color: var(--c-on-surface-variant);
+      background: var(--c-surface); border: none;
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.2s ease;
+    }
+    .hist-tab:hover { color: var(--c-primary); }
+    .hist-tab.active {
+      color: var(--c-primary);
+      box-shadow: inset 4px 4px 8px var(--nm-dark), inset -4px -4px 8px var(--nm-light);
+    }
+    .hist-tab .material-symbols-outlined { font-size: 20px; }
+
+    /* 필터 바 */
+    .hist-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .hist-divider { width: 1px; height: 24px; background: var(--c-outline-variant); opacity: 0.5; margin: 0 2px; }
+    .hist-spacer { flex: 1 1 auto; }
+
+    /* 인셋 입력 (헤더 검색과 동일 톤) */
+    .hist-input {
+      background: var(--c-surface); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px;
+      padding: 8px 12px; font-size: 13px; font-family: inherit;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .hist-input::placeholder { color: var(--c-outline); }
+    select.hist-input { cursor: pointer; }
+    .hist-search { display: inline-flex; align-items: center; gap: 8px; padding-left: 12px; }
+    .hist-search .material-symbols-outlined { color: var(--c-outline); font-size: 20px; }
+    .hist-search input { background: transparent; border: none; outline: none; color: var(--c-on-surface); font-size: 13px; width: 160px; }
+
+    /* 세그먼트 버튼 그룹 (포함/정확/제외, 기간) */
+    .hist-seg { display: inline-flex; border-radius: 10px; overflow: hidden;
+      box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light); }
+    .hist-seg-btn {
+      padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant); transition: all 0.15s ease;
+    }
+    .hist-seg-btn + .hist-seg-btn { border-left: 1px solid var(--c-outline-variant); }
+    .hist-seg-btn.active {
+      color: var(--c-primary);
+      box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light);
+    }
+
+    /* 액션 버튼 (저장/다운로드/링크 복사) */
+    .hist-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 12px; cursor: pointer;
+      font-size: 13px; font-weight: 700; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .hist-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .hist-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .hist-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .hist-btn .material-symbols-outlined { font-size: 18px; }
+    .hist-btn-success:hover:not(:disabled) { color: var(--health-backedup); }
+
+    /* 결과 카운트 */
+    .hist-count { font-size: 13px; color: var(--c-on-surface-variant); margin-bottom: 10px; font-weight: 600; }
+
+    /* 테이블 컨테이너 (스크롤 + 인셋) */
+    .hist-table-wrap {
+      border-radius: 16px; padding: 6px 12px; overflow-x: auto;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low);
+    }
+    .hist-table-wrap .nm-table th { white-space: nowrap; cursor: pointer; user-select: none; }
+    .hist-table-wrap .nm-table th .sort-arrow { font-size: 12px; opacity: 0.6; }
+    .hist-table-wrap .nm-table td { white-space: nowrap; }
+    .hist-table-wrap .nm-table td.wrap { white-space: normal; max-width: 220px; }
+
+    /* 칩(인라인 아이콘 포함) */
+    .chip .material-symbols-outlined { font-size: 14px; margin-right: 3px; }
+    .chip-ghost {
+      background: transparent; color: var(--c-on-surface-variant);
+      border: 1px solid var(--c-outline-variant);
+    }
+    .hist-iconbtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: all 0.15s ease; text-decoration: none;
+    }
+    .hist-iconbtn:hover { color: var(--c-primary); }
+    .hist-iconbtn:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .hist-iconbtn .material-symbols-outlined { font-size: 18px; }
+
+    /* 페이저 */
+    .hist-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--c-on-surface-variant); }
+    .hist-empty { padding: 20px; color: var(--c-on-surface-variant); font-size: 14px; }
+    .hist-tabpanel { display: none; }
+    .hist-tabpanel.active { display: block; }
+  </style>
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">자산 통합조회</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">자산 정보 · 백업 이력 · 통신 이력</p>
+      </div>
+    </div>
+
+    <!-- 탭 -->
+    <div class="hist-tabs" id="hist-tabs">
+      <button class="hist-tab" data-tab="0"><span class="material-symbols-outlined">dns</span>자산 정보</button>
+      <button class="hist-tab" data-tab="1"><span class="material-symbols-outlined">history</span>백업 이력</button>
+      <button class="hist-tab" data-tab="2"><span class="material-symbols-outlined">wifi</span>통신 이력</button>
+    </div>
+
+    <!-- ─── 탭 0: 자산 정보 ─── -->
+    <div class="hist-tabpanel" data-panel="0">
+      <div class="nm-card">
+        <div class="hist-filter">
+          <div class="nm-inset hist-search" style="border-radius:10px;">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="a-search" placeholder="자산명 / IP 검색" />
+          </div>
+          <div class="hist-seg" id="a-mode">
+            <button class="hist-seg-btn active" data-mode="contains">포함</button>
+            <button class="hist-seg-btn" data-mode="exact">정확한 단어</button>
+            <button class="hist-seg-btn" data-mode="exclude">제외</button>
+          </div>
+          <div class="hist-divider"></div>
+          <select class="hist-input" id="a-type" style="width:140px;"><option value="">전체 타입</option></select>
+          <select class="hist-input" id="a-line" style="width:140px;"><option value="">전체 라인</option></select>
+          <select class="hist-input" id="a-health" style="width:140px;">
+            <option value="">전체 상태</option>
+            <option value="backedup">백업 갱신</option>
+            <option value="unchanged">변경 없음</option>
+            <option value="failed">작업 실패</option>
+            <option value="inprogress">작업중</option>
+            <option value="unknown">내역 없음</option>
+          </select>
+          <div class="hist-spacer"></div>
+          <button class="hist-btn hist-btn-success" id="a-bulk"><span class="material-symbols-outlined">download</span>프로젝트 일괄다운로드</button>
+          <button class="hist-btn" id="a-csv"><span class="material-symbols-outlined">save</span>저장</button>
+          <button class="hist-btn" id="a-link"><span class="material-symbols-outlined">link</span>링크 복사</button>
+        </div>
+        <div class="hist-count" id="a-count"></div>
+        <div class="hist-table-wrap"><table class="nm-table" id="a-table"></table></div>
+        <div class="hist-pager" id="a-pager"></div>
+      </div>
+    </div>
+
+    <!-- ─── 탭 1: 백업 이력 ─── -->
+    <div class="hist-tabpanel" data-panel="1">
+      <div class="nm-card">
+        <div class="hist-filter">
+          <div class="nm-inset hist-search" style="border-radius:10px;">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="b-search" placeholder="검색어 입력" />
+          </div>
+          <div class="hist-seg" id="b-mode">
+            <button class="hist-seg-btn active" data-mode="contains">포함</button>
+            <button class="hist-seg-btn" data-mode="exact">정확한 단어</button>
+            <button class="hist-seg-btn" data-mode="exclude">제외</button>
+          </div>
+          <div class="hist-divider"></div>
+          <input type="date" class="hist-input" id="b-start" />
+          <span style="opacity:0.5;">→</span>
+          <input type="date" class="hist-input" id="b-end" />
+          <div class="hist-seg" id="b-period">
+            <button class="hist-seg-btn active" data-days="0">오늘</button>
+            <button class="hist-seg-btn" data-days="7">최근 7일</button>
+            <button class="hist-seg-btn" data-days="30">최근 30일</button>
+          </div>
+          <div class="hist-divider"></div>
+          <select class="hist-input" id="b-result" style="width:120px;">
+            <option value="">전체 결과</option>
+            <option value="백업 갱신">백업 갱신</option>
+            <option value="변경 없음">변경 없음</option>
+            <option value="작업 실패">작업 실패</option>
+            <option value="작업중">작업중</option>
+          </select>
+          <select class="hist-input" id="b-line" style="width:140px;"><option value="">전체 라인</option></select>
+          <div class="hist-spacer"></div>
+          <button class="hist-btn" id="b-csv"><span class="material-symbols-outlined">save</span>저장</button>
+          <button class="hist-btn" id="b-link"><span class="material-symbols-outlined">link</span>링크 복사</button>
+        </div>
+        <div class="hist-count" id="b-count"></div>
+        <div class="hist-table-wrap"><table class="nm-table" id="b-table"></table></div>
+        <div class="hist-pager" id="b-pager"></div>
+      </div>
+    </div>
+
+    <!-- ─── 탭 2: 통신 이력 ─── -->
+    <div class="hist-tabpanel" data-panel="2">
+      <div class="nm-card">
+        <div class="hist-filter">
+          <div class="nm-inset hist-search" style="border-radius:10px;">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="p-search" placeholder="자산명 / IP 검색" />
+          </div>
+          <div class="hist-seg" id="p-mode">
+            <button class="hist-seg-btn active" data-mode="contains">포함</button>
+            <button class="hist-seg-btn" data-mode="exact">정확한 단어</button>
+            <button class="hist-seg-btn" data-mode="exclude">제외</button>
+          </div>
+          <div class="hist-divider"></div>
+          <input type="date" class="hist-input" id="p-start" />
+          <span style="opacity:0.5;">→</span>
+          <input type="date" class="hist-input" id="p-end" />
+          <div class="hist-seg" id="p-period">
+            <button class="hist-seg-btn active" data-days="0">오늘</button>
+            <button class="hist-seg-btn" data-days="7">최근 7일</button>
+            <button class="hist-seg-btn" data-days="30">최근 30일</button>
+          </div>
+          <div class="hist-divider"></div>
+          <select class="hist-input" id="p-status" style="width:120px;">
+            <option value="">전체 상태</option>
+            <option value="online">온라인</option>
+            <option value="offline">오프라인</option>
+          </select>
+          <select class="hist-input" id="p-line" style="width:140px;"><option value="">전체 라인</option></select>
+          <div class="hist-spacer"></div>
+          <button class="hist-btn" id="p-csv"><span class="material-symbols-outlined">save</span>저장</button>
+          <button class="hist-btn" id="p-link"><span class="material-symbols-outlined">link</span>링크 복사</button>
+        </div>
+        <div class="hist-count" id="p-count"></div>
+        <div class="hist-table-wrap"><table class="nm-table" id="p-table"></table></div>
+        <div class="hist-pager" id="p-pager"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/history.js"></script>
+</body>
+</html>
