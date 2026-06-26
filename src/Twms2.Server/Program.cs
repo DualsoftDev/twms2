@@ -130,12 +130,17 @@ app.Services.GetRequiredService<DexaNotificationService>();
     var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
     startupLogger.LogInformation("캐시 워밍업 시작...");
     using var scope = app.Services.CreateScope();
-    var dexaRead = scope.ServiceProvider.GetRequiredService<DexaReadService>();
-    var assets = await dexaRead.GetViewAssetsAsync();
-    var actionsTask = dexaRead.GetRecentActionsAsync(200);
-    var agentsTask = dexaRead.GetAgentsAsync();
-    await Task.WhenAll(actionsTask, agentsTask);
-    startupLogger.LogInformation("캐시 워밍업 완료: 자산 {Count}건 로드됨", assets.Count);
+    var sp = scope.ServiceProvider;
+    var statusService = sp.GetRequiredService<AssetStatusService>();
+    var dashboardService = sp.GetRequiredService<DashboardService>();
+    // 첫 화면(/api/nav + /api/dashboard) 이 실제로 쓰는 합성 데이터를 통째로 데운다:
+    //  - 합성 자산상태: 병합자산·에이전트·최신액션·전체액션(연속실패 집계)·핑·라인맵 + 합성 캐시 시드
+    //  - 대시보드 코어: 7일 액션·드라이브 용량 등
+    // 이전 워밍업은 자산·최근200건만 데워 전체액션/핑/머지자산 비용을 첫 클릭이 다 냈음(콜드).
+    var statusTask = statusService.GetAssetStatusesAsync();
+    var coreTask = dashboardService.GetDashboardCoreAsync();
+    await Task.WhenAll(statusTask, coreTask);
+    startupLogger.LogInformation("캐시 워밍업 완료: 자산 상태 {Count}건 로드됨", statusTask.Result.Count);
 }
 
 if (!app.Environment.IsDevelopment())
@@ -260,8 +265,9 @@ app.MapGet("/api/download/backup/{assetId:int}/{version:int}", (int assetId, int
 
 // 프로젝트 일괄 다운로드 API (필터된 자산들의 최신 백업을 하나의 ZIP으로)
 // POST: 자산 1000개 이상 시 URL 길이 제한 회피 + Response.Body 직접 스트리밍으로 메모리 절약
-app.MapPost("/api/download/backup/bulk", async (HttpContext ctx, DexaReadService dexaRead) =>
+app.MapPost("/api/download/backup/bulk", async (HttpContext ctx, DexaReadService dexaRead, ILoggerFactory loggerFactory) =>
 {
+    var logger = loggerFactory.CreateLogger("BulkDownload");
     int[] assetIds;
     try
     {
@@ -293,6 +299,7 @@ app.MapPost("/api/download/backup/bulk", async (HttpContext ctx, DexaReadService
 
     // 대상 자산의 백업 파일 수집
     var filesToPack = new List<(string ZipEntryName, string FilePath)>();
+    long totalBytes = 0;
     foreach (var assetId in assetIds)
     {
         if (!versionMap.TryGetValue(assetId, out var version)) continue;
@@ -309,6 +316,7 @@ app.MapPost("/api/download/backup/bulk", async (HttpContext ctx, DexaReadService
         var assetName = nameMap.TryGetValue(assetId, out var n) ? n : assetId.ToString();
         var entryName = $"{assetName}_V{version}.zip";
         filesToPack.Add((entryName, fullPath));
+        totalBytes += new FileInfo(fullPath).Length;
     }
 
     if (filesToPack.Count == 0)
@@ -317,6 +325,20 @@ app.MapPost("/api/download/backup/bulk", async (HttpContext ctx, DexaReadService
         await ctx.Response.WriteAsync("다운로드 가능한 백업 파일이 없습니다.");
         return;
     }
+
+    // ZipArchive 는 동기 쓰기만 지원하므로 Response.Body 직접 스트리밍을 위해 이 요청에 한해 동기 IO 를 허용한다.
+    // (기본값 AllowSynchronousIO=false 면 ZIP 마무리 단계에서 InvalidOperationException 이 나 다운로드가 깨진다.)
+    var bodyControl = ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
+    if (bodyControl != null) bodyControl.AllowSynchronousIO = true;
+
+    // 경고: 동기 스트리밍은 다운로드가 끝날 때까지 워커 스레드를 점유한다. 대용량/동시 요청이 겹치면
+    // 스레드 풀이 압박될 수 있어, 큰 묶음은 운영에서 추적할 수 있도록 경고 로그를 남긴다.
+    const long WarnBytes = 500L * 1024 * 1024; // 500MB
+    const int WarnCount = 300;
+    if (totalBytes >= WarnBytes || filesToPack.Count >= WarnCount)
+        logger.LogWarning(
+            "대용량 일괄다운로드: 자산 {Count}건 / 약 {SizeMB}MB 를 동기 스트리밍합니다. 동시 요청이 많으면 스레드 풀 점유에 주의하세요.",
+            filesToPack.Count, totalBytes / (1024 * 1024));
 
     // Response.Body에 직접 스트리밍 (메모리에 전체 ZIP을 올리지 않음)
     var fileName = $"DEXA_Backup_{DateTime.Now:yyyyMMdd_HHmm}.zip";
@@ -415,6 +437,9 @@ var staticRoutes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCa
 // (정확매칭을 먼저 보므로 /assets·/assets/table 은 위 딕셔너리가 우선.)
 var assetDetailRx = new System.Text.RegularExpressions.Regex(
     @"^/(?:assets|qr)/\d+/?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+// 정적 레이아웃 편집기: /admin/layout/{id}/edit → layout-editor.html (Blazor /admin/layout/{id} 와 별개 경로).
+var layoutEditorRx = new System.Text.RegularExpressions.Regex(
+    @"^/admin/layout/\d+/edit/?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 var staticAppRoot = Path.Combine(
     app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "app");
 app.Use(async (context, next) =>
@@ -424,6 +449,7 @@ app.Use(async (context, next) =>
         var reqPath = context.Request.Path.Value ?? string.Empty;
         string? file = null;
         if (staticRoutes.TryGetValue(reqPath, out var mapped)) file = mapped;
+        else if (layoutEditorRx.IsMatch(reqPath)) file = "layout-editor.html";
         else if (assetDetailRx.IsMatch(reqPath)) file = "asset-detail.html";
 
         var path = file is null ? null : Path.Combine(staticAppRoot, file);

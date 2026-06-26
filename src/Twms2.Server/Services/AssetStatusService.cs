@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Models.Dexa;
 
@@ -13,19 +14,54 @@ public class AssetStatusService
     private readonly DexaReadService _dexaRead;
     private readonly PingDbService _pingDb;
     private readonly LayoutDbService _layoutDb;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<AssetStatusService> _logger;
 
-    public AssetStatusService(AssetService assetService, DexaReadService dexaRead, PingDbService pingDb, LayoutDbService layoutDb, ILogger<AssetStatusService> logger)
+    // 합성 결과(자산+에이전트+액션+핑+라인맵 병합) 캐시.
+    // 이 서비스는 Scoped → 첫 로딩에 /api/nav 와 /api/dashboard 가 별도 요청(별도 인스턴스)으로
+    // 동시에 GetAssetStatusesAsync 를 호출한다. 합성 자체가 무캐시 GetAllActionsAsync(전체 스캔)를
+    // 포함하므로 매 호출이 비싸다. 싱글톤 IMemoryCache + static 세마포어로 (a)중복 병합과
+    // (b)콜드스타트 동시 2회 DB 조회를 single-flight 로 합친다. TTL 은 하위 액션 캐시(15s)와 동일.
+    private const string CacheKey = "asset_statuses_composed";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
+    private static readonly SemaphoreSlim BuildLock = new(1, 1);
+
+    public AssetStatusService(AssetService assetService, DexaReadService dexaRead, PingDbService pingDb, LayoutDbService layoutDb, IMemoryCache cache, ILogger<AssetStatusService> logger)
     {
         _assetService = assetService;
         _dexaRead = dexaRead;
         _pingDb = pingDb;
         _layoutDb = layoutDb;
+        _cache = cache;
         _logger = logger;
     }
 
-    /// <summary>전체 자산 상태 목록 (DEXA + TWM 통합)</summary>
+    /// <summary>전체 자산 상태 목록 (DEXA + TWM 통합). 15초 캐시 + single-flight 로 중복 병합 방지.</summary>
     public async Task<List<AssetStatusInfo>> GetAssetStatusesAsync()
+    {
+        if (_cache.TryGetValue(CacheKey, out List<AssetStatusInfo>? cached))
+            return cached!;
+
+        await BuildLock.WaitAsync();
+        try
+        {
+            // 락 대기 중 다른 호출이 채웠으면 그대로 사용 (콜드스타트 동시 호출 합치기)
+            if (_cache.TryGetValue(CacheKey, out cached))
+                return cached!;
+
+            var built = await BuildAssetStatusesAsync();
+            // 빈 결과(조회 실패)는 캐시하지 않음 — 다음 호출이 재시도하도록.
+            if (built.Count > 0)
+                _cache.Set(CacheKey, built, CacheTtl);
+            return built;
+        }
+        finally
+        {
+            BuildLock.Release();
+        }
+    }
+
+    private async Task<List<AssetStatusInfo>> BuildAssetStatusesAsync()
     {
         try
         {

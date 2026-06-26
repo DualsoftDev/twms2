@@ -2,7 +2,7 @@
  * 설정(Settings) — Settings.razor + 자식 탭(라인/매뉴얼/일반)을 정적 페이지로 이식.
  * GET /api/settings 1회 조회 → 3개 탭 렌더. 30초 폴링 + 탭 복귀 시 갱신.
  * 쓰기: POST/DELETE 엔드포인트가 존재하는 항목만 fetch 로 처리 후 재조회.
- *   - 로고 이미지 업로드/삭제는 Blazor JS interop(SVG 변환) 의존 → 정적 포팅 제외(미리보기/여백만).
+ *   - 로고 업로드: PNG/JPG 는 logoConverter(imagetracer) 로 SVG 변환 후, 그 외는 원본 그대로 POST /api/settings/logo.
  * ==========================================================================*/
 (function () {
   'use strict';
@@ -13,6 +13,7 @@
   let _state = { general: {}, lines: [], manuals: [] };
   let _activeTab = 'lines';
   let _pendingFile = null; // 선택된 매뉴얼 PDF
+  let _pendingLogo = null; // 선택된 로고 이미지
 
   async function load() {
     try {
@@ -31,11 +32,6 @@
 
   // ──────────────── 일반 ────────────────
   function renderGeneral(g) {
-    // 입력 중 사용자가 편집한 값을 폴링이 덮어쓰지 않도록 포커스 시 보존
-    const titleEl = $('gen-title');
-    if (document.activeElement !== titleEl) titleEl.value = g.appTitle ?? 'TWM';
-    if (document.activeElement !== $('gen-showdate')) $('gen-showdate').checked = !!g.showDate;
-
     const pad = g.logoPadding ?? 10;
     const range = $('logo-padding');
     if (document.activeElement !== range) { range.value = pad; $('logo-padding-val').textContent = pad + 'px'; }
@@ -47,29 +43,94 @@
     } else {
       host.innerHTML = `<p class="text-on-surface-variant" style="font-style:italic;margin:0;">설정된 로고 없음</p>`;
     }
+
+    // 삭제 버튼은 로고가 있을 때만 노출 (SettingsGeneral 와 동일)
+    const delBtn = $('logo-delete-btn');
+    if (delBtn) delBtn.style.display = g.logoUrl ? 'inline-flex' : 'none';
   }
 
-  async function saveGeneral() {
-    const btn = $('gen-save-btn');
-    const body = {
-      appTitle: ($('gen-title').value || '').trim(),
-      showDate: $('gen-showdate').checked,
-      logoPadding: parseInt($('logo-padding').value, 10) || 0,
-    };
-    if (!body.appTitle) { toast('이름을 입력해주세요.'); return; }
+  // ──────────────── 사이드바 로고 ────────────────
+  function onLogoPicked(e) {
+    const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    _pendingLogo = f;
+    $('logo-file-name').textContent = f ? f.name : '선택된 파일 없음';
+    $('logo-upload-btn').disabled = !f;
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => { const s = String(r.result); resolve(s.slice(s.indexOf(',') + 1)); };
+      r.onerror = () => reject(new Error('파일 읽기 실패'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function uploadLogo() {
+    if (!_pendingLogo) return;
+    const f = _pendingLogo;
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (!['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) {
+      toast('PNG, JPG, SVG, GIF, WEBP 파일만 지원합니다.'); return;
+    }
+    if (f.size > 2 * 1024 * 1024) { toast('파일 크기가 2MB를 초과합니다.'); return; }
+
+    const btn = $('logo-upload-btn');
     btn.disabled = true;
+    $('logo-upload-label').textContent = '저장 중...';
     try {
-      const res = await postJson('/api/settings/general', body);
-      toast(res.ok ? '저장되었습니다. 새로고침 시 적용됩니다.' : (res.error || '저장 실패'));
-      if (res.ok) await load();
-    } finally { btn.disabled = false; }
+      let blob, name;
+      if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
+        // Blazor SettingsGeneral 와 동일: imagetracer 로 SVG 변환 후 app-logo.svg 로 저장
+        if (!window.logoConverter) { toast('SVG 변환 모듈을 불러오지 못했습니다.'); return; }
+        const base64 = await fileToBase64(f);
+        const svg = await window.logoConverter.convertToSvg(base64, ext === 'png' ? 'image/png' : 'image/jpeg');
+        blob = new Blob([svg], { type: 'image/svg+xml' });
+        name = 'app-logo.svg';
+      } else {
+        blob = f;
+        name = 'app-logo.' + ext;
+      }
+      const fd = new FormData();
+      fd.append('file', blob, name);
+      const res = await fetch('/api/settings/logo', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast('로고가 저장되었습니다.');
+        _pendingLogo = null;
+        $('logo-file-input').value = '';
+        $('logo-file-name').textContent = '선택된 파일 없음';
+        await load();
+        if (window.Shell && Shell.refresh) Shell.refresh(); // 사이드바 로고 즉시 갱신
+      } else toast(data.error || '업로드 실패');
+    } catch (e) {
+      toast('업로드 중 오류가 발생했습니다.');
+    } finally {
+      $('logo-upload-label').textContent = '저장';
+      $('logo-upload-btn').disabled = !_pendingLogo;
+    }
+  }
+
+  async function deleteLogo() {
+    if (!window.confirm('사이드바 로고를 삭제하시겠습니까?')) return;
+    try {
+      const res = await fetch('/api/settings/logo', { method: 'DELETE', headers: { 'Accept': 'application/json' } });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast('로고가 삭제되었습니다.');
+        await load();
+        if (window.Shell && Shell.refresh) Shell.refresh();
+      } else toast(data.error || '삭제 실패');
+    } catch (e) { toast('삭제 중 오류가 발생했습니다.'); }
   }
 
   async function saveLogoPadding() {
     const btn = $('logo-padding-save-btn');
     const body = {
-      appTitle: ($('gen-title').value || _state.general.appTitle || 'TWM').trim() || 'TWM',
-      showDate: $('gen-showdate').checked,
+      // 헤더 이름 설정은 정적 헤더(shell.js)에서 미사용이라 제거됨.
+      // /api/settings/general 은 appTitle 필수 검증이 있어 기존 저장값을 유지한 채 로고 여백만 갱신한다.
+      appTitle: (_state.general.appTitle || 'TWM'),
+      showDate: !!_state.general.showDate,
       logoPadding: parseInt($('logo-padding').value, 10) || 0,
     };
     btn.disabled = true;
@@ -237,11 +298,14 @@
   function bind() {
     // 탭
     document.querySelectorAll('.set-tab').forEach(t => t.addEventListener('click', () => switchTab(t.getAttribute('data-tab'))));
-    // 일반
-    $('gen-save-btn').addEventListener('click', saveGeneral);
-    $('gen-reset-btn').addEventListener('click', () => { $('gen-title').value = 'TWM'; $('gen-showdate').checked = false; });
+    // 일반 (로고 여백)
     $('logo-padding').addEventListener('input', () => { $('logo-padding-val').textContent = $('logo-padding').value + 'px'; });
     $('logo-padding-save-btn').addEventListener('click', saveLogoPadding);
+    // 로고 업로드/삭제
+    $('logo-pick-btn').addEventListener('click', () => $('logo-file-input').click());
+    $('logo-file-input').addEventListener('change', onLogoPicked);
+    $('logo-upload-btn').addEventListener('click', uploadLogo);
+    $('logo-delete-btn').addEventListener('click', deleteLogo);
     // 라인
     $('line-add-btn').addEventListener('click', addLine);
     // 매뉴얼
@@ -252,7 +316,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
-    if (window.Shell) await Shell.init({ active: 'admin' });
+    if (window.Shell) await Shell.init({ active: 'settings' });
     bind();
     await load();
     setInterval(load, 30000);

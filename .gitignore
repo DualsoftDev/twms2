@@ -38,6 +38,11 @@ TestResult.xml
 *.metaproj
 *.metaproj.tmp
 
+# Node (정적 페이지 자산 빌드: Tailwind 컴파일 / 폰트 페치)
+# 결과물(wwwroot/app/twms.css, wwwroot/lib/fonts/) 은 커밋, 툴체인은 제외
+node_modules/
+src/Twms2.Server/node_modules/
+
 # Rider / JetBrains
 .idea/
 *.sln.iml

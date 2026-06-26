@@ -24,9 +24,13 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get()
+    public async Task<IActionResult> Get([FromQuery] int failThreshold = 3)
     {
-        var coreTask = _dash.GetDashboardCoreAsync();
+        // 주의 필요 자산 기준(연속 실패 횟수) — 사용자가 우측 상단 메뉴로 설정. 기본 3회.
+        var threshold = Math.Clamp(failThreshold, 1, 100);
+
+        // 최근 작업은 "오늘 하루" 전체를 최신순으로 (페이지네이션은 클라이언트)
+        var coreTask = _dash.GetDashboardCoreAsync(todayActivities: true);
         var statusTask = _status.GetAssetStatusesAsync();
         await Task.WhenAll(coreTask, statusTask);
         var core = coreTask.Result;
@@ -40,28 +44,6 @@ public class DashboardController : ControllerBase
         var failed = total - backupSuccess - noBackup;
         var unchanged = backupSuccess - changed;
         double Pct(int v) => total > 0 ? Math.Round(100.0 * v / total, 1) : 0;
-
-        // 히트맵 정렬 (백업상태 → 온/오프라인 → 이름)
-        var heatmap = statuses
-            .OrderBy(a => a.Health switch
-            {
-                AssetHealthStatus.BackedUp => 0,
-                AssetHealthStatus.InProgress => 1,
-                AssetHealthStatus.Failed => 2,
-                AssetHealthStatus.Unknown => 3,
-                AssetHealthStatus.Unchanged => 4,
-                _ => 5,
-            })
-            .ThenBy(a => a.LatestPing is { Reachable: false } ? 1 : 0)
-            .ThenBy(a => a.Name)
-            .Select(a => new
-            {
-                assetId = a.AssetId,
-                name = a.Name,
-                health = HealthKey(a.Health),
-                offline = a.LatestPing is { Reachable: false },
-            })
-            .ToList();
 
         // 타입별 (Robot PLC 분리)
         var typeStats = statuses
@@ -79,11 +61,10 @@ public class DashboardController : ControllerBase
             .Cast<object>()
             .ToList();
 
-        // 주의 필요 (연속 3회 이상 실패)
+        // 주의 필요 (연속 N회 이상 실패) — 임계값은 사용자 설정, 전체 반환 후 클라이언트가 페이지네이션
         var attention = statuses
-            .Where(a => a.ConsecutiveFailureCount >= 3)
+            .Where(a => a.ConsecutiveFailureCount >= threshold)
             .OrderByDescending(a => a.ConsecutiveFailureCount)
-            .Take(10)
             .Select(a => new
             {
                 assetId = a.AssetId,
@@ -95,8 +76,8 @@ public class DashboardController : ControllerBase
             })
             .ToList();
 
+        // 오늘 하루 전체 활동(최신순) — 클라이언트가 다음/이전으로 페이지네이션
         var activities = core.RecentActivities
-            .Take(8)
             .Select(a => new { assetId = a.AssetId, assetName = a.AssetName, action = a.Action, success = a.Success, timestamp = a.Timestamp })
             .ToList();
 
@@ -121,10 +102,10 @@ public class DashboardController : ControllerBase
                 unchanged, unchangedPct = Pct(unchanged),
                 failed, failedPct = Pct(failed),
             },
-            heatmap,
             typeStats,
             lineStats,
             attention,
+            attentionThreshold = threshold,
             activities,
             schedule,
             drive,

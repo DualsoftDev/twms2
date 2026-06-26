@@ -1,0 +1,17 @@
+{
+  "name": "twms2-server-assets",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TWMS2.0 정적 페이지 프런트 자산 빌드 (Tailwind 컴파일 + 폰트 self-host). 운영 폐쇄망 대비 CDN 제거용.",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i Styles/twms.input.css -o wwwroot/app/twms.css --minify",
+    "watch:css": "tailwindcss -c tailwind.config.js -i Styles/twms.input.css -o wwwroot/app/twms.css --watch",
+    "fetch:fonts": "node scripts/fetch-fonts.mjs",
+    "build": "npm run fetch:fonts && npm run build:css"
+  },
+  "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.7",
+    "tailwindcss": "^3.4.17"
+  }
+}

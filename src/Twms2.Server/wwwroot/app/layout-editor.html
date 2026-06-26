@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>레이아웃 편집 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="/lib/fonts/fonts.css" />
+  <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
+  <link rel="stylesheet" href="/app/twms.css" />
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── MudBlazor 변수 → TWMS 정적 테마 변수 별칭 (편집기 SVG/패널 CSS 재사용) ── */
+    .dsp-page {
+      --mud-palette-primary: var(--c-primary);
+      --mud-palette-surface: var(--c-surface);
+      --mud-palette-background: var(--c-surface-container-low);
+      --mud-palette-text-primary: var(--c-on-surface);
+      --mud-palette-text-secondary: var(--c-on-surface-variant);
+      --mud-palette-error: var(--health-failed);
+      --mud-palette-lines-default: var(--c-outline);
+      --mud-palette-appbar-background: var(--c-surface);
+      --neu-radius-inner: 14px;
+      --neu-radius-button: 10px;
+      --neu-shadow-dark: var(--nm-dark);
+      --neu-shadow-light: var(--nm-light);
+    }
+
+    /* ── 페이지 헤더 + 탭 ── */
+    .le-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+    .le-title { font-size: 20px; font-weight: 800; color: var(--c-primary); margin: 0; }
+    .le-tabs { margin-left: auto; }
+    .le-tab[hidden] { display: none; }
+
+    /* 액션/아이콘 버튼 (레이아웃 관리 페이지 톤 재사용) */
+    .le-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 12px;
+      cursor: pointer; font-size: 13px; font-weight: 700; border: none; text-decoration: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light); transition: all .15s ease; }
+    .le-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .le-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .le-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .le-btn-primary { color: var(--c-primary); }
+    .le-btn-danger { color: var(--health-failed); }
+    .le-btn .material-symbols-outlined { font-size: 18px; }
+
+    .le-iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+      border-radius: 9px; cursor: pointer; border: none; background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light); transition: all .15s ease; text-decoration: none; }
+    .le-iconbtn:hover:not(:disabled) { color: var(--c-primary); }
+    .le-iconbtn:disabled { opacity: .4; cursor: not-allowed; }
+    .le-iconbtn.is-active { color: var(--c-primary); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .le-iconbtn .material-symbols-outlined { font-size: 19px; }
+
+    /* 편집기 툴바 */
+    .le-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px;
+      border-radius: 14px; background: var(--c-surface);
+      box-shadow: 4px 4px 10px var(--nm-dark), -4px -4px 10px var(--nm-light); }
+    .le-tb-sep { width: 1px; align-self: stretch; background: var(--c-outline); opacity: .4; margin: 2px 2px; }
+    .le-tb-spacer { flex: 1 1 auto; }
+    .le-tb-num { width: 56px; text-align: center; font-size: 14px; font-weight: 700; padding: 6px 4px; border-radius: 8px;
+      border: none; color: var(--c-on-surface); background: var(--c-surface);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .le-tb-num::-webkit-outer-spin-button, .le-tb-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .le-tb-label { font-size: 12px; color: var(--c-on-surface-variant); font-weight: 600; }
+    .le-tb-zoom { min-width: 46px; text-align: center; font-size: 13px; color: var(--c-on-surface-variant); font-family: 'JetBrains Mono', monospace; }
+    .le-changed { font-size: 12px; font-weight: 700; color: var(--health-inprogress); padding: 4px 10px; border-radius: 8px;
+      background: color-mix(in srgb, var(--health-inprogress) 16%, transparent); }
+    .le-sel-label { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-size: 12px; font-weight: 600; color: var(--c-primary); }
+
+    /* 도면 설정 탭 */
+    .le-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 900px) { .le-config-grid { grid-template-columns: 1fr; } }
+    .le-card-title { font-size: 15px; font-weight: 700; color: var(--c-on-surface); margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .le-card-title .material-symbols-outlined { font-size: 20px; color: var(--c-primary); }
+    .le-preview-box { border-radius: 12px; overflow: hidden;
+      box-shadow: inset 2px 2px 6px var(--nm-dark), inset -2px -2px 6px var(--nm-light); }
+    .le-field-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .le-color-swatch { width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--c-outline); flex-shrink: 0; cursor: pointer; }
+    .le-color-hex { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--c-on-surface-variant); }
+    .le-color-input { width: 0; height: 0; opacity: 0; position: absolute; pointer-events: none; }
+    .le-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      background: color-mix(in srgb, var(--c-primary) 14%, transparent); color: var(--c-primary); }
+    .le-switch-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .le-range { flex: 1; accent-color: var(--c-primary); }
+    .le-preset { font-size: 12px; font-weight: 600; color: var(--c-on-surface-variant); background: transparent; border: none; cursor: pointer; padding: 4px 8px; border-radius: 7px; }
+    .le-preset:hover { color: var(--c-primary); background: color-mix(in srgb, var(--c-primary) 10%, transparent); }
+
+    /* 좌측 패널 입력 (배치/라인 탭) */
+    .le-panel-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 9px; border: none; margin-bottom: 8px;
+      font-size: 13px; font-family: inherit; color: var(--c-on-surface); background: var(--c-surface);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .le-panel-head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--c-on-surface); margin: 8px 0 6px; }
+    .le-panel-head .material-symbols-outlined { font-size: 17px; }
+    .le-mini { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px;
+      border: none; cursor: pointer; background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 1px 1px 3px var(--nm-dark), -1px -1px 3px var(--nm-light); }
+    .le-mini:hover { color: var(--c-primary); }
+    .le-mini.danger:hover { color: var(--health-failed); }
+    .le-mini .material-symbols-outlined { font-size: 15px; }
+    .le-floor-input { width: 52px; text-align: center; font-size: 12px; padding: 3px; border-radius: 6px; border: none;
+      color: var(--c-on-surface); background: var(--c-surface);
+      box-shadow: inset 1px 1px 3px var(--nm-dark), inset -1px -1px 3px var(--nm-light); }
+    .le-floor-input::-webkit-outer-spin-button, .le-floor-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .asset-type-icon-sm { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
+    .ap-empty { padding: 14px; text-align: center; font-size: 12px; color: var(--c-on-surface-variant); }
+    .le-pillbtn { display:inline-flex; align-items:center; gap:5px; padding:6px 11px; border-radius:9px; cursor:pointer; border:none;
+      font-size:12px; font-weight:700; background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light); }
+    .le-pillbtn:hover { color: var(--c-primary); }
+    .le-pillbtn.danger:hover { color: var(--health-failed); }
+    .le-pillbtn .material-symbols-outlined { font-size:16px; }
+
+    /* 로딩/빈 상태 */
+    .le-loading { display: flex; align-items: center; justify-content: center; height: 50vh; color: var(--c-on-surface-variant); font-size: 14px; }
+
+    /* app.css(미로드) 의 부트스트랩풍 유틸 대체 */
+    .flex-grow-1 { flex: 1 1 auto; min-width: 0; }
+
+    /* =========================================================
+       Blueprint / Asset Placement 편집기 SVG·패널 (app.css 이식)
+       ========================================================= */
+    .bp-rect-fill { fill: var(--mud-palette-primary); fill-opacity: 0.15; cursor: grab; transition: fill-opacity 0.15s ease; }
+    .bp-edit-rect:hover .bp-rect-fill { fill-opacity: 0.25; }
+    .bp-edit-rect.dragging .bp-rect-fill { fill-opacity: 0.3; cursor: grabbing; }
+    .bp-rect-border { fill: none; stroke: var(--mud-palette-primary); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; transition: stroke-width 0.15s ease; }
+    .bp-edit-rect:hover .bp-rect-border { stroke-width: 3; stroke-dasharray: none; }
+    .bp-edit-rect.dragging .bp-rect-border { stroke-width: 4; stroke-dasharray: none; }
+    .bp-rect-label { font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 16px; font-weight: 700;
+      fill: #ffffff; stroke: rgba(0,0,0,0.7); stroke-width: 3px; paint-order: stroke fill; pointer-events: all; user-select: none; cursor: grab; }
+    .bp-resize-handle { fill: var(--mud-palette-primary); fill-opacity: 0.5; cursor: nwse-resize; rx: 3; transition: fill-opacity 0.15s ease; }
+    .bp-resize-handle:hover { fill-opacity: 0.9; }
+    .bp-delete-btn { cursor: pointer; opacity: 0; transition: opacity 0.15s ease; }
+    .bp-edit-rect:hover .bp-delete-btn { opacity: 1; }
+    .bp-delete-btn circle { fill: var(--mud-palette-error); fill-opacity: 0.8; }
+    .bp-delete-btn:hover circle { fill-opacity: 1; }
+    .bp-delete-text { font-family: sans-serif; font-size: 16px; font-weight: 700; fill: white; pointer-events: none; user-select: none; }
+
+    .drawing-editor-svg { width: 100%; height: 100%; display: block; user-select: none; }
+
+    .ap-editor-layout { display: flex; gap: 10px; height: calc(100vh - 320px); min-height: 420px; }
+    .ap-left-panel { width: 300px; min-width: 260px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto;
+      padding: 12px; background: var(--c-surface); border-radius: 14px;
+      box-shadow: 4px 4px 10px var(--nm-dark), -4px -4px 10px var(--nm-light); }
+    .ap-canvas-area { flex: 1; min-width: 0; }
+    .ap-canvas-container { width: 100%; height: 100%; border-radius: 14px; overflow: hidden; background: #1a1a2e;
+      box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light); }
+    .ap-canvas-svg { width: 100%; height: 100%; display: block; }
+
+    .ap-panel-section { margin-bottom: 6px; }
+    .ap-asset-list, .ap-group-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--c-outline); border-radius: 8px; }
+    .ap-list-item { display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-bottom: 1px solid color-mix(in srgb, var(--c-outline) 40%, transparent);
+      cursor: pointer; transition: background 0.1s; }
+    .ap-list-item:hover { background: color-mix(in srgb, var(--c-primary) 6%, transparent); }
+    .ap-list-item.checked { background: color-mix(in srgb, #4caf50 10%, transparent); }
+    .ap-list-item.selected { background: color-mix(in srgb, #2196f3 14%, transparent); }
+    .ap-list-item.small { padding: 3px 7px 3px 18px; }
+    .ap-list-name { font-size: 0.8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-on-surface); }
+    .ap-list-sub { font-size: 0.7rem; color: var(--c-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ap-line-tag { color: #4caf50; margin-left: 4px; font-weight: 500; }
+
+    .ap-group-item { border-bottom: 1px solid var(--c-outline); transition: background 0.12s ease; }
+    .ap-group-item.selected { background: color-mix(in srgb, #2196f3 22%, transparent); box-shadow: inset 3px 0 0 #2196f3; }
+    .ap-group-header { display: flex; align-items: center; gap: 5px; padding: 5px; cursor: pointer; }
+    .ap-group-header:hover { background: color-mix(in srgb, var(--c-primary) 6%, transparent); }
+    .ap-group-color { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    .ap-group-members { background: color-mix(in srgb, var(--c-outline) 12%, transparent); max-height: 150px; overflow-y: auto; }
+    .ap-group-count { font-size: 0.7rem; color: var(--c-on-surface-variant); min-width: 14px; text-align: right; }
+
+    .ap-asset-icon { cursor: grab; transition: filter 0.15s ease; }
+    .ap-asset-icon:hover { filter: brightness(1.08) drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
+    .ap-asset-icon.ap-selected rect:first-of-type { stroke: #2196F3; stroke-width: 2; stroke-dasharray: 4 2; }
+    .ap-lasso-rect { fill: rgba(33, 150, 243, 0.08); stroke: #2196F3; stroke-width: 1.5; stroke-dasharray: 6 3; pointer-events: none; }
+    .ap-group-container { cursor: grab; }
+    .ap-group-container:hover rect:first-of-type { stroke-opacity: 0.9; fill-opacity: 0.15; }
+    .ap-group-resize { cursor: nwse-resize; opacity: 0; transition: opacity 0.15s; }
+    .ap-group-container:hover .ap-group-resize { opacity: 1; }
+    .ap-snap-guide { stroke: #2196F3; stroke-width: 0.5; stroke-dasharray: 4 2; opacity: 0.7; pointer-events: none; }
+    .ap-group-selected > rect:first-of-type { stroke-width: 2.5 !important; stroke-dasharray: none !important; filter: drop-shadow(0 0 4px rgba(33, 150, 243, 0.6)); }
+    .ap-group-drop-target > rect:first-of-type { stroke-width: 3 !important; stroke-dasharray: none !important; fill-opacity: 0.25 !important;
+      filter: drop-shadow(0 0 6px rgba(76, 175, 80, 0.7)); transition: all 0.15s ease; }
+    .ap-grid-preview { cursor: move; opacity: 0.85; }
+    .ap-grid-preview:hover { opacity: 1; }
+    .ap-sel-bbox, .ap-sel-outline { pointer-events: none; }
+    .ap-sel-handle { pointer-events: all; transition: fill 0.1s; }
+    .ap-sel-handle:hover { fill: #2196F3; stroke: white; }
+    @keyframes ap-flash-anim { 0%, 100% { filter: none; } 25%, 75% { filter: drop-shadow(0 0 8px #2196F3) drop-shadow(0 0 16px #2196F3); } }
+    .ap-flash { animation: ap-flash-anim 0.6s ease 2; }
+  </style>
+</head>
+<body class="font-body-md">
+  <div class="dsp-page">
+    <!-- 헤더 + 탭 -->
+    <div class="le-head">
+      <a href="/admin/layout" class="le-iconbtn" title="레이아웃 관리로"><span class="material-symbols-outlined">arrow_back</span></a>
+      <h2 class="le-title" id="le-title">레이아웃 편집</h2>
+      <div class="lv-seg le-tabs" id="le-tabs">
+        <button type="button" class="lv-seg-btn active" data-tab="config"><span class="material-symbols-outlined">image</span>도면 설정</button>
+        <button type="button" class="lv-seg-btn" data-tab="lines"><span class="material-symbols-outlined">map</span>라인 영역</button>
+        <button type="button" class="lv-seg-btn" data-tab="assets"><span class="material-symbols-outlined">grid_view</span>자산 배치</button>
+      </div>
+    </div>
+
+    <div id="le-loading" class="le-loading">불러오는 중…</div>
+
+    <!-- ════════ 탭 1: 도면 설정 ════════ -->
+    <section id="tab-config" class="le-tab nm-card" hidden>
+      <div class="panel-header">
+        <span class="panel-title">도면 설정</span>
+        <button class="le-btn le-btn-primary" id="cfg-save"><span class="material-symbols-outlined">save</span>도면 설정 저장</button>
+      </div>
+      <div class="le-config-grid" style="margin-top:8px;">
+        <!-- 좌: 미리보기 + 이미지 -->
+        <div>
+          <div class="le-card-title"><span class="material-symbols-outlined">preview</span>미리보기</div>
+          <div class="le-preview-box"><svg id="cfg-preview" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" style="width:100%;display:block;"></svg></div>
+
+          <div class="le-card-title" style="margin-top:20px;"><span class="material-symbols-outlined">image</span>도면 이미지</div>
+          <input type="file" id="cfg-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;" />
+          <div class="le-field-row">
+            <button class="le-btn" id="cfg-pick"><span class="material-symbols-outlined">upload</span>이미지 선택</button>
+            <span class="le-chip" id="cfg-file-chip" hidden></span>
+            <button class="le-btn le-btn-danger" id="cfg-img-del" hidden><span class="material-symbols-outlined">delete</span>이미지 삭제</button>
+            <span class="le-color-hex" id="cfg-img-none">등록된 이미지 없음</span>
+          </div>
+          <p class="text-on-surface-variant" style="font-size:12px;margin:0;">PNG · JPG · SVG · WEBP (최대 10MB). 저장 시 적용됩니다.</p>
+        </div>
+
+        <!-- 우: 배경색 + 그리드 -->
+        <div>
+          <div class="le-card-title"><span class="material-symbols-outlined">palette</span>배경색</div>
+          <div class="le-field-row">
+            <label class="le-color-swatch" id="cfg-bg-swatch" for="cfg-bg-color"></label>
+            <input type="color" id="cfg-bg-color" class="le-color-input" />
+            <div>
+              <div class="le-color-hex" id="cfg-bg-hex">#1a1a2e</div>
+            </div>
+          </div>
+          <div class="le-field-row">
+            <button class="le-preset" data-bg="#1a1a2e">기본 (다크 블루)</button>
+            <button class="le-preset" data-bg="#ffffff">흰색</button>
+            <button class="le-preset" data-bg="#0f172a">짙은 남색</button>
+          </div>
+
+          <div class="le-card-title" style="margin-top:20px;"><span class="material-symbols-outlined">grid_on</span>그리드</div>
+          <div class="le-switch-row">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+              <input type="checkbox" id="cfg-grid-enabled" style="width:18px;height:18px;accent-color:var(--c-primary);" /> 그리드 사용
+            </label>
+          </div>
+          <div id="cfg-grid-opts">
+            <div class="le-field-row">
+              <span class="le-tb-label" style="min-width:64px;">그리드 크기</span>
+              <input type="range" id="cfg-grid-size" class="le-range" min="5" max="100" step="5" />
+              <span class="le-color-hex" id="cfg-grid-size-val" style="min-width:46px;text-align:right;">20 px</span>
+            </div>
+            <div class="le-field-row">
+              <label class="le-color-swatch" id="cfg-grid-swatch" for="cfg-grid-color" style="width:32px;height:32px;"></label>
+              <input type="color" id="cfg-grid-color" class="le-color-input" />
+              <span class="le-color-hex" id="cfg-grid-hex">#e0e0e0</span>
+            </div>
+            <div class="le-field-row">
+              <button class="le-preset" data-grid="#e0e0e0">기본 (밝은 회색)</button>
+              <button class="le-preset" data-grid="#ffffff">흰색</button>
+              <button class="le-preset" data-grid="#4a90d9">파란색</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ 탭 2: 라인 영역 ════════ -->
+    <section id="tab-lines" class="le-tab" hidden>
+      <div class="le-toolbar">
+        <button class="le-iconbtn" id="bp-snap" title="스냅(격자에 정렬)"><span class="material-symbols-outlined">grid_4x4</span></button>
+        <span class="le-tb-label">Grid</span>
+        <input type="number" class="le-tb-num" id="bp-grid" min="5" max="100" step="5" value="20" />
+        <span class="le-tb-sep"></span>
+        <button class="le-iconbtn" id="bp-zoom-out" title="축소"><span class="material-symbols-outlined">remove</span></button>
+        <button class="le-iconbtn" id="bp-zoom-reset" title="100%"><span class="material-symbols-outlined">center_focus_weak</span></button>
+        <button class="le-iconbtn" id="bp-zoom-in" title="확대"><span class="material-symbols-outlined">add</span></button>
+        <span class="le-tb-sep"></span>
+        <button class="le-iconbtn" id="bp-undo" title="실행 취소" disabled><span class="material-symbols-outlined">undo</span></button>
+        <button class="le-iconbtn" id="bp-redo" title="다시 실행" disabled><span class="material-symbols-outlined">redo</span></button>
+        <span class="le-tb-spacer"></span>
+        <span class="le-changed" id="bp-changed" hidden>변경됨</span>
+        <button class="le-btn le-btn-primary" id="bp-save"><span class="material-symbols-outlined">check</span>저장</button>
+      </div>
+      <div class="ap-editor-layout">
+        <div class="ap-left-panel" id="bp-panel"></div>
+        <div class="ap-canvas-area">
+          <div id="bp-editor-container" class="ap-canvas-container">
+            <svg id="bp-editor-svg" class="drawing-editor-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ 탭 3: 자산 배치 ════════ -->
+    <section id="tab-assets" class="le-tab" hidden>
+      <div class="le-toolbar">
+        <button class="le-iconbtn" id="ap-tool-pan" title="이동(팬) 도구 — 스페이스 키로도 전환"><span class="material-symbols-outlined">pan_tool</span></button>
+        <span class="le-tb-sep"></span>
+        <button class="le-iconbtn" id="ap-snap" title="스냅(격자/이웃 정렬)"><span class="material-symbols-outlined">grid_4x4</span></button>
+        <span class="le-tb-label">Grid</span>
+        <input type="number" class="le-tb-num" id="ap-grid" min="5" max="100" step="5" value="20" />
+        <span class="le-tb-sep"></span>
+        <button class="le-iconbtn" id="ap-zoom-out" title="축소"><span class="material-symbols-outlined">remove</span></button>
+        <span class="le-tb-zoom" id="ap-zoom">100%</span>
+        <button class="le-iconbtn" id="ap-zoom-in" title="확대"><span class="material-symbols-outlined">add</span></button>
+        <button class="le-iconbtn" id="ap-zoom-reset" title="100%"><span class="material-symbols-outlined">center_focus_weak</span></button>
+        <button class="le-iconbtn" id="ap-zoom-fit" title="전체 보기"><span class="material-symbols-outlined">fit_screen</span></button>
+        <span class="le-tb-sep"></span>
+        <button class="le-iconbtn" id="ap-undo" title="실행 취소" disabled><span class="material-symbols-outlined">undo</span></button>
+        <button class="le-iconbtn" id="ap-redo" title="다시 실행" disabled><span class="material-symbols-outlined">redo</span></button>
+        <span class="le-tb-sep"></span>
+        <span class="material-symbols-outlined" style="font-size:18px;color:var(--c-on-surface-variant);">aspect_ratio</span>
+        <input type="number" class="le-tb-num" id="ap-scale" min="0.1" max="5" step="0.05" value="1.00" style="width:62px;" title="전체 자산 크기" />
+        <span class="le-tb-spacer"></span>
+        <div id="ap-sel-actions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"></div>
+        <span class="le-changed" id="ap-changed" hidden>변경됨</span>
+        <button class="le-btn le-btn-primary" id="ap-save" disabled><span class="material-symbols-outlined">check</span>적용</button>
+      </div>
+      <div class="ap-editor-layout">
+        <div class="ap-left-panel" id="ap-panel"></div>
+        <div class="ap-canvas-area">
+          <div id="ap-editor-container" class="ap-canvas-container">
+            <svg id="ap-editor-svg" class="ap-canvas-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/js/blueprint-zoom.js"></script>
+  <script src="/js/blueprint-editor.js"></script>
+  <script src="/js/asset-placement-editor.js"></script>
+  <script src="/app/layout-editor.js"></script>
+</body>
+</html>

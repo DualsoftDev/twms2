@@ -1,0 +1,870 @@
+/* ============================================================================
+ * 레이아웃 편집기 — /admin/layout/{id}/edit 정적 페이지.
+ * Blazor LayoutEditor / BlueprintEditor / PlacementEditor 를 정적 HTML/JS 로 이식.
+ *   탭1 도면 설정  : 이미지 업로드·삭제 + 배경색 + 그리드(색/크기/사용)
+ *   탭2 라인 영역  : 라인 블럭(영역) 드래그/리사이즈 배치  (blueprint-editor.js 재사용)
+ *   탭3 자산 배치  : 자산·그룹 드래그/올가미/스냅/그룹화    (asset-placement-editor.js 재사용)
+ * 데이터: GET /api/admin/layout/{id}/edit-data
+ * 저장:   PUT config · POST/DELETE image · PUT rects · PUT placement
+ *
+ * 상호작용 레이어(드래그/줌)는 기존 JS 모듈을 그대로 쓴다. 그 모듈들은 Blazor 의
+ * DotNetObjectReference.invokeMethodAsync(...) 를 호출하므로, 같은 모양의 shim 객체를
+ * 넘겨 콜백을 순수 JS 핸들러로 라우팅한다.
+ * ==========================================================================*/
+(function () {
+  'use strict';
+
+  // ── 공통 유틸 ───────────────────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const F = (v) => String(Math.round((Number(v) || 0) * 1000) / 1000);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const iconHref = (p) => '/' + String(p || 'images/icons/plc.png').replace(/^\//, '');
+  const toast = (m) => { if (window.Shell && Shell.toast) Shell.toast(m); };
+
+  let LID = 0;
+  let config = {};        // 도면 설정 (3개 탭 공유; 탭1 저장 시 갱신)
+  let allAssets = [];     // 자산 스냅샷
+  let assetMap = new Map();
+  let linesList = [];     // [{id,name}]
+  let lineMap = {};       // id → name
+
+  async function api(url, method, body) {
+    const opts = { method, headers: { Accept: 'application/json' } };
+    if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    let res;
+    try { res = await fetch(url, opts); } catch (e) { toast('요청 실패: ' + e.message); return null; }
+    if (!res.ok) {
+      let m = '요청에 실패했습니다.';
+      try { const e = await res.json(); if (e && e.error) m = e.error; } catch (_) {}
+      toast(m); return null;
+    }
+    return await res.json().catch(() => ({}));
+  }
+
+  // 도면 이미지의 xMidYMid meet 렌더 영역 (LayoutHelpers.CalcImageRect 이식)
+  function calcImageRect(cfg, vbW = 1000, vbH = 600) {
+    if (!cfg || !(cfg.imageWidth > 0) || !(cfg.imageHeight > 0)) return { x: 0, y: 0, w: vbW, h: vbH };
+    const ir = cfg.imageWidth / cfg.imageHeight, vr = vbW / vbH;
+    if (ir > vr) { const h = vbW / ir; return { x: 0, y: (vbH - h) / 2, w: vbW, h }; }
+    const w = vbH * ir; return { x: (vbW - w) / 2, y: 0, w, h: vbH };
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 탭 1 — 도면 설정 (배경색 / 그리드 / 이미지)
+   * ═════════════════════════════════════════════════════════════════════*/
+  const Cfg = (() => {
+    let bgColor = '#1a1a2e', gridColor = '#e0e0e0', gridEnabled = true, gridSize = 20;
+    let selectedFile = null, previewObjUrl = null;
+
+    function load() {
+      bgColor = config.bgColor || '#1a1a2e';
+      gridColor = config.gridColor || '#e0e0e0';
+      gridEnabled = config.gridEnabled !== false;
+      gridSize = config.gridSize > 0 ? config.gridSize : 20;
+      selectedFile = null;
+      $('cfg-bg-color').value = bgColor;
+      $('cfg-grid-color').value = gridColor;
+      $('cfg-grid-enabled').checked = gridEnabled;
+      $('cfg-grid-size').value = gridSize;
+      syncControls();
+      renderPreview();
+    }
+
+    function syncControls() {
+      $('cfg-bg-swatch').style.background = bgColor;
+      $('cfg-bg-hex').textContent = bgColor;
+      $('cfg-grid-swatch').style.background = gridColor;
+      $('cfg-grid-hex').textContent = gridColor;
+      $('cfg-grid-size-val').textContent = gridSize + ' px';
+      $('cfg-grid-opts').style.display = gridEnabled ? '' : 'none';
+      const hasImg = !!config.imagePath || !!selectedFile;
+      $('cfg-img-del').hidden = !config.imagePath;
+      $('cfg-img-none').hidden = hasImg;
+      const chip = $('cfg-file-chip');
+      if (selectedFile) { chip.hidden = false; chip.textContent = selectedFile.name; }
+      else chip.hidden = true;
+    }
+
+    function previewSrc() {
+      if (previewObjUrl) return previewObjUrl;
+      if (config.imagePath) return iconHref(config.imagePath);
+      return null;
+    }
+
+    function renderPreview() {
+      const gl = gridSize * 5;
+      let defs = `<pattern id="cfgp-sm" width="${gridSize}" height="${gridSize}" patternUnits="userSpaceOnUse">`
+        + `<path d="M ${gridSize} 0 L 0 0 0 ${gridSize}" fill="none" stroke="${gridColor}" stroke-width="0.5" opacity="0.2"/></pattern>`
+        + `<pattern id="cfgp-lg" width="${gl}" height="${gl}" patternUnits="userSpaceOnUse">`
+        + `<rect width="${gl}" height="${gl}" fill="url(#cfgp-sm)"/>`
+        + `<path d="M ${gl} 0 L 0 0 0 ${gl}" fill="none" stroke="${gridColor}" stroke-width="0.8" opacity="0.3"/></pattern>`;
+      let body = `<rect width="1000" height="600" fill="${bgColor}"/>`;
+      if (gridEnabled) body += `<rect width="1000" height="600" fill="url(#cfgp-lg)"/>`;
+      const src = previewSrc();
+      if (src) { const ir = calcImageRect(config); body += `<image href="${src}" x="${F(ir.x)}" y="${F(ir.y)}" width="${F(ir.w)}" height="${F(ir.h)}" preserveAspectRatio="none" opacity="0.85"/>`; }
+      $('cfg-preview').innerHTML = `<defs>${defs}</defs>${body}`;
+    }
+
+    function bind() {
+      $('cfg-bg-color').addEventListener('input', e => { bgColor = e.target.value; syncControls(); renderPreview(); });
+      $('cfg-grid-color').addEventListener('input', e => { gridColor = e.target.value; syncControls(); renderPreview(); });
+      $('cfg-grid-enabled').addEventListener('change', e => { gridEnabled = e.target.checked; syncControls(); renderPreview(); });
+      $('cfg-grid-size').addEventListener('input', e => { gridSize = parseInt(e.target.value, 10) || 20; syncControls(); renderPreview(); });
+      document.querySelectorAll('.le-preset[data-bg]').forEach(b => b.addEventListener('click', () => { bgColor = b.dataset.bg; $('cfg-bg-color').value = bgColor; syncControls(); renderPreview(); }));
+      document.querySelectorAll('.le-preset[data-grid]').forEach(b => b.addEventListener('click', () => { gridColor = b.dataset.grid; $('cfg-grid-color').value = gridColor; syncControls(); renderPreview(); }));
+
+      $('cfg-pick').addEventListener('click', () => $('cfg-file').click());
+      $('cfg-file').addEventListener('change', e => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        selectedFile = f;
+        if (previewObjUrl) URL.revokeObjectURL(previewObjUrl);
+        previewObjUrl = URL.createObjectURL(f);
+        // 임시 미리보기는 원본 비율 유지를 위해 전체 채움(저장 후 실제 크기 반영)
+        syncControls(); renderPreview();
+      });
+      $('cfg-img-del').addEventListener('click', removeImage);
+      $('cfg-save').addEventListener('click', save);
+    }
+
+    async function removeImage() {
+      if (!confirm('도면 이미지를 삭제하시겠습니까?')) return;
+      const r = await api(`/api/admin/layout/${LID}/image`, 'DELETE');
+      if (!r) return;
+      config.imagePath = null; config.imageWidth = null; config.imageHeight = null;
+      if (previewObjUrl) { URL.revokeObjectURL(previewObjUrl); previewObjUrl = null; }
+      selectedFile = null;
+      syncControls(); renderPreview();
+      toast('도면 이미지가 삭제되었습니다.');
+    }
+
+    async function save() {
+      const btn = $('cfg-save'); btn.disabled = true;
+      try {
+        const r = await api(`/api/admin/layout/${LID}/config`, 'PUT', { bgColor, gridColor, gridEnabled, gridSize });
+        if (!r) return;
+        config.bgColor = bgColor; config.gridColor = gridColor; config.gridEnabled = gridEnabled; config.gridSize = gridSize;
+
+        if (selectedFile) {
+          const fd = new FormData(); fd.append('file', selectedFile);
+          let res;
+          try { res = await fetch(`/api/admin/layout/${LID}/image`, { method: 'POST', body: fd }); }
+          catch (e) { toast('이미지 업로드 실패: ' + e.message); return; }
+          if (!res.ok) { let m = '이미지 업로드 실패'; try { const e = await res.json(); if (e && e.error) m = e.error; } catch (_) {} toast(m); return; }
+          const img = await res.json();
+          config.imagePath = img.imagePath; config.imageWidth = img.imageWidth; config.imageHeight = img.imageHeight;
+          selectedFile = null;
+          if (previewObjUrl) { URL.revokeObjectURL(previewObjUrl); previewObjUrl = null; }
+        }
+        syncControls(); renderPreview();
+        toast('도면 설정이 저장되었습니다.');
+      } finally { btn.disabled = false; }
+    }
+
+    return { load, bind };
+  })();
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 탭 2 — 라인 영역 (BlueprintEditor 이식, blueprint-editor.js 재사용)
+   * ═════════════════════════════════════════════════════════════════════*/
+  const Bp = (() => {
+    let rects = [];          // [{lineId,x,y,width,height}]
+    let snapEnabled = true, snapGridSize = 20;
+    let hasChanges = false, inited = false;
+    let undo = [], redo = [];
+    const MAX_UNDO = 30;
+
+    const shim = { invokeMethodAsync(name, ...a) { if (name === 'OnRectMoved') onRectMoved(...a); else if (name === 'OnRectDeleted') onRectDeleted(...a); return Promise.resolve(); } };
+
+    function load() { rects = (window.__rectsSeed || []).map(r => ({ ...r })); undo = []; redo = []; hasChanges = false; }
+
+    function snapshot() { return rects.map(r => ({ ...r })); }
+    function pushUndo() { undo.push(snapshot()); if (undo.length > MAX_UNDO) undo.shift(); redo = []; }
+    function restore(snap) { rects = snap.map(r => ({ ...r })); }
+
+    function unplaced() { const placed = new Set(rects.map(r => r.lineId)); return linesList.filter(l => !placed.has(l.id)); }
+
+    function renderSvg() {
+      const svg = $('bp-editor-svg');
+      const gs = config.gridSize > 0 ? config.gridSize : 20, gl = gs * 5;
+      const gEnabled = config.gridEnabled !== false, gColor = config.gridColor || '#e0e0e0', bg = config.bgColor || '#1a1a2e';
+      let defs = `<pattern id="bp-grid-small" width="${gs}" height="${gs}" patternUnits="userSpaceOnUse">`
+        + `<path d="M ${gs} 0 L 0 0 0 ${gs}" fill="none" stroke="${gColor}" stroke-width="0.5" opacity="0.2"/></pattern>`
+        + `<pattern id="bp-grid-large" width="${gl}" height="${gl}" patternUnits="userSpaceOnUse">`
+        + `<rect width="${gl}" height="${gl}" fill="url(#bp-grid-small)"/>`
+        + `<path d="M ${gl} 0 L 0 0 0 ${gl}" fill="none" stroke="${gColor}" stroke-width="0.8" opacity="0.3"/></pattern>`;
+      let body = `<rect x="-2000" y="-2000" width="5000" height="4000" fill="#111122"/>`
+        + `<rect width="1000" height="600" fill="${bg}"/>`
+        + (gEnabled ? `<rect width="1000" height="600" fill="url(#bp-grid-large)"/>` : '')
+        + `<rect width="1000" height="600" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="8 4" opacity="0.4"/>`;
+      if (config.imagePath) { const ir = calcImageRect(config); body += `<image href="${iconHref(config.imagePath)}" x="${F(ir.x)}" y="${F(ir.y)}" width="${F(ir.w)}" height="${F(ir.h)}" preserveAspectRatio="none" opacity="0.5"/>`; }
+      for (const r of rects) {
+        const label = lineMap[r.lineId] || ('Line ' + r.lineId);
+        body += `<g class="bp-edit-rect" data-line-id="${r.lineId}">`
+          + `<rect class="bp-rect-fill" x="${F(r.x)}" y="${F(r.y)}" width="${F(r.width)}" height="${F(r.height)}" rx="3" ry="3"/>`
+          + `<rect class="bp-rect-border" x="${F(r.x)}" y="${F(r.y)}" width="${F(r.width)}" height="${F(r.height)}" rx="3" ry="3"/>`
+          + `<text class="bp-rect-label" x="${F(r.x + r.width / 2)}" y="${F(r.y + r.height / 2)}" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`
+          + `</g>`;
+      }
+      for (const r of rects) {
+        body += `<g class="bp-edit-rect" data-line-id="${r.lineId}">`
+          + `<rect class="bp-resize-handle" x="${F(r.x + r.width - 15)}" y="${F(r.y + r.height - 15)}" width="30" height="30" rx="3"/>`
+          + `<g class="bp-delete-btn" data-delete="${r.lineId}">`
+          + `<circle cx="${F(r.x + r.width)}" cy="${F(r.y)}" r="15"/>`
+          + `<text class="bp-delete-text" x="${F(r.x + r.width)}" y="${F(r.y)}" text-anchor="middle" dominant-baseline="central">×</text>`
+          + `</g></g>`;
+      }
+      svg.innerHTML = `<defs>${defs}</defs>${body}`;
+      window.blueprintEditor.init('bp-editor-container', shim);
+      window.blueprintEditor.setSnapConfig('bp-editor-container', snapEnabled, snapGridSize);
+    }
+
+    function renderPanel() {
+      const placedRows = rects.map(r => {
+        const name = lineMap[r.lineId] || ('Line ' + r.lineId);
+        return `<div class="ap-list-item" title="${esc(name)}"><span class="material-symbols-outlined" style="font-size:18px;color:var(--c-primary);">map</span>`
+          + `<div class="flex-grow-1" style="min-width:0;"><div class="ap-list-name">${esc(name)}</div>`
+          + `<div class="ap-list-sub">${Math.round(r.width)} × ${Math.round(r.height)}</div></div></div>`;
+      }).join('') || `<div class="ap-empty">배치된 라인이 없습니다.</div>`;
+      const un = unplaced();
+      const unRows = un.map(l => `<div class="ap-list-item"><span class="material-symbols-outlined" style="font-size:18px;color:var(--c-on-surface-variant);">add_box</span>`
+        + `<span class="ap-list-name flex-grow-1">${esc(l.name)}</span>`
+        + `<button class="le-mini" data-add-line="${l.id}" title="배치"><span class="material-symbols-outlined">add</span></button></div>`).join('')
+        || `<div class="ap-empty">모든 라인이 배치되었습니다.</div>`;
+      $('bp-panel').innerHTML =
+        `<div class="le-panel-head"><span class="material-symbols-outlined">map</span>배치된 라인 (${rects.length})</div>`
+        + `<div class="ap-asset-list">${placedRows}</div>`
+        + `<div class="le-panel-head"><span class="material-symbols-outlined">add_box</span>미배치 라인 (${un.length})</div>`
+        + `<div class="ap-asset-list">${unRows}</div>`
+        + `<button class="le-pillbtn" id="bp-add" style="margin-top:10px;width:100%;justify-content:center;" ${linesList.length === 0 ? 'disabled' : ''}><span class="material-symbols-outlined">add</span>라인 추가</button>`;
+      $('bp-panel').querySelectorAll('[data-add-line]').forEach(b => b.addEventListener('click', () => addRect(parseInt(b.dataset.addLine, 10))));
+      const addAll = $('bp-add'); if (addAll) addAll.addEventListener('click', () => { const u = unplaced(); if (u.length) addRect(u[0].id); else toast('모든 라인이 이미 배치되었습니다.'); });
+    }
+
+    function updateToolbar() {
+      $('bp-snap').classList.toggle('is-active', snapEnabled);
+      $('bp-undo').disabled = undo.length === 0;
+      $('bp-redo').disabled = redo.length === 0;
+      $('bp-changed').hidden = !hasChanges;
+    }
+
+    function markChanged() { hasChanges = true; updateToolbar(); }
+
+    function onRectMoved(lineId, x, y, w, h) {
+      const r = rects.find(r => r.lineId === lineId);
+      if (!r) return;
+      pushUndo();
+      r.x = Math.round(x * 100) / 100; r.y = Math.round(y * 100) / 100;
+      r.width = Math.round(Math.max(30, w) * 100) / 100; r.height = Math.round(Math.max(20, h) * 100) / 100;
+      markChanged();
+    }
+    function onRectDeleted(lineId) {
+      pushUndo();
+      rects = rects.filter(r => r.lineId !== lineId);
+      markChanged(); renderSvg(); renderPanel();
+    }
+    function addRect(lineId) {
+      if (rects.some(r => r.lineId === lineId)) return;
+      pushUndo();
+      const idx = rects.length;
+      rects.push({ lineId, x: 50 + (idx % 4) * 220, y: 50 + Math.floor(idx / 4) * 150, width: 180, height: 120 });
+      markChanged(); renderSvg(); renderPanel();
+    }
+    function doUndo() { if (!undo.length) return; redo.push(snapshot()); restore(undo.pop()); markChanged(); renderSvg(); renderPanel(); }
+    function doRedo() { if (!redo.length) return; undo.push(snapshot()); restore(redo.pop()); markChanged(); renderSvg(); renderPanel(); }
+
+    async function save() {
+      // 캔버스 DOM 의 최신 좌표를 동기화 후 저장
+      const live = window.blueprintEditor.getPositions('bp-editor-container') || [];
+      for (const p of live) { const r = rects.find(r => r.lineId === p.lineId); if (r) { r.x = p.x; r.y = p.y; r.width = p.w; r.height = p.h; } }
+      const btn = $('bp-save'); btn.disabled = true;
+      try {
+        const r = await api(`/api/admin/layout/${LID}/rects`, 'PUT', { rects });
+        if (!r) return;
+        hasChanges = false; updateToolbar();
+        toast(`${rects.length}개 라인 영역이 저장되었습니다.`);
+      } finally { btn.disabled = false; }
+    }
+
+    function activate() {
+      $('bp-editor-svg').setAttribute('viewBox', '0 0 1000 600');
+      renderSvg(); renderPanel(); updateToolbar();
+      if (!inited) {
+        window.blueprintZoom.init('bp-editor-container', { clampMargin: 1.0 });
+        inited = true;
+      }
+    }
+    function deactivate() {
+      if (!inited) return;
+      window.blueprintEditor.dispose('bp-editor-container');
+      window.blueprintZoom.dispose('bp-editor-container');
+      inited = false;
+    }
+    function hasUnsaved() { return hasChanges; }
+
+    function bind() {
+      $('bp-snap').addEventListener('click', () => { snapEnabled = !snapEnabled; window.blueprintEditor.setSnapConfig('bp-editor-container', snapEnabled, snapGridSize); updateToolbar(); });
+      $('bp-grid').addEventListener('change', e => { snapGridSize = clamp(parseInt(e.target.value, 10) || 20, 5, 100); e.target.value = snapGridSize; window.blueprintEditor.setSnapConfig('bp-editor-container', snapEnabled, snapGridSize); });
+      $('bp-zoom-in').addEventListener('click', () => window.blueprintZoom.zoomIn('bp-editor-container'));
+      $('bp-zoom-out').addEventListener('click', () => window.blueprintZoom.zoomOut('bp-editor-container'));
+      $('bp-zoom-reset').addEventListener('click', () => window.blueprintZoom.reset('bp-editor-container'));
+      $('bp-undo').addEventListener('click', doUndo);
+      $('bp-redo').addEventListener('click', doRedo);
+      $('bp-save').addEventListener('click', save);
+    }
+
+    return { load, bind, activate, deactivate, hasUnsaved };
+  })();
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 탭 3 — 자산 배치 (PlacementEditor 이식, asset-placement-editor.js 재사용)
+   * ═════════════════════════════════════════════════════════════════════*/
+  const Ap = (() => {
+    let positions = new Map();      // assetId → {x,y,scale,visible}
+    let dbPositionIds = new Set();  // 서버에 위치 행이 있던 자산(미배치 전환 영속화용)
+    let groups = [];                // {id,name,x,y,width,height,color,floor}
+    let groupMembers = new Map();   // groupId → [assetId]
+    let groupedIds = new Set();
+    let placedOnOther = new Set();
+    let selAssets = new Set(), selGroups = new Set(), checked = new Set(), expanded = new Set();
+    let searchText = '', selLineId = null, displayFilter = null, includeOther = false;
+    let globalScale = 1, snapEnabled = true, snapGridSize = 20, activeTool = 'select';
+    let hasChanges = false, nextTempGroupId = -1, inited = false, shellBuilt = false;
+    let undo = [], redo = [];
+    const MAX_UNDO = 30;
+
+    const HANDLERS = {
+      OnSelectionChanged: onSelectionChanged,
+      OnToggleAssetSelection: onToggleAssetSelection,
+      OnToggleGroupSelection: onToggleGroupSelection,
+      OnItemsMoved: onItemsMoved,
+      OnGroupMoved: onGroupMoved,
+      OnBulkMoved: onBulkMoved,
+      OnAssetDroppedOnGroup: onAssetDroppedOnGroup,
+      OnAssetRemovedFromGroup: onAssetRemovedFromGroup,
+      OnKeyAction: onKeyAction,
+      OnGridPlaceConfirmed: () => {},
+    };
+    const shim = { invokeMethodAsync(name, ...a) { const fn = HANDLERS[name]; if (fn) fn(...a); return Promise.resolve(); } };
+
+    // ── 상태 적재 ──
+    function load(d) {
+      positions = new Map();
+      dbPositionIds = new Set();
+      (d.positions || []).forEach(p => { positions.set(p.assetId, { x: p.x, y: p.y, scale: p.scale > 0 ? p.scale : 1, visible: !!p.visible }); dbPositionIds.add(p.assetId); });
+      groups = (d.groups || []).map(g => ({ ...g }));
+      groupMembers = new Map();
+      (d.groupMembers || []).forEach(m => { if (!groupMembers.has(m.groupId)) groupMembers.set(m.groupId, []); groupMembers.get(m.groupId).push(m.assetId); });
+      placedOnOther = new Set(d.placedOnOtherLayouts || []);
+      rebuildIndexes();
+      undo = []; redo = []; hasChanges = false; nextTempGroupId = -1;
+      selAssets.clear(); selGroups.clear(); checked.clear();
+      const scales = [...positions.values()].filter(p => p.scale > 0).map(p => p.scale);
+      globalScale = scales.length ? Math.round((scales.reduce((a, b) => a + b, 0) / scales.length) * 10) / 10 : 1;
+    }
+
+    function rebuildIndexes() { groupedIds = new Set([...groupMembers.values()].flat()); }
+    function getPosition(id) { let p = positions.get(id); if (!p) { p = { x: 100, y: 100, scale: 1, visible: false }; positions.set(id, p); } return p; }
+    function posOf(id) { return positions.get(id) || { x: 100, y: 100, scale: 1, visible: false }; }
+    function memberIdsOf(gid) { return groupMembers.get(gid) || []; }
+
+    // 그룹 내 동적 그리드 배치 (PlacementEditor.LayoutGroupAssets 이식)
+    function layoutGroupAssets(grp, members) {
+      const out = [];
+      if (!members.length) return out;
+      const pad = 2.0, availW = grp.width - pad * 2, availH = grp.height - pad * 2;
+      if (availW < 4 || availH < 4) return out;
+      const count = members.length, aspect = availW / availH;
+      const bestCols = Math.max(1, Math.round(Math.sqrt(count * aspect)));
+      const cols = Math.min(bestCols, count), rows = Math.ceil(count / cols);
+      const rawSz = Math.min(availW / cols, availH / rows);
+      const gap = Math.max(1.0, Math.min(rawSz * 0.1, 2.0));
+      const cellW = (availW - gap * (cols - 1)) / cols, cellH = (availH - gap * (rows - 1)) / rows;
+      const sz = Math.max(4, Math.min(cellW, cellH));
+      const totalW = cols * sz + (cols - 1) * gap, totalH = rows * sz + (rows - 1) * gap;
+      const startX = grp.x + pad + (availW - totalW) / 2, startY = grp.y + pad + (availH - totalH) / 2;
+      for (let i = 0; i < count; i++) {
+        const c = i % cols, r = Math.floor(i / cols);
+        out.push({ x: Math.round((startX + c * (sz + gap)) * 100) / 100, y: Math.round((startY + r * (sz + gap)) * 100) / 100, size: Math.round(sz * 10) / 10, asset: members[i] });
+      }
+      return out;
+    }
+
+    // ── 계산 목록 ──
+    function unplacedAssets() {
+      let r = allAssets.filter(a => !posOf(a.assetId).visible && !groupedIds.has(a.assetId));
+      if (!includeOther) r = r.filter(a => !placedOnOther.has(a.assetId));
+      if (selLineId !== null) r = selLineId === -1 ? r.filter(a => a.lineId == null) : r.filter(a => a.lineId === selLineId);
+      if (searchText.trim()) { const q = searchText.toLowerCase(); r = r.filter(a => (a.name || '').toLowerCase().includes(q) || (a.ip || '').toLowerCase().includes(q)); }
+      return r;
+    }
+    function placedUngrouped() { return allAssets.filter(a => posOf(a.assetId).visible && !groupedIds.has(a.assetId)); }
+    function groupLabel(gid) {
+      const ids = memberIdsOf(gid);
+      if (!ids.length) return '그룹 #' + gid;
+      const names = ids.map(id => assetMap.get(id)).filter(Boolean).slice(0, 5).map(a => a.name);
+      let l = names.join(', ');
+      if (ids.length > 5) l += ` 외 ${ids.length - 5}`;
+      return l;
+    }
+
+    // ── SVG 렌더 ──
+    function assetNode(asset, cx, cy, sz, scale) {
+      const sel = selAssets.has(asset.assetId) ? ' ap-selected' : '';
+      const imgSz = sz * 0.75, imgOff = sz * 0.125;
+      return `<g class="ap-asset-icon${sel}" data-asset-id="${asset.assetId}" data-x="${F(cx)}" data-y="${F(cy)}" data-scale="${F(scale)}" transform="translate(${F(cx - sz / 2)},${F(cy - sz / 2)})" style="cursor:grab;">`
+        + `<title>${esc(asset.name)}</title>`
+        + `<rect width="${F(sz)}" height="${F(sz)}" rx="4" fill="white" stroke="#ccc" stroke-width="1" opacity="0.9"/>`
+        + `<image href="${iconHref(asset.icon)}" width="${F(imgSz)}" height="${F(imgSz)}" x="${F(imgOff)}" y="${F(imgOff)}"/></g>`;
+    }
+    function memberNode(asset, it) {
+      const sel = selAssets.has(asset.assetId) ? ' ap-selected' : '';
+      return `<g class="ap-asset-icon${sel}" data-asset-id="${asset.assetId}" data-x="${F(it.x + it.size / 2)}" data-y="${F(it.y + it.size / 2)}" data-scale="${F(it.size / 32)}" transform="translate(${F(it.x)},${F(it.y)})" style="cursor:grab;">`
+        + `<title>${esc(asset.name)}</title>`
+        + `<rect width="${F(it.size)}" height="${F(it.size)}" rx="3" fill="white" stroke="#ccc" stroke-width="1" opacity="0.9"/>`
+        + `<image href="${iconHref(asset.icon)}" width="${F(it.size - 2)}" height="${F(it.size - 2)}" x="1" y="1"/></g>`;
+    }
+    function groupNode(grp) {
+      const ids = memberIdsOf(grp.id);
+      const members = ids.map(id => assetMap.get(id)).filter(Boolean);
+      const color = grp.color || '#4a90d9';
+      const selCls = selGroups.has(grp.id) ? ' ap-group-selected' : '';
+      const rSz = clamp(Math.min(grp.width, grp.height) * 0.15, 6, 16), rOff = rSz / 2;
+      let inner = '';
+      for (const it of layoutGroupAssets(grp, members)) inner += memberNode(it.asset, it);
+      return `<g class="ap-group-container${selCls}" data-group-id="${grp.id}" data-x="${F(grp.x)}" data-y="${F(grp.y)}" data-w="${F(grp.width)}" data-h="${F(grp.height)}" data-members="${ids.join(',')}">`
+        + `<rect x="${F(grp.x)}" y="${F(grp.y)}" width="${F(grp.width)}" height="${F(grp.height)}" rx="6" fill="${color}10" stroke="${color}" stroke-width="1.5" stroke-dasharray="6 3"/>`
+        + `<g clip-path="url(#ap-grp-clip-${grp.id})">${inner}</g>`
+        + `<rect class="ap-group-resize" x="${F(grp.x + grp.width - rOff)}" y="${F(grp.y + grp.height - rOff)}" width="${F(rSz)}" height="${F(rSz)}" rx="2" fill="${color}" fill-opacity="0.4"/></g>`;
+    }
+    function renderSvg() {
+      const svg = $('ap-editor-svg');
+      const gs = snapGridSize, gl = gs * 5, bg = config.bgColor || '#1a1a2e';
+      let defs = `<pattern id="ap-grid-sm" width="${gs}" height="${gs}" patternUnits="userSpaceOnUse"><path d="M ${gs} 0 L 0 0 0 ${gs}" fill="none" stroke="#e0e0e0" stroke-width="0.3" opacity="0.3"/></pattern>`
+        + `<pattern id="ap-grid-lg" width="${gl}" height="${gl}" patternUnits="userSpaceOnUse"><rect width="${gl}" height="${gl}" fill="url(#ap-grid-sm)"/><path d="M ${gl} 0 L 0 0 0 ${gl}" fill="none" stroke="#ccc" stroke-width="0.5" opacity="0.3"/></pattern>`;
+      groups.forEach(g => defs += `<clipPath id="ap-grp-clip-${g.id}"><rect x="${F(g.x)}" y="${F(g.y)}" width="${F(g.width)}" height="${F(g.height)}" rx="6"/></clipPath>`);
+      let body = `<rect width="1000" height="600" fill="${bg}"/>`;
+      if (snapEnabled) body += `<rect width="1000" height="600" fill="url(#ap-grid-lg)"/>`;
+      if (config.imagePath) { const ir = calcImageRect(config); body += `<image href="${iconHref(config.imagePath)}" x="${F(ir.x)}" y="${F(ir.y)}" width="${F(ir.w)}" height="${F(ir.h)}" preserveAspectRatio="none" opacity="0.5"/>`; }
+      groups.forEach(g => body += groupNode(g));
+      for (const a of allAssets) {
+        if (groupedIds.has(a.assetId)) continue;
+        const p = posOf(a.assetId);
+        if (!p.visible) continue;
+        if (displayFilter && a.typeName !== displayFilter) continue;
+        body += assetNode(a, p.x, p.y, 32 * p.scale, p.scale);
+      }
+      svg.innerHTML = `<defs>${defs}</defs>${body}`;
+    }
+
+    // ── 좌측 패널 ──
+    function buildShell() {
+      const lineOpts = ['<option value="">전체</option>']
+        .concat(linesList.map(l => `<option value="${l.id}">${esc(l.name)}</option>`))
+        .concat('<option value="-1">미지정</option>').join('');
+      const types = [...new Set(allAssets.map(a => a.typeName).filter(Boolean))].sort();
+      const typeOpts = ['<option value="">전체 표시</option>'].concat(types.map(t => `<option value="${esc(t)}">${esc(t)} 만</option>`)).join('');
+      $('ap-panel').innerHTML =
+        `<input type="text" id="ap-search" class="le-panel-input" placeholder="자산 검색..." />`
+        + `<select id="ap-line" class="le-panel-input">${lineOpts}</select>`
+        + `<select id="ap-display" class="le-panel-input">${typeOpts}</select>`
+        + `<div class="ap-panel-section"><div class="le-panel-head" style="justify-content:space-between;">`
+        + `<span id="ap-unplaced-title">미배치 (0)</span>`
+        + `<span style="display:flex;gap:8px;align-items:center;font-weight:500;font-size:11px;">`
+        + `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" id="ap-include-other" style="accent-color:var(--c-primary);"/>다른도면포함</label>`
+        + `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" id="ap-check-all" style="accent-color:#4caf50;"/>전체</label>`
+        + `</span></div><div class="ap-asset-list" id="ap-unplaced-list"></div></div>`
+        + `<div class="ap-panel-section" id="ap-groups-section" hidden><div class="le-panel-head" id="ap-groups-title">그룹 (0)</div><div class="ap-group-list" id="ap-groups-list"></div></div>`
+        + `<div class="ap-panel-section"><div class="le-panel-head" id="ap-placed-title">배치됨 (0)</div><div class="ap-asset-list" id="ap-placed-list"></div></div>`;
+
+      $('ap-search').addEventListener('input', e => { searchText = e.target.value; renderUnplaced(); });
+      $('ap-line').addEventListener('change', e => { selLineId = e.target.value === '' ? null : parseInt(e.target.value, 10); renderUnplaced(); });
+      $('ap-display').addEventListener('change', e => { displayFilter = e.target.value || null; renderSvg(); });
+      $('ap-include-other').addEventListener('change', e => { includeOther = e.target.checked; checked.clear(); renderUnplaced(); });
+      $('ap-check-all').addEventListener('change', e => toggleCheckAll(e.target.checked));
+
+      // 리스트 클릭 위임
+      $('ap-unplaced-list').addEventListener('click', e => {
+        const item = e.target.closest('[data-uid]'); if (!item) return;
+        toggleCheck(parseInt(item.dataset.uid, 10));
+      });
+      $('ap-placed-list').addEventListener('click', e => {
+        const hide = e.target.closest('[data-hide]');
+        if (hide) { unplaceAsset(parseInt(hide.dataset.hide, 10)); return; }
+        const item = e.target.closest('[data-pid]'); if (item) focusAsset(parseInt(item.dataset.pid, 10));
+      });
+      $('ap-groups-list').addEventListener('click', e => {
+        const del = e.target.closest('[data-grp-del]'); if (del) { deleteGroup(parseInt(del.dataset.grpDel, 10)); return; }
+        const rem = e.target.closest('[data-grp-rem]'); if (rem) { removeFromGroup(parseInt(rem.dataset.grp, 10), parseInt(rem.dataset.grpRem, 10)); return; }
+        const head = e.target.closest('[data-grp-exp]'); if (head) toggleGroupExpand(parseInt(head.dataset.grpExp, 10));
+      });
+      $('ap-groups-list').addEventListener('change', e => {
+        const f = e.target.closest('[data-grp-floor]');
+        if (f) onGroupFloorChanged(parseInt(f.dataset.grpFloor, 10), parseInt(f.value, 10));
+      });
+      shellBuilt = true;
+    }
+
+    function renderUnplaced() {
+      const list = unplacedAssets();
+      $('ap-unplaced-title').textContent = `미배치 (${list.length})`;
+      const all = $('ap-check-all'); if (all) all.checked = checked.size > 0 && checked.size >= list.length;
+      $('ap-unplaced-list').innerHTML = list.map(a => {
+        const ck = checked.has(a.assetId);
+        const tag = a.lineName ? `<span class="ap-line-tag">${esc(a.lineName)}</span>` : '';
+        return `<div class="ap-list-item ${ck ? 'checked' : ''}" data-uid="${a.assetId}">`
+          + `<input type="checkbox" ${ck ? 'checked' : ''} style="accent-color:#4caf50;pointer-events:none;"/>`
+          + `<img src="${iconHref(a.icon)}" class="asset-type-icon-sm"/>`
+          + `<div class="flex-grow-1" style="min-width:0;"><div class="ap-list-name">${esc(a.name)}</div>`
+          + `<div class="ap-list-sub">${esc(a.ip || '')}${tag}</div></div></div>`;
+      }).join('') || `<div class="ap-empty">미배치 자산이 없습니다.</div>`;
+    }
+    function renderGroups() {
+      const sec = $('ap-groups-section');
+      sec.hidden = groups.length === 0;
+      $('ap-groups-title').textContent = `그룹 (${groups.length})`;
+      $('ap-groups-list').innerHTML = groups.map(g => {
+        const ids = memberIdsOf(g.id), isExp = expanded.has(g.id), selCls = selGroups.has(g.id) ? 'selected' : '';
+        let members = '';
+        if (isExp) members = `<div class="ap-group-members">` + ids.map(aid => {
+          const a = assetMap.get(aid); if (!a) return '';
+          return `<div class="ap-list-item small"><img src="${iconHref(a.icon)}" class="asset-type-icon-sm"/>`
+            + `<span class="flex-grow-1 ap-list-name">${esc(a.name)}</span>`
+            + `<button class="le-mini danger" data-grp="${g.id}" data-grp-rem="${aid}" title="그룹에서 제거"><span class="material-symbols-outlined">remove_circle_outline</span></button></div>`;
+        }).join('') + `</div>`;
+        return `<div class="ap-group-item ${selCls}">`
+          + `<div class="ap-group-header" data-grp-exp="${g.id}">`
+          + `<span class="material-symbols-outlined" style="font-size:18px;">${isExp ? 'expand_more' : 'chevron_right'}</span>`
+          + `<span class="ap-group-color" style="background:${g.color || '#4a90d9'}"></span>`
+          + `<span class="flex-grow-1 ap-list-name" style="font-size:.72rem;">${esc(groupLabel(g.id))}</span>`
+          + `<input type="number" class="le-floor-input" data-grp-floor="${g.id}" value="${g.floor}" min="-20" max="100" title="층" onclick="event.stopPropagation()"/>`
+          + `<span class="ap-group-count">${ids.length}</span>`
+          + `<button class="le-mini danger" data-grp-del="${g.id}" title="그룹 삭제"><span class="material-symbols-outlined">delete</span></button>`
+          + `</div>${members}</div>`;
+      }).join('');
+    }
+    function renderPlaced() {
+      const list = placedUngrouped();
+      $('ap-placed-title').textContent = `배치됨 (${list.length})`;
+      $('ap-placed-list').innerHTML = list.map(a => {
+        const sel = selAssets.has(a.assetId) ? 'selected' : '';
+        return `<div class="ap-list-item ${sel}" data-pid="${a.assetId}"><img src="${iconHref(a.icon)}" class="asset-type-icon-sm"/>`
+          + `<div class="flex-grow-1" style="min-width:0;"><div class="ap-list-name">${esc(a.name)}</div><div class="ap-list-sub">${esc(a.ip || '')}</div></div>`
+          + `<button class="le-mini" data-hide="${a.assetId}" title="미배치"><span class="material-symbols-outlined">visibility_off</span></button></div>`;
+      }).join('') || `<div class="ap-empty">배치된 자산이 없습니다.</div>`;
+    }
+    function renderPanel() { if (!shellBuilt) return; renderUnplaced(); renderGroups(); renderPlaced(); }
+
+    // ── 선택 액션 툴바 ──
+    function selectedSharedFloor() {
+      const fl = [...new Set(groups.filter(g => selGroups.has(g.id)).map(g => g.floor))];
+      return fl.length === 1 ? fl[0] : '';
+    }
+    function updateSelActions() {
+      const host = $('ap-sel-actions');
+      const total = selAssets.size + selGroups.size;
+      if (total === 0) { host.innerHTML = ''; return; }
+      const names = [...selAssets].map(id => (assetMap.get(id) || {}).name || ('#' + id))
+        .concat([...selGroups].map(id => { const g = groups.find(g => g.id === id); return g ? (g.name || '그룹 #' + id) : ''; }));
+      let html = `<span class="le-sel-label" title="${esc(names.join(', '))}">${esc(names.join(', '))}</span>`;
+      if (selAssets.size > 1) {
+        html += `<button class="le-pillbtn" id="ap-group-btn"><span class="material-symbols-outlined">workspaces</span>그룹화</button>`
+          + `<select class="le-panel-input" id="ap-align" style="width:auto;margin:0;padding:6px 8px;"><option value="">정렬/분배…</option>`
+          + `<option value="grid">그리드 정렬</option><option value="row">가로 정렬</option><option value="col">세로 정렬</option>`
+          + `<option value="h">가로 균등 분배</option><option value="v">세로 균등 분배</option></select>`;
+      }
+      if (selGroups.size > 0) {
+        html += `<input type="number" class="le-floor-input" id="ap-sel-floor" style="width:64px;" min="-20" max="100" placeholder="혼합" value="${selectedSharedFloor()}" title="선택 그룹 층"/>`;
+      }
+      html += `<button class="le-pillbtn danger" id="ap-del-sel"><span class="material-symbols-outlined">delete</span>삭제</button>`;
+      host.innerHTML = html;
+      const gb = $('ap-group-btn'); if (gb) gb.addEventListener('click', createGroupFromSelection);
+      const al = $('ap-align'); if (al) al.addEventListener('change', e => { const v = e.target.value; e.target.value = ''; if (v === 'h' || v === 'v') distribute(v); else if (v) align(v); });
+      const sf = $('ap-sel-floor'); if (sf) sf.addEventListener('change', e => onSelectedGroupsFloor(parseInt(e.target.value, 10)));
+      const ds = $('ap-del-sel'); if (ds) ds.addEventListener('click', () => { pushUndo(); unplaceSelected(); refresh(); });
+    }
+
+    function updateToolbar() {
+      $('ap-snap').classList.toggle('is-active', snapEnabled);
+      $('ap-tool-pan').classList.toggle('is-active', activeTool === 'pan');
+      $('ap-undo').disabled = undo.length === 0;
+      $('ap-redo').disabled = redo.length === 0;
+      $('ap-changed').hidden = !hasChanges;
+      $('ap-save').disabled = !hasChanges;
+      if (inited) $('ap-zoom').textContent = window.assetPlacementEditor.getZoomLevel('ap-editor-container') + '%';
+    }
+    function markChanged() { hasChanges = true; }
+    function refresh() { renderSvg(); renderPanel(); updateSelActions(); updateToolbar(); }
+
+    // ── Undo / Redo ──
+    function snap() {
+      return {
+        positions: new Map([...positions].map(([k, v]) => [k, { ...v }])),
+        groups: groups.map(g => ({ ...g })),
+        members: new Map([...groupMembers].map(([k, v]) => [k, v.slice()])),
+      };
+    }
+    function pushUndo() { undo.push(snap()); if (undo.length > MAX_UNDO) undo.shift(); redo = []; }
+    function restore(s) {
+      positions = new Map([...s.positions].map(([k, v]) => [k, { ...v }]));
+      groups = s.groups.map(g => ({ ...g }));
+      groupMembers = new Map([...s.members].map(([k, v]) => [k, v.slice()]));
+      rebuildIndexes(); selAssets.clear(); selGroups.clear(); markChanged();
+    }
+    function doUndo() { if (!undo.length) return; redo.push(snap()); restore(undo.pop()); refresh(); }
+    function doRedo() { if (!redo.length) return; undo.push(snap()); restore(redo.pop()); refresh(); }
+
+    // ── JS 콜백 핸들러 ──
+    function onSelectionChanged(assetIds, groupIds) {
+      selAssets = new Set(assetIds || []); selGroups = new Set(groupIds || []);
+      const last = (assetIds && assetIds.length) ? assetIds[assetIds.length - 1] : null;
+      if (last != null) { for (const [gid, mems] of groupMembers) if (mems.includes(last)) { expanded.add(gid); break; } }
+      refresh();
+    }
+    function onToggleAssetSelection(id) { selGroups.clear(); if (!selAssets.delete(id)) selAssets.add(id); refresh(); }
+    function onToggleGroupSelection(id) { selAssets.clear(); if (!selGroups.delete(id)) selGroups.add(id); refresh(); }
+    function onItemsMoved(list) { pushUndo(); (list || []).forEach(p => { const pos = getPosition(p.assetId); pos.x = p.x; pos.y = p.y; }); markChanged(); refresh(); }
+    function onGroupMoved(gid, x, y, w, h) { pushUndo(); const g = groups.find(g => g.id === gid); if (g) { g.x = x; g.y = y; g.width = w; g.height = h; } markChanged(); refresh(); }
+    function onBulkMoved(list, grps) {
+      pushUndo();
+      (grps || []).forEach(gp => { const g = groups.find(g => g.id === gp.groupId); if (g) { g.x = gp.x; g.y = gp.y; g.width = gp.w; g.height = gp.h; } });
+      (list || []).forEach(p => { const pos = getPosition(p.assetId); pos.x = p.x; pos.y = p.y; });
+      markChanged(); refresh();
+    }
+    function onAssetDroppedOnGroup(assetId, groupId) {
+      const cur = groupMembers.get(groupId);
+      if (cur && cur.includes(assetId)) return;
+      for (const [gid, mems] of groupMembers) { const i = mems.indexOf(assetId); if (i >= 0) { mems.splice(i, 1); if (!mems.length) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); } break; } }
+      let mems = groupMembers.get(groupId); if (!mems) { mems = []; groupMembers.set(groupId, mems); }
+      mems.push(assetId); rebuildIndexes(); markChanged(); refresh();
+    }
+    function onAssetRemovedFromGroup(assetId, groupId) {
+      const mems = groupMembers.get(groupId); if (!mems) return;
+      const i = mems.indexOf(assetId); if (i < 0) return; mems.splice(i, 1);
+      if (!mems.length) { groups = groups.filter(g => g.id !== groupId); groupMembers.delete(groupId); }
+      rebuildIndexes(); markChanged(); refresh();
+    }
+    function onKeyAction(action) {
+      switch (action) {
+        case 'delete': pushUndo(); unplaceSelected(); break;
+        case 'undo': doUndo(); return;
+        case 'redo': doRedo(); return;
+        case 'escape': selAssets.clear(); selGroups.clear(); break;
+        case 'selectAll': selAssets = new Set(allAssets.filter(a => posOf(a.assetId).visible && !groupedIds.has(a.assetId)).map(a => a.assetId)); break;
+        case 'group': if (selAssets.size > 1) { createGroupFromSelection(); return; } break;
+      }
+      refresh();
+    }
+
+    // ── 배치/미배치 ──
+    function toggleCheck(assetId) {
+      if (!checked.delete(assetId)) { checked.add(assetId); placeIndividually(assetId); refresh(); }
+      else renderUnplaced();
+    }
+    function placeIndividually(assetId) {
+      const pos = getPosition(assetId); if (pos.visible) return;
+      pushUndo();
+      const idx = checked.size - 1, cols = 5, spacing = 32 * globalScale + 12;
+      pos.visible = true; pos.scale = globalScale;
+      pos.x = Math.round((40 + (idx % cols) * spacing) * 100) / 100;
+      pos.y = Math.round((40 + Math.floor(idx / cols) * spacing) * 100) / 100;
+      markChanged();
+    }
+    function unplaceAsset(assetId) {
+      const pos = getPosition(assetId); pos.visible = false;
+      for (const [gid, mems] of groupMembers) { const i = mems.indexOf(assetId); if (i >= 0) { mems.splice(i, 1); if (!mems.length) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); } break; } }
+      checked.delete(assetId);
+      rebuildIndexes(); markChanged(); refresh();
+    }
+    function toggleCheckAll(check) {
+      if (check) {
+        pushUndo();
+        const list = unplacedAssets(), spacing = 32 * globalScale + 12, cols = 5;
+        list.forEach((a, i) => {
+          checked.add(a.assetId);
+          const pos = getPosition(a.assetId);
+          if (!pos.visible) { pos.visible = true; pos.scale = globalScale; pos.x = Math.round((40 + (i % cols) * spacing) * 100) / 100; pos.y = Math.round((40 + Math.floor(i / cols) * spacing) * 100) / 100; }
+        });
+        markChanged();
+      } else checked.clear();
+      refresh();
+    }
+    function focusAsset(assetId) {
+      selAssets = new Set([assetId]); selGroups.clear();
+      if (inited) { try { window.assetPlacementEditor.scrollToAsset('ap-editor-container', assetId); } catch (_) {} }
+      refresh();
+    }
+
+    // ── 그룹 ──
+    function toggleGroupExpand(gid) { if (!expanded.delete(gid)) expanded.add(gid); renderGroups(); }
+    function createGroupFromSelection() {
+      if (selAssets.size < 2) return;
+      pushUndo();
+      const ids = [...selAssets];
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const id of ids) { const p = getPosition(id); const sz = 32 * p.scale; minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x + sz); maxY = Math.max(maxY, p.y + sz + 14); }
+      const pad = 14, tempId = nextTempGroupId--;
+      groups.push({ id: tempId, name: '그룹', x: Math.round((minX - pad) * 100) / 100, y: Math.round((minY - pad - 14) * 100) / 100, width: Math.round((maxX - minX + pad * 2) * 100) / 100, height: Math.round((maxY - minY + pad * 2 + 14) * 100) / 100, color: null, floor: 1 });
+      groupMembers.set(tempId, ids);
+      rebuildIndexes(); selAssets.clear(); markChanged(); refresh();
+      toast('그룹이 생성되었습니다.');
+    }
+    function deleteGroup(gid) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); expanded.delete(gid); selGroups.delete(gid); rebuildIndexes(); markChanged(); refresh(); }
+    function removeFromGroup(gid, aid) {
+      const mems = groupMembers.get(gid); if (!mems) return;
+      const i = mems.indexOf(aid); if (i >= 0) mems.splice(i, 1);
+      if (!mems.length) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); expanded.delete(gid); }
+      rebuildIndexes(); markChanged(); refresh();
+    }
+    function onGroupFloorChanged(gid, floor) { if (!Number.isFinite(floor)) return; if (floor === 0) floor = 1; const g = groups.find(g => g.id === gid); if (!g || g.floor === floor) return; pushUndo(); g.floor = floor; markChanged(); refresh(); }
+    function onSelectedGroupsFloor(floor) { if (!Number.isFinite(floor)) return; const f = floor === 0 ? 1 : floor; const targets = groups.filter(g => selGroups.has(g.id) && g.floor !== f); if (!targets.length) return; pushUndo(); targets.forEach(g => g.floor = f); markChanged(); refresh(); }
+
+    // ── 정렬 / 분배 ──
+    function align(mode) {
+      if (selAssets.size < 2) return;
+      pushUndo();
+      const ids = [...selAssets].sort((a, b) => ((assetMap.get(a) || {}).name || '').localeCompare((assetMap.get(b) || {}).name || ''));
+      const n = ids.length; let cx = 0, cy = 0;
+      ids.forEach(id => { const p = getPosition(id); cx += p.x; cy += p.y; }); cx /= n; cy /= n;
+      const cellW = 32 * globalScale + 12, cellH = 32 * globalScale + 24;
+      if (mode === 'grid') {
+        const cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+        const baseX = Math.max(0, cx - cols * cellW / 2), baseY = Math.max(0, cy - rows * cellH / 2);
+        ids.forEach((id, i) => { const p = getPosition(id); p.x = Math.round((baseX + (i % cols) * cellW + cellW / 2) * 100) / 100; p.y = Math.round((baseY + Math.floor(i / cols) * cellH + cellH / 2) * 100) / 100; });
+      } else if (mode === 'row') {
+        const bx = Math.max(0, cx - n * cellW / 2);
+        ids.forEach((id, i) => { const p = getPosition(id); p.x = Math.round((bx + i * cellW + cellW / 2) * 100) / 100; p.y = Math.round(cy * 100) / 100; });
+      } else if (mode === 'col') {
+        const by = Math.max(0, cy - n * cellH / 2);
+        ids.forEach((id, i) => { const p = getPosition(id); p.x = Math.round(cx * 100) / 100; p.y = Math.round((by + i * cellH + cellH / 2) * 100) / 100; });
+      }
+      markChanged(); refresh(); toast(`${n}개 정렬됨`);
+    }
+    function distribute(axis) {
+      if (selAssets.size < 3) return;
+      pushUndo();
+      let ids = [...selAssets];
+      if (axis === 'h') { ids.sort((a, b) => getPosition(a).x - getPosition(b).x); const first = getPosition(ids[0]).x, last = getPosition(ids[ids.length - 1]).x, step = (last - first) / (ids.length - 1); for (let i = 1; i < ids.length - 1; i++) getPosition(ids[i]).x = Math.round((first + i * step) * 100) / 100; }
+      else { ids.sort((a, b) => getPosition(a).y - getPosition(b).y); const first = getPosition(ids[0]).y, last = getPosition(ids[ids.length - 1]).y, step = (last - first) / (ids.length - 1); for (let i = 1; i < ids.length - 1; i++) getPosition(ids[i]).y = Math.round((first + i * step) * 100) / 100; }
+      markChanged(); refresh(); toast(`${ids.length}개 균등 분배됨`);
+    }
+    function unplaceSelected() {
+      let count = 0;
+      for (const aid of selAssets) {
+        const pos = getPosition(aid); if (pos.visible) { pos.visible = false; count++; }
+        for (const [gid, mems] of groupMembers) { const i = mems.indexOf(aid); if (i >= 0) { mems.splice(i, 1); if (!mems.length) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); } } }
+      }
+      for (const gid of selGroups) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); count++; }
+      selAssets.clear(); selGroups.clear(); rebuildIndexes(); markChanged();
+      if (count > 0) toast(`${count}개 제거됨`);
+    }
+
+    function setGlobalScale(v) {
+      v = Math.round(clamp(v, 0.1, 5) * 100) / 100; globalScale = v;
+      for (const p of positions.values()) p.scale = v;
+      markChanged(); refresh();
+    }
+
+    // ── 저장 (PlacementEditor.ApplyChangesAsync 이식) ──
+    async function save() {
+      const btn = $('ap-save'); btn.disabled = true;
+      try {
+        const posList = [];
+        for (const [aid, p] of positions) if (p.visible || dbPositionIds.has(aid)) posList.push({ assetId: aid, x: p.x, y: p.y, scale: p.scale > 0 ? p.scale : 1, visible: p.visible });
+        const grpList = groups.map(g => ({ name: g.name || '그룹', x: g.x, y: g.y, width: g.width, height: g.height, color: g.color, floor: g.floor, memberIds: memberIdsOf(g.id) }));
+        const r = await api(`/api/admin/layout/${LID}/placement`, 'PUT', { positions: posList, groups: grpList });
+        if (!r) return;
+        dbPositionIds = new Set(posList.filter(p => p.visible).map(p => p.assetId));
+        hasChanges = false; updateToolbar();
+        toast(`${posList.filter(p => p.visible).length}개 자산, ${grpList.length}개 그룹 적용됨`);
+      } finally { btn.disabled = false; }
+    }
+
+    function activate() {
+      $('ap-editor-svg').setAttribute('viewBox', '0 0 1000 600');
+      if (!shellBuilt) buildShell();
+      $('ap-scale').value = globalScale.toFixed(2);
+      renderSvg(); renderPanel(); updateSelActions(); updateToolbar();
+      window.assetPlacementEditor.init('ap-editor-container', shim);
+      window.assetPlacementEditor.setSnapConfig('ap-editor-container', snapEnabled, snapGridSize);
+      window.assetPlacementEditor.setTool('ap-editor-container', activeTool);
+      inited = true;
+      updateToolbar();
+    }
+    function deactivate() { if (inited) { window.assetPlacementEditor.dispose('ap-editor-container'); inited = false; } }
+    function hasUnsaved() { return hasChanges; }
+
+    function bind() {
+      $('ap-tool-pan').addEventListener('click', () => { activeTool = activeTool === 'pan' ? 'select' : 'pan'; window.assetPlacementEditor.setTool('ap-editor-container', activeTool); updateToolbar(); });
+      $('ap-snap').addEventListener('click', () => { snapEnabled = !snapEnabled; window.assetPlacementEditor.setSnapConfig('ap-editor-container', snapEnabled, snapGridSize); renderSvg(); updateToolbar(); });
+      $('ap-grid').addEventListener('change', e => { snapGridSize = clamp(parseInt(e.target.value, 10) || 20, 5, 100); e.target.value = snapGridSize; window.assetPlacementEditor.setSnapConfig('ap-editor-container', snapEnabled, snapGridSize); renderSvg(); });
+      $('ap-zoom-in').addEventListener('click', () => { window.assetPlacementEditor.zoomIn('ap-editor-container'); updateToolbar(); });
+      $('ap-zoom-out').addEventListener('click', () => { window.assetPlacementEditor.zoomOut('ap-editor-container'); updateToolbar(); });
+      $('ap-zoom-reset').addEventListener('click', () => { window.assetPlacementEditor.resetZoom('ap-editor-container'); updateToolbar(); });
+      $('ap-zoom-fit').addEventListener('click', () => { window.assetPlacementEditor.fitAll('ap-editor-container'); updateToolbar(); });
+      $('ap-undo').addEventListener('click', doUndo);
+      $('ap-redo').addEventListener('click', doRedo);
+      $('ap-scale').addEventListener('change', e => setGlobalScale(parseFloat(e.target.value) || 1));
+      $('ap-save').addEventListener('click', save);
+    }
+
+    return { load, bind, activate, deactivate, hasUnsaved };
+  })();
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 탭 전환 + 부트스트랩
+   * ═════════════════════════════════════════════════════════════════════*/
+  let activeTab = 'config';
+  const EDITOR_TABS = { lines: Bp, assets: Ap };
+
+  function switchTab(tab) {
+    if (tab === activeTab) return;
+    // 떠나는 탭에 미저장 변경이 있으면 확인
+    const leaving = EDITOR_TABS[activeTab];
+    if (leaving && leaving.hasUnsaved() && !confirm('저장하지 않은 변경사항이 있습니다. 탭을 전환하시겠습니까?')) {
+      document.querySelectorAll('#le-tabs .lv-seg-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+      return;
+    }
+    if (leaving) leaving.deactivate();
+
+    activeTab = tab;
+    document.querySelectorAll('#le-tabs .lv-seg-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    ['config', 'lines', 'assets'].forEach(t => { $('tab-' + t).hidden = (t !== tab); });
+
+    if (tab === 'config') Cfg.load();
+    else EDITOR_TABS[tab].activate();
+  }
+
+  async function boot() {
+    if (window.Shell) await Shell.init({ active: 'layout' });
+    const m = location.pathname.match(/\/admin\/layout\/(\d+)\/edit/);
+    LID = m ? parseInt(m[1], 10) : 0;
+    if (!LID) { $('le-loading').textContent = '잘못된 레이아웃입니다.'; return; }
+
+    const d = await api(`/api/admin/layout/${LID}/edit-data`, 'GET');
+    if (!d) { $('le-loading').textContent = '레이아웃 데이터를 불러올 수 없습니다.'; return; }
+
+    config = d.config || { bgColor: '#1a1a2e', gridColor: '#e0e0e0', gridEnabled: true, gridSize: 20 };
+    allAssets = d.assets || [];
+    assetMap = new Map(allAssets.map(a => [a.assetId, a]));
+    linesList = d.lines || [];
+    lineMap = {}; linesList.forEach(l => lineMap[l.id] = l.name);
+    window.__rectsSeed = d.rects || [];
+
+    $('le-title').textContent = (d.layout && d.layout.name) ? d.layout.name : '레이아웃 편집';
+    document.title = `${(d.layout && d.layout.name) || '레이아웃'} 편집 — TWMS`;
+
+    Cfg.bind(); Bp.bind(); Bp.load(); Ap.bind(); Ap.load(d);
+
+    // 탭 버튼 + 초기 탭(도면 설정) 표시
+    document.querySelectorAll('#le-tabs .lv-seg-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+    $('le-loading').hidden = true;
+    $('tab-config').hidden = false;
+    Cfg.load();
+
+    window.addEventListener('beforeunload', (e) => { if (Bp.hasUnsaved() || Ap.hasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+})();

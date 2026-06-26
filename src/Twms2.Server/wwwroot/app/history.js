@@ -23,6 +23,14 @@
     incomplete: { label: '미완료',    chip: 'chip-error',   icon: 'hourglass_disabled' },
     inprogress: { label: '작업중',    chip: 'chip-warning', icon: 'hourglass_top' },
   };
+  // 백업 로그 레벨 → 칩 클래스 (BackupLog.razor.GetLevelColor 이식)
+  const LOG_LEVEL = {
+    INFO:  'chip-info',
+    WARN:  'chip-warning',
+    ERROR: 'chip-error',
+    FATAL: 'chip-error',
+    DEBUG: 'chip-default',
+  };
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const $ = (id) => document.getElementById(id);
@@ -127,8 +135,11 @@
   }
 
   function fillSelectOptions() {
+    // 로봇 PLC 가 있으면(또는 현재 필터가 로봇이면) '자산별 현황' 차트 드릴다운과 맞물리도록 합성 옵션 노출
+    const hasRobot = S.assets.some(a => a.isRobotPlc) || S.filterType === ROBOT_TYPE;
     const typeOpts = '<option value="">전체 타입</option>' +
-      S.typeNames.map(t => `<option value="${esc(t)}"${t === S.filterType ? ' selected' : ''}>${esc(t)}</option>`).join('');
+      S.typeNames.map(t => `<option value="${esc(t)}"${t === S.filterType ? ' selected' : ''}>${esc(t)}</option>`).join('') +
+      (hasRobot ? `<option value="${ROBOT_TYPE}"${S.filterType === ROBOT_TYPE ? ' selected' : ''}>Robot PLC</option>` : '');
     $('a-type').innerHTML = typeOpts;
     const lineOpts = (sel) => '<option value="">전체 라인</option>' +
       S.lineNames.map(l => `<option value="${esc(l)}"${l === sel ? ' selected' : ''}>${esc(l)}</option>`).join('');
@@ -180,6 +191,13 @@
     const p = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
+  // 로그 다이얼로그용 시각 (BackupLog.razor 와 동일하게 HH:mm:ss.fff)
+  function fmtLogTime(s) {
+    if (!s) return '-';
+    const d = new Date(s); if (isNaN(d)) return s;
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+  }
   function fmtShort(s) {
     if (!s) return '-';
     const d = new Date(s); if (isNaN(d)) return s;
@@ -188,15 +206,19 @@
   }
 
   /* ════════════════ 탭 0: 자산 정보 ════════════════ */
+  // 타입 필터값 'Robot PLC' 는 대시보드 '자산별 현황' 차트의 합성 그룹(로봇 PLC) — 실제 타입명이 아니라
+  // isRobotPlc 플래그로 거른다. 로봇 PLC 는 XGT PLC 이므로 연결 컬럼 가시성은 XGT PLC 와 동일.
+  const ROBOT_TYPE = 'Robot PLC';
   // 타입별 컬럼 가시성 (Razor.ShowConnColumns / ShowRobotColumn / ShowModelVersion)
-  function showConn() { const t = S.filterType; return !t || t === 'XGT PLC' || t === 'LS Servo' || t === 'LS Drive'; }
-  function showRobot() { const t = S.filterType; return !t || t === 'XGT PLC'; }
+  function showConn() { const t = S.filterType; return !t || t === ROBOT_TYPE || t === 'XGT PLC' || t === 'LS Servo' || t === 'LS Drive'; }
+  function showRobot() { const t = S.filterType; return !t || t === ROBOT_TYPE || t === 'XGT PLC'; }
   function showModelVer() { const t = S.filterType; return !t || t === 'LS Drive'; }
 
   function filteredAssets() {
     return S.assets.filter(a => {
       if (!matchSearch([a.name, a.ip, a.description])) return false;
-      if (S.filterType && a.typeName !== S.filterType) return false;
+      if (S.filterType === ROBOT_TYPE) { if (!a.isRobotPlc) return false; }
+      else if (S.filterType && a.typeName !== S.filterType) return false;
       if (S.filterLine && a.lineName !== S.filterLine) return false;
       if (S.filterHealth && a.health !== S.filterHealth) return false;
       return true;
@@ -303,7 +325,7 @@
       }
       const report = a.hasReport
         ? `<a class="hist-iconbtn" href="/report/${a.assetId}/${a.version}/index.html" target="_blank" title="리포트 보기"><span class="material-symbols-outlined">open_in_new</span></a>` : '';
-      const log = `<a class="hist-iconbtn" href="/assets/${a.assetId}" title="로그 보기"><span class="material-symbols-outlined">article</span></a>`;
+      const log = `<button class="hist-iconbtn" data-log="${a.id}" data-asset="${a.assetId}" title="로그 보기"><span class="material-symbols-outlined">article</span></button>`;
       return `<tr>
         <td><a href="/assets/${a.assetId}">${esc(a.assetName)}</a></td>
         <td>${esc(a.typeName || '-')}</td>
@@ -323,6 +345,57 @@
     bindSort('b-table', S.bSort, renderActions);
     renderPager('b-pager', S.bPage, pages, sorted.length, (p) => { S.bPage = p; renderActions(); });
   }
+
+  /* ── 백업 로그 다이얼로그 (BackupLog.razor.ShowLogs 이식) ── */
+  async function openLogModal(actionId, assetId) {
+    $('log-title').textContent = `액션 #${actionId} 로그`;
+    $('log-sub').textContent = '불러오는 중…';
+    $('log-body').innerHTML = '';
+    $('log-modal').classList.add('show');
+    await fetchLogs(actionId, false, assetId);
+  }
+
+  async function fetchLogs(actionId, all, assetId) {
+    try {
+      const res = await fetch(`/api/history/logs/${actionId}${all ? '?all=true' : ''}`, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('http ' + res.status);
+      const d = await res.json();
+      renderLogs(d.logs || [], d.total || 0, all, actionId, assetId);
+    } catch (e) {
+      $('log-sub').textContent = '';
+      $('log-body').innerHTML = `<div class="hist-empty">로그를 불러오지 못했습니다.</div>`;
+    }
+  }
+
+  function renderLogs(logs, total, all, actionId, assetId) {
+    if (logs.length === 0) {
+      $('log-sub').textContent = '';
+      $('log-body').innerHTML = `<div class="hist-empty">로그가 없습니다.</div>`;
+      return;
+    }
+    const showAll = !all && total > logs.length;
+    $('log-sub').innerHTML =
+      `<span>Asset ID: ${esc(assetId)} · 로그 ${logs.length} / ${total} 건</span>` +
+      (showAll ? `<button class="hist-btn" id="log-all"><span class="material-symbols-outlined">unfold_more</span>전체 보기 (${total}건)</button>` : '');
+    const rows = logs.map(l => {
+      const cls = LOG_LEVEL[l.level] || 'chip-default';
+      return `<tr>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--c-on-surface-variant);">${esc(fmtLogTime(l.dateTime))}</td>
+        <td><span class="chip ${cls}">${esc(l.level || '-')}</span></td>
+        <td style="white-space:pre-wrap;word-break:break-word;">${esc(l.message)}</td>
+      </tr>`;
+    }).join('');
+    $('log-body').innerHTML =
+      `<table class="nm-table"><thead><tr><th style="width:110px;">시간</th><th style="width:90px;">레벨</th><th>메시지</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const allBtn = $('log-all');
+    if (allBtn) allBtn.addEventListener('click', () => {
+      allBtn.disabled = true;
+      allBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_top</span>불러오는 중…';
+      fetchLogs(actionId, true, assetId);
+    });
+  }
+
+  function closeLogModal() { $('log-modal').classList.remove('show'); }
 
   /* ════════════════ 탭 2: 통신 이력 ════════════════ */
   function metaOf(id) { return S.meta[String(id)] || { name: '#' + id, typeName: '', lineName: '', ip: '' }; }
@@ -591,6 +664,21 @@
     $('b-line').addEventListener('change', (e) => { S.filterLine = e.target.value; fillSelectOptions(); renderActiveTab(); syncUrl(); });
     $('b-csv').addEventListener('click', exportActionCsv);
     $('b-link').addEventListener('click', copyLink);
+    // 로그 버튼(행 위임): /assets 이동 대신 로그 다이얼로그
+    $('b-table').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-log]');
+      if (!btn) return;
+      openLogModal(+btn.getAttribute('data-log'), +btn.getAttribute('data-asset'));
+    });
+
+    // 로그 다이얼로그 닫기: 배경 클릭 / 닫기 버튼 / ESC
+    const logModal = $('log-modal');
+    if (logModal) {
+      logModal.addEventListener('click', (e) => {
+        if (e.target === logModal || e.target.closest('[data-close]')) closeLogModal();
+      });
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLogModal(); });
 
     // 탭2 통신
     $('p-start').addEventListener('change', (e) => { S.startDate = e.target.value; onDateManual(); });

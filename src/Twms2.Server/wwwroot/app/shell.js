@@ -12,7 +12,6 @@
     { key: 'overview', label: '대시보드', icon: 'dashboard', href: '/', match: ['/', '/overview'] },
     { key: 'layout', label: '레이아웃', icon: 'space_dashboard', href: '/layout', match: ['/layout'] },
     { key: 'history', label: '자산 통합조회', icon: 'inventory_2', href: '/history', match: ['/history'] },
-    { key: 'admin', label: '관리', icon: 'settings', href: '/admin', match: ['/admin'], adminOnly: true },
   ];
 
   const HEALTH_COLOR = {
@@ -28,8 +27,12 @@
 
     async init(opts) {
       this.activeKey = (opts && opts.active) || 'overview';
+      this._applyNavCollapsed(); // 저장된 접힘 상태를 골격 생성 전 선적용 (로드 시 애니메이션 깜빡임 방지)
       this._render(); // 데이터 없이 즉시 골격 렌더 (빠른 첫 페인트)
       this._bindTheme();
+      this._bindNavToggle();
+      this._bindSearch();
+      this._bindSysStatus();
       await this._renderAuth();
       await this.refresh();
       // 30초 폴링 (Blazor 사이드바의 30s 타이머와 동일 주기)
@@ -50,6 +53,8 @@
     _render() {
       if (document.querySelector('.dsp-sidebar')) return;
       const page = document.querySelector('.dsp-page');
+      const path = location.pathname.replace(/\/$/, '') || '/';
+      const settingsActive = path.startsWith('/settings') || this.activeKey === 'settings';
 
       const aside = document.createElement('aside');
       aside.className = 'dsp-sidebar';
@@ -64,18 +69,28 @@
         <nav id="dsp-nav" style="display:flex;flex-direction:column;gap:6px;"></nav>
         <div style="height:1px;background:var(--c-outline-variant);opacity:0.4;margin:6px 0;"></div>
         <div id="dsp-tree" class="dsp-tree"></div>
-        <div id="dsp-mini-kpi" class="dsp-mini-kpi"></div>`;
+        <div style="height:1px;background:var(--c-outline-variant);opacity:0.4;margin:6px 0;"></div>
+        <a href="/settings" class="dsp-nav-link${settingsActive ? ' active' : ''}">
+          <span class="material-symbols-outlined">settings</span><span>설정</span></a>`;
 
       const header = document.createElement('header');
       header.className = 'dsp-header';
       header.innerHTML = `
-        <div class="nm-inset" style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:9999px;width:min(420px,40vw);">
+        <div style="display:flex;align-items:center;gap:12px;">
+        <button id="dsp-nav-toggle" class="dsp-iconbtn" title="메뉴 접기/펼치기"><span class="material-symbols-outlined">menu_open</span></button>
+        <div id="dsp-search-box" class="nm-inset" style="position:relative;display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:9999px;width:min(420px,40vw);">
           <span class="material-symbols-outlined" style="color:var(--c-outline);">search</span>
-          <input id="dsp-search" type="text" placeholder="자산 검색..." style="background:transparent;border:none;outline:none;width:100%;color:var(--c-on-surface);font-size:14px;" />
+          <input id="dsp-search" type="text" placeholder="자산 검색..." autocomplete="off" style="background:transparent;border:none;outline:none;width:100%;color:var(--c-on-surface);font-size:14px;" />
+          <div id="dsp-search-results" class="dsp-search-results" style="display:none;"></div>
+        </div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
+          <button id="dsp-sys-status" type="button" class="nm-flat-sm" title="DEXA 서버 · 에이전트 상태 보기" style="padding:8px 16px;border-radius:12px;display:flex;align-items:center;gap:8px;background:var(--c-surface);border:none;cursor:pointer;">
+            <span id="dsp-sys-led" class="w-2 h-2 rounded-full status-led" style="background:var(--health-unknown);"></span>
+            <span id="dsp-sys-label" class="font-label-mono text-on-surface" style="font-size:12px;">DEXA …</span>
+            <span class="material-symbols-outlined" style="font-size:16px;color:var(--c-on-surface-variant);">expand_more</span>
+          </button>
           <button id="dsp-theme-toggle" class="dsp-iconbtn" title="테마 전환"><span class="material-symbols-outlined">dark_mode</span></button>
-          <button class="dsp-iconbtn" title="알림"><span class="material-symbols-outlined">notifications</span></button>
           <div id="dsp-auth" style="display:flex;align-items:center;gap:8px;"></div>
         </div>`;
 
@@ -113,24 +128,39 @@
       const logoText = document.getElementById('dsp-logo-text');
       if (data.logoUrl && logo) { logo.src = data.logoUrl; logo.style.display = 'block'; if (logoText) logoText.style.display = 'none'; }
       // 네비 (admin 반영)
-      this._renderNav(!!data.isAdmin);
-      // 미니 KPI
-      const kpi = data.kpi || {};
-      const mini = document.getElementById('dsp-mini-kpi');
-      if (mini) {
-        const items = [
-          { dot: 'var(--c-primary)', v: kpi.total ?? 0, l: '전체' },
-          { dot: 'var(--health-backedup)', v: kpi.backedUp ?? 0, l: '갱신' },
-          { dot: 'var(--health-unchanged)', v: kpi.unchanged ?? 0, l: '유지' },
-          { dot: 'var(--health-failed)', v: kpi.failed ?? 0, l: '주의' },
-        ];
-        mini.innerHTML = items.map(i => `<div class="dsp-mini-kpi-item">
-          <span class="dsp-mini-kpi-dot" style="background:${i.dot};"></span>
-          <span class="dsp-mini-kpi-value">${i.v}</span>
-          <span class="dsp-mini-kpi-label">${i.l}</span></div>`).join('');
+      this.isAdmin = !!data.isAdmin;
+      this._renderNav(this.isAdmin);
+      document.dispatchEvent(new CustomEvent('shell:auth', { detail: { isAdmin: this.isAdmin } }));
+      // DEXA 연결 상태
+      const led = document.getElementById('dsp-sys-led');
+      const label = document.getElementById('dsp-sys-label');
+      if (led && label) {
+        const online = !!data.dexaOnline;
+        led.style.background = online ? 'var(--health-backedup)' : 'var(--health-failed)';
+        label.textContent = online ? 'DEXA 정상' : 'DEXA 연결 끊김';
       }
       // 자산 트리
       this._renderTree(data.tree || []);
+      // 헤더 검색 자동완성용 자산 인덱스 (트리 평탄화)
+      this._buildAssetIndex(data.tree || []);
+    },
+
+    /* ── 트리 → 검색용 평탄 자산 목록 ── */
+    _buildAssetIndex(lines) {
+      const out = [];
+      const push = (a, lineName) => {
+        if (!a || a.assetId == null) return;
+        out.push({ assetId: a.assetId, name: a.displayName || '', icon: a.icon || '', statusColor: a.statusColor, lineName: lineName || '' });
+      };
+      (lines || []).forEach(line => {
+        const ln = line.lineName || '';
+        (line.plcNodes || []).forEach(p => {
+          push(p.plc, ln);
+          (p.children || []).forEach(c => push(c, ln));
+        });
+        (line.standalone || []).forEach(s => push(s, ln));
+      });
+      this._assets = out;
     },
 
     _renderTree(lines) {
@@ -197,6 +227,7 @@
       try { me = await fetch('/api/auth/me', { headers: { Accept: 'application/json' } }).then(r => r.json()); } catch (e) {}
       if (me && me.authenticated) {
         host.innerHTML = `<span style="font-size:13px;color:var(--c-on-surface-variant);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(me.name || '')}</span>
+          <a href="/settings" class="dsp-iconbtn" title="설정" style="color:var(--c-on-surface-variant);text-decoration:none;"><span class="material-symbols-outlined">settings</span></a>
           <button id="dsp-logout" class="dsp-iconbtn" title="로그아웃" style="color:var(--c-error);"><span class="material-symbols-outlined">logout</span></button>`;
         const out = document.getElementById('dsp-logout');
         if (out) out.addEventListener('click', async () => {
@@ -207,6 +238,190 @@
         const ret = encodeURIComponent(location.pathname + location.search);
         host.innerHTML = `<a href="/login?returnUrl=${ret}" class="dsp-iconbtn" title="로그인" style="color:var(--c-primary);text-decoration:none;"><span class="material-symbols-outlined">login</span></a>`;
       }
+    },
+
+    /* ── 헤더 자산 검색: 입력 중 실시간 자동완성 드롭다운 ──
+     * - 자산 클릭 → 자산 상세(/assets/{id})
+     * - "전체 결과 보기" 또는 Enter → 자산 통합조회(/history?tab=0&q=)
+     * - ↑/↓ 로 항목 이동, Esc 로 닫기 */
+    _bindSearch() {
+      const input = document.getElementById('dsp-search');
+      const box = document.getElementById('dsp-search-results');
+      if (!input || !box) return;
+      this._assets = this._assets || [];
+      let activeIdx = -1;   // -1 = "전체 결과 보기" 행
+      let matches = [];
+
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const goAll = () => {
+        const term = input.value.trim();
+        if (!term) return;
+        location.href = '/history?tab=0&q=' + encodeURIComponent(term);
+      };
+      const close = () => { box.style.display = 'none'; box.innerHTML = ''; activeIdx = -1; };
+
+      const render = () => {
+        const term = input.value.trim().toLowerCase();
+        if (!term) { close(); return; }
+        matches = this._assets
+          .filter(a => a.name.toLowerCase().includes(term))
+          .slice(0, 8);
+        const rows = matches.map((a, i) => `
+          <a href="/assets/${a.assetId}" class="dsp-sr-item${i === activeIdx ? ' active' : ''}" data-idx="${i}">
+            <img class="dsp-sr-ico" src="${esc(a.icon)}" onerror="this.style.visibility='hidden'"/>
+            <span class="dsp-sr-name">${esc(a.name)}</span>
+            ${a.lineName ? `<span class="dsp-sr-line">${esc(a.lineName)}</span>` : ''}
+          </a>`).join('');
+        const empty = matches.length ? '' : `<div class="dsp-sr-empty">일치하는 자산 없음</div>`;
+        box.innerHTML = rows + empty +
+          `<div class="dsp-sr-all${activeIdx === -1 ? ' active' : ''}" data-all="1">
+            <span class="material-symbols-outlined">manage_search</span>'${esc(input.value.trim())}' 전체 결과 보기</div>`;
+        box.style.display = 'block';
+        // 마우스 호버 시 활성 인덱스 동기화
+        box.querySelectorAll('.dsp-sr-item').forEach(el =>
+          el.addEventListener('mousemove', () => { activeIdx = +el.getAttribute('data-idx'); paint(); }));
+        const all = box.querySelector('.dsp-sr-all');
+        if (all) {
+          all.addEventListener('mousemove', () => { activeIdx = -1; paint(); });
+          all.addEventListener('click', goAll);
+        }
+      };
+      // 활성 표시만 갱신 (재렌더 없이)
+      const paint = () => {
+        box.querySelectorAll('.dsp-sr-item').forEach(el =>
+          el.classList.toggle('active', +el.getAttribute('data-idx') === activeIdx));
+        const all = box.querySelector('.dsp-sr-all');
+        if (all) all.classList.toggle('active', activeIdx === -1);
+      };
+
+      input.addEventListener('input', () => { activeIdx = -1; render(); });
+      input.addEventListener('focus', () => { if (input.value.trim()) render(); });
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'ArrowDown') { ev.preventDefault(); activeIdx = Math.min(activeIdx + 1, matches.length - 1); paint(); }
+        else if (ev.key === 'ArrowUp') { ev.preventDefault(); activeIdx = Math.max(activeIdx - 1, -1); paint(); }
+        else if (ev.key === 'Enter') {
+          ev.preventDefault();
+          if (activeIdx >= 0 && matches[activeIdx]) location.href = '/assets/' + matches[activeIdx].assetId;
+          else goAll();
+        } else if (ev.key === 'Escape') { close(); }
+      });
+      // 바깥 클릭 시 닫기
+      document.addEventListener('click', (ev) => { if (!ev.target.closest('#dsp-search-box')) close(); });
+    },
+
+    /* ── DEXA 상태 배지: 클릭 시 서버/에이전트 상태 팝오버 ── */
+    _bindSysStatus() {
+      const btn = document.getElementById('dsp-sys-status');
+      if (!btn) return;
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (document.getElementById('dsp-sys-pop')) { this._closeSysPop(); return; }
+        this._openSysPop(btn);
+      });
+    },
+
+    _closeSysPop() {
+      const pop = document.getElementById('dsp-sys-pop');
+      if (pop) pop.remove();
+      if (this._sysPopOutside) { document.removeEventListener('click', this._sysPopOutside); this._sysPopOutside = null; }
+    },
+
+    async _openSysPop(anchor) {
+      const pop = document.createElement('div');
+      pop.id = 'dsp-sys-pop';
+      pop.className = 'nm-flat';
+      const r = anchor.getBoundingClientRect();
+      pop.style.cssText = `position:fixed;top:${Math.round(r.bottom + 8)}px;right:${Math.round(window.innerWidth - r.right)}px;`
+        + `z-index:200;width:340px;max-height:70vh;overflow:auto;background:var(--c-surface-container);`
+        + `border-radius:16px;padding:16px;`;
+      pop.innerHTML = `<div style="display:flex;align-items:center;gap:8px;color:var(--c-on-surface-variant);font-size:13px;">
+        <span class="material-symbols-outlined" style="font-size:18px;">sync</span> 상태 확인 중…</div>`;
+      document.body.appendChild(pop);
+
+      // 바깥 클릭 시 닫기 (배지 자체 클릭은 토글 핸들러가 처리)
+      this._sysPopOutside = (e) => { if (!e.target.closest('#dsp-sys-pop') && !e.target.closest('#dsp-sys-status')) this._closeSysPop(); };
+      document.addEventListener('click', this._sysPopOutside);
+
+      try {
+        const data = await fetch('/api/nav/dexa-status', { headers: { Accept: 'application/json' } }).then(r => r.json());
+        if (document.getElementById('dsp-sys-pop')) pop.innerHTML = this._sysPopHtml(data);
+      } catch (e) {
+        pop.innerHTML = `<div style="color:var(--c-error);font-size:13px;">상태 정보를 불러오지 못했습니다.</div>`;
+      }
+    },
+
+    _sysPopHtml(d) {
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const online = !!d.online;
+      const dotC = online ? 'var(--health-backedup)' : 'var(--health-failed)';
+      const fmt = (t) => {
+        if (!t) return '—';
+        const dt = new Date(t);
+        if (isNaN(dt)) return '—';
+        const p = (n) => String(n).padStart(2, '0');
+        return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+      };
+
+      // ── 서버 상태 ──
+      const server = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="status-led" style="width:10px;height:10px;border-radius:9999px;display:inline-block;background:${dotC};"></span>
+            <span class="font-label-mono" style="font-size:14px;color:var(--c-on-surface);">DEXA 서버 ${online ? '정상' : '연결 끊김'}</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px;color:var(--c-on-surface-variant);margin-bottom:14px;">
+          <span>유형</span><span style="color:var(--c-on-surface);text-align:right;">${esc(d.provider)}</span>
+        </div>`;
+
+      // ── 연결된 에이전트 목록 ──
+      const agents = d.agents || [];
+      let agentBody;
+      if (!online) {
+        agentBody = `<div style="font-size:12px;color:var(--c-on-surface-variant);padding:8px 0;">서버에 연결할 수 없습니다.</div>`;
+      } else if (agents.length === 0) {
+        agentBody = `<div style="font-size:12px;color:var(--c-on-surface-variant);padding:8px 0;">연결된 에이전트가 없습니다.</div>`;
+      } else {
+        agentBody = agents.map(a => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--c-outline-variant);">
+            <span class="status-led" style="width:8px;height:8px;border-radius:9999px;flex:none;background:var(--health-backedup);"></span>
+            <div style="min-width:0;flex:1;">
+              <div style="font-size:13px;color:var(--c-on-surface);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.name) || '(이름없음)'}</div>
+              <div style="font-size:11px;color:var(--c-on-surface-variant);">${esc(a.ip) || '—'}${a.swVersion ? ' · v' + esc(a.swVersion) : ''}</div>
+            </div>
+            <div style="font-size:11px;color:var(--c-on-surface-variant);text-align:right;flex:none;">접속 ${fmt(a.connected)}</div>
+          </div>`).join('');
+      }
+
+      const head = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:12px;font-weight:600;color:var(--c-on-surface);">연결된 에이전트</span>
+          <span style="font-size:11px;color:var(--c-on-surface-variant);">${online ? `${d.agentCount}개` : ''}</span>
+        </div>`;
+
+      return server + head + agentBody;
+    },
+
+    /* ── 네비 사이드바 접기/펼치기 ── */
+    // 저장된 상태를 body 클래스로 선반영. _render() 가 골격을 만들기 전에 호출되어야
+    // 사이드바가 처음부터 접힌 상태로 그려져 로드 시 슬라이드 애니메이션이 튀지 않는다.
+    _applyNavCollapsed() {
+      let collapsed = false;
+      try { collapsed = localStorage.getItem('twms-nav-collapsed') === '1'; } catch (e) {}
+      document.body.classList.toggle('nav-collapsed', collapsed);
+    },
+    _bindNavToggle() {
+      const btn = document.getElementById('dsp-nav-toggle');
+      if (!btn) return;
+      const sync = () => {
+        const collapsed = document.body.classList.contains('nav-collapsed');
+        const ico = btn.querySelector('.material-symbols-outlined');
+        if (ico) ico.textContent = collapsed ? 'menu' : 'menu_open';
+      };
+      sync();
+      btn.addEventListener('click', () => {
+        const collapsed = document.body.classList.toggle('nav-collapsed');
+        try { localStorage.setItem('twms-nav-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+        sync();
+      });
     },
 
     /* ── 테마 토글 ── */

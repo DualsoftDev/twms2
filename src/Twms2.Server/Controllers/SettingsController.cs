@@ -13,8 +13,9 @@ namespace Twms2.Server.Controllers;
 /// - DELETE /api/settings/lines/{id} : 라인 삭제 (배정 자산 있으면 거부).
 /// - POST /api/settings/manuals: 매뉴얼(키워드+PDF) 업로드.
 /// - DELETE /api/settings/manuals/{id} : 매뉴얼 삭제 (파일 포함).
+/// - POST /api/settings/logo   : 사이드바 로고 업로드 (app-logo.* 저장). PNG/JPG→SVG 변환은 클라이언트(logo-converter.js)에서 수행 후 .svg 로 업로드.
+/// - DELETE /api/settings/logo : 사이드바 로고 삭제 (app-logo.* 제거).
 /// 기존 서비스(AppSettingsEditor / LayoutDbService / ManualDbService)를 얇게 래핑(신규 비즈니스 로직 없음).
-/// 로고 이미지 업로드/삭제는 Blazor 의 JS interop(SVG 변환) 의존이라 이번 정적 포팅에서는 제외(읽기 전용 미리보기).
 /// </summary>
 [ApiController]
 [Route("api/settings")]
@@ -184,6 +185,53 @@ public class SettingsController : ControllerBase
         }
 
         await _manual.DeleteManualAsync(id);
+        return Ok(new { ok = true });
+    }
+
+    // ──────────────── 사이드바 로고 ────────────────
+
+    private static readonly string[] AllowedLogoExt = { ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp" };
+    private const long MaxLogoSize = 2L * 1024 * 1024; // 2MB (SettingsGeneral.UploadLogoAsync 와 동일)
+
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    [HttpPost("logo")]
+    [RequestSizeLimit(MaxLogoSize + 512 * 1024)]
+    public async Task<IActionResult> UploadLogo(IFormFile? file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "이미지 파일을 선택해주세요." });
+        if (file.Length > MaxLogoSize)
+            return BadRequest(new { error = "파일 크기가 2MB를 초과합니다." });
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (Array.IndexOf(AllowedLogoExt, ext) < 0)
+            return BadRequest(new { error = "PNG, JPG, SVG, GIF, WEBP 파일만 지원합니다." });
+
+        // 기존 로고(app-logo.*) 제거 후 신규 저장 (SettingsGeneral 와 동일한 단일 파일 정책)
+        Directory.CreateDirectory(TwmsDataPath.Uploads);
+        foreach (var f in Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*"))
+        {
+            try { System.IO.File.Delete(f); } catch { /* 교체 중 잠김 무시 */ }
+        }
+
+        var filePath = Path.Combine(TwmsDataPath.Uploads, $"app-logo{ext}");
+        await using (var fs = System.IO.File.Create(filePath))
+            await file.CopyToAsync(fs);
+
+        return Ok(new { ok = true, logoUrl = ScanLogoUrl() });
+    }
+
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    [HttpDelete("logo")]
+    public IActionResult DeleteLogo()
+    {
+        try
+        {
+            if (Directory.Exists(TwmsDataPath.Uploads))
+                foreach (var f in Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*"))
+                    System.IO.File.Delete(f);
+        }
+        catch { /* 삭제 실패는 무시 (SettingsGeneral.DeleteLogoAsync 와 동일) */ }
         return Ok(new { ok = true });
     }
 
