@@ -10,6 +10,7 @@
 
   const NAV_ITEMS = [
     { key: 'overview', label: '대시보드', icon: 'dashboard', href: '/', match: ['/', '/overview'] },
+    { key: 'statistics', label: '통계', icon: 'monitoring', href: '/statistics', match: ['/statistics'] },
     { key: 'layout', label: '레이아웃', icon: 'space_dashboard', href: '/layout', match: ['/layout'] },
     { key: 'history', label: '자산 통합조회', icon: 'inventory_2', href: '/history', match: ['/history'] },
   ];
@@ -27,6 +28,9 @@
 
     async init(opts) {
       this.activeKey = (opts && opts.active) || 'overview';
+      // 임베드(iframe) 모드: 다른 페이지(예: /settings 의 관리 탭) 안에 끼워진 경우
+      // 사이드바/헤더/폴링/인증표시를 생략하고 페이지 본문(.dsp-page)만 노출한다.
+      if (window.self !== window.top) { this.embedded = true; this._initEmbedded(); return; }
       this._applyNavCollapsed(); // 저장된 접힘 상태를 골격 생성 전 선적용 (로드 시 애니메이션 깜빡임 방지)
       this._render(); // 데이터 없이 즉시 골격 렌더 (빠른 첫 페인트)
       this._bindTheme();
@@ -38,6 +42,18 @@
       // 30초 폴링 (Blazor 사이드바의 30s 타이머와 동일 주기)
       this.pollTimer = setInterval(() => this.refresh(), 30000);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) this.refresh(); });
+    },
+
+    /* ── 임베드 모드: 사이드바/헤더 없이 .dsp-page 본문만 (설정 페이지의 관리 탭 iframe 용) ── */
+    _initEmbedded() {
+      document.body.classList.add('dsp-embedded');
+      if (!document.getElementById('dsp-embed-style')) {
+        const s = document.createElement('style');
+        s.id = 'dsp-embed-style';
+        s.textContent = 'body.dsp-embedded{margin:0;background:var(--c-surface);}'
+          + '.dsp-embedded .dsp-page{padding:18px 20px;max-width:none;}';
+        document.head.appendChild(s);
+      }
     },
 
     async refresh() {
@@ -59,12 +75,12 @@
       const aside = document.createElement('aside');
       aside.className = 'dsp-sidebar';
       aside.innerHTML = `
-        <a href="/overview" class="dsp-logo-area" style="display:flex;align-items:center;gap:10px;text-decoration:none;margin-bottom:8px;">
-          <img id="dsp-logo" alt="logo" style="max-height:40px;max-width:100%;object-fit:contain;display:none;" />
-          <div id="dsp-logo-text">
-            <h1 class="font-display" style="font-weight:800;font-size:24px;color:var(--c-primary);margin:0;line-height:1;">TWMS</h1>
-            <p style="font-size:12px;color:var(--c-on-surface-variant);opacity:0.8;margin:0;">Total Web Management</p>
-          </div>
+        <a href="/overview" class="dsp-logo-area" title="TWMS — Total Web Management System">
+          <img id="dsp-logo" class="dsp-logo-img" alt="TWMS" src="${this._logoSrc()}" />
+          <span id="dsp-logo-text" class="dsp-logo-text">
+            <span class="dsp-logo-title">TWMS</span>
+            <span class="dsp-logo-sub">Total Web Management System</span>
+          </span>
         </a>
         <nav id="dsp-nav" style="display:flex;flex-direction:column;gap:6px;"></nav>
         <div style="height:1px;background:var(--c-outline-variant);opacity:0.4;margin:6px 0;"></div>
@@ -109,6 +125,29 @@
       this._syncThemeIcon();
     },
 
+    /* ── 사이드바 브랜드(로고 마크 + 제목/부제) ──
+     * 기본: 배경 제거한 TWMS 심볼 마크(좌) + 제목 "TWMS" / 부제 텍스트(우). 다크 테마에선 밝은 마크로 자동 교체.
+     * 일반설정으로 마크(logoUrl)·제목(navTitle)·부제(navSubtitle)를 각각 변경 가능. 미설정·삭제 시 기본값으로 복원. */
+    _logoSrc() {
+      if (this._customLogo) return this._customLogo;
+      return document.documentElement.classList.contains('dark')
+        ? '/app/twms-mark-dark.png' : '/app/twms-mark.png';
+    },
+    _syncLogo() {
+      const img = document.getElementById('dsp-logo');
+      if (img) img.src = this._logoSrc();
+    },
+    _syncBrand(title, sub) {
+      const t = document.querySelector('.dsp-logo-title');
+      const s = document.querySelector('.dsp-logo-sub');
+      if (t) t.textContent = (title != null && String(title).trim()) ? title : 'TWMS';
+      if (s) {
+        const v = (sub != null ? String(sub) : 'Total Web Management System');
+        s.textContent = v;
+        s.style.display = v ? '' : 'none';
+      }
+    },
+
     _renderNav(isAdmin) {
       const nav = document.getElementById('dsp-nav');
       if (!nav) return;
@@ -123,10 +162,10 @@
     },
 
     _renderData(data) {
-      // 로고
-      const logo = document.getElementById('dsp-logo');
-      const logoText = document.getElementById('dsp-logo-text');
-      if (data.logoUrl && logo) { logo.src = data.logoUrl; logo.style.display = 'block'; if (logoText) logoText.style.display = 'none'; }
+      // 로고 마크 + 제목/부제 — 일반설정 값으로 헤더 갱신. 미설정(또는 삭제) 시 기본값으로 복원.
+      this._customLogo = data.logoUrl || null;
+      this._syncLogo();
+      this._syncBrand(data.navTitle, data.navSubtitle);
       // 네비 (admin 반영)
       this.isAdmin = !!data.isAdmin;
       this._renderNav(this.isAdmin);
@@ -150,7 +189,7 @@
       const out = [];
       const push = (a, lineName) => {
         if (!a || a.assetId == null) return;
-        out.push({ assetId: a.assetId, name: a.displayName || '', icon: a.icon || '', statusColor: a.statusColor, lineName: lineName || '' });
+        out.push({ assetId: a.assetId, name: a.displayName || '', icon: a.icon || '', statusColor: a.statusColor, health: a.health, healthLabel: a.healthLabel, offline: !!a.offline, lineName: lineName || '' });
       };
       (lines || []).forEach(line => {
         const ln = line.lineName || '';
@@ -167,15 +206,38 @@
       const host = document.getElementById('dsp-tree');
       if (!host) return;
       const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      const dot = (c) => `<span class="dsp-status-dot" style="background:${HEALTH_COLOR[c] || c || 'var(--health-unknown)'};"></span>`;
+      // 현재 보고 있는 자산(/assets/{id}) — 트리에서 강조
+      const curId = (location.pathname.match(/^\/assets\/(\d+)/) || [])[1] || null;
 
-      const leaf = (a) => `<a href="/assets/${a.assetId}" class="dsp-tree-row" title="${esc(a.displayName)}">
+      // 상태 LED 점: 색상 글로우 + 표면 링. 실패/작업중은 펄스, 오프라인은 속 빈 링.
+      const dotHtml = (a) => {
+        const color = a.statusColor || HEALTH_COLOR[a.health] || 'var(--health-unknown)';
+        const off = !!a.offline;
+        const pulse = !off && (a.health === 'failed' || a.health === 'inprogress');
+        const cls = 'dsp-status-dot' + (off ? ' is-offline' : '') + (pulse ? ' pulse' : '');
+        return `<span class="${cls}" style="color:${color};background:${color};"></span>`;
+      };
+      // 행 툴팁: 자산명 · 상태(· 오프라인)
+      const rowTitle = (a) => esc(a.displayName) + (a.healthLabel ? ' · ' + esc(a.healthLabel) : '') + (a.offline ? ' · 오프라인' : '');
+      // 현재 자산 강조 + 오프라인 표시용 행 클래스
+      const stateCls = (a) => (curId && String(a.assetId) === curId ? ' is-active' : '') + (a.offline ? ' is-offline' : '');
+
+      const leaf = (a) => `<a href="/assets/${a.assetId}" class="dsp-tree-row leaf${stateCls(a)}" title="${rowTitle(a)}">
+        <span class="dsp-tree-toggle"></span>
         <img class="dsp-tree-ico" src="${esc(a.icon)}" onerror="this.style.visibility='hidden'"/>
-        <span class="dsp-tree-label">${esc(a.displayName)}</span>${dot(a.statusColor)}</a>`;
+        <span class="dsp-tree-label">${esc(a.displayName)}</span>${dotHtml(a)}</a>`;
 
       const html = lines.map(line => {
         const lineId = 'L:' + line.lineName;
         const open = _treeState[lineId] !== undefined ? _treeState[lineId] : !!line.expanded;
+        const aggColor = line.aggColor || 'var(--health-unknown)';
+        // 라인에 실패/작업중이 있으면 집계 점도 펄스
+        const aggPulse = (line.failed > 0 || line.inProgress > 0) ? ' pulse' : '';
+        // 접힘 여부와 무관하게 라인 단위 문제 수를 배지로 노출 (문제 없으면 표시 안 함)
+        const badges = [];
+        if (line.failed > 0) badges.push(`<span class="dsp-tree-badge fail" title="작업 실패 ${line.failed}건">${line.failed}</span>`);
+        if (line.inProgress > 0) badges.push(`<span class="dsp-tree-badge prog" title="작업중 ${line.inProgress}건">${line.inProgress}</span>`);
+        if (line.offline > 0) badges.push(`<span class="dsp-tree-badge off" title="오프라인 ${line.offline}대">${line.offline}</span>`);
         const plcs = (line.plcNodes || []).map(p => {
           const pid = 'P:' + p.plc.assetId;
           const popen = _treeState[pid] !== undefined ? _treeState[pid] : !!p.expanded;
@@ -185,17 +247,17 @@
             ? `<span class="dsp-tree-toggle material-symbols-outlined" data-toggle="${pid}">${popen ? 'arrow_drop_up' : 'arrow_drop_down'}</span>`
             : `<span class="dsp-tree-toggle"></span>`;
           return `<div class="dsp-tree-node">
-            <div class="dsp-tree-row">${toggle}
+            <div class="dsp-tree-row${stateCls(p.plc)}" title="${rowTitle(p.plc)}">${toggle}
               <a href="/assets/${p.plc.assetId}" class="dsp-tree-label" style="display:flex;align-items:center;gap:4px;text-decoration:none;color:inherit;overflow:hidden;">
                 <img class="dsp-tree-ico" src="${esc(p.plc.icon)}" onerror="this.style.visibility='hidden'"/>
-                <span class="dsp-tree-label">${esc(p.plc.displayName)}</span></a>${dot(p.plc.statusColor)}</div>${kids}</div>`;
+                <span class="dsp-tree-label">${esc(p.plc.displayName)}</span></a>${dotHtml(p.plc)}</div>${kids}</div>`;
         }).join('');
         const standalone = (line.standalone || []).map(leaf).join('');
         return `<div class="dsp-tree-line">
           <div class="dsp-tree-row line" data-toggle="${lineId}">
             <span class="dsp-tree-toggle material-symbols-outlined">${open ? 'arrow_drop_up' : 'arrow_drop_down'}</span>
-            <span class="dsp-tree-aggdot" style="background:${line.aggColor || 'var(--health-unknown)'};"></span>
-            <span class="dsp-tree-label">${esc(line.lineName)}</span></div>
+            <span class="dsp-tree-aggdot${aggPulse}" style="color:${aggColor};background:${aggColor};"></span>
+            <span class="dsp-tree-label">${esc(line.lineName)}</span>${badges.join('')}</div>
           <div class="dsp-tree-children" data-children="${lineId}" style="display:${open ? 'block' : 'none'};">${plcs}${standalone}</div>
         </div>`;
       }).join('');
@@ -219,15 +281,22 @@
     },
 
     /* ── 로그인/로그아웃 토글 ── */
-    // 로그인 안 했으면 "로그인" 버튼(클릭 시 /login), 했으면 사용자명 + 로그아웃 버튼.
+    // 헤더: 로그인 안 했으면 "로그인" 아이콘(클릭 시 /login), 했으면 사용자 칩 + 로그아웃 버튼.
+    // 사이드바 '설정' 링크는 항상 /settings 로 고정 — 비로그인 접근 시 서버 게이트가 /login 으로 보냄.
     async _renderAuth() {
       const host = document.getElementById('dsp-auth');
       if (!host) return;
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const ret = encodeURIComponent(location.pathname + location.search);
       let me = { authenticated: false };
       try { me = await fetch('/api/auth/me', { headers: { Accept: 'application/json' } }).then(r => r.json()); } catch (e) {}
+
       if (me && me.authenticated) {
-        host.innerHTML = `<span style="font-size:13px;color:var(--c-on-surface-variant);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(me.name || '')}</span>
-          <a href="/settings" class="dsp-iconbtn" title="설정" style="color:var(--c-on-surface-variant);text-decoration:none;"><span class="material-symbols-outlined">settings</span></a>
+        // 헤더: 아이콘 + 아이디를 하나의 칩으로 묶어 표시 (설정 기어 제거)
+        host.innerHTML = `<div class="nm-inset dsp-user-chip" title="${esc(me.name || '')}" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:9999px;">
+            <span class="material-symbols-outlined" style="font-size:20px;color:var(--c-primary);">account_circle</span>
+            <span style="font-size:13px;font-weight:600;color:var(--c-on-surface);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(me.name || '')}</span>
+          </div>
           <button id="dsp-logout" class="dsp-iconbtn" title="로그아웃" style="color:var(--c-error);"><span class="material-symbols-outlined">logout</span></button>`;
         const out = document.getElementById('dsp-logout');
         if (out) out.addEventListener('click', async () => {
@@ -235,7 +304,7 @@
           location.href = '/';
         });
       } else {
-        const ret = encodeURIComponent(location.pathname + location.search);
+        // 헤더: 로그인 아이콘
         host.innerHTML = `<a href="/login?returnUrl=${ret}" class="dsp-iconbtn" title="로그인" style="color:var(--c-primary);text-decoration:none;"><span class="material-symbols-outlined">login</span></a>`;
       }
     },
@@ -259,6 +328,14 @@
         location.href = '/history?tab=0&q=' + encodeURIComponent(term);
       };
       const close = () => { box.style.display = 'none'; box.innerHTML = ''; activeIdx = -1; };
+      // 검색 결과에도 상태 LED 점 (트리와 동일 규칙)
+      const srDot = (a) => {
+        const color = a.statusColor || 'var(--health-unknown)';
+        const off = !!a.offline;
+        const pulse = !off && (a.health === 'failed' || a.health === 'inprogress');
+        const t = (a.healthLabel || '') + (off ? ' · 오프라인' : '');
+        return `<span class="dsp-status-dot${off ? ' is-offline' : ''}${pulse ? ' pulse' : ''}" style="color:${color};background:${color};" title="${esc(t)}"></span>`;
+      };
 
       const render = () => {
         const term = input.value.trim().toLowerCase();
@@ -270,7 +347,7 @@
           <a href="/assets/${a.assetId}" class="dsp-sr-item${i === activeIdx ? ' active' : ''}" data-idx="${i}">
             <img class="dsp-sr-ico" src="${esc(a.icon)}" onerror="this.style.visibility='hidden'"/>
             <span class="dsp-sr-name">${esc(a.name)}</span>
-            ${a.lineName ? `<span class="dsp-sr-line">${esc(a.lineName)}</span>` : ''}
+            ${a.lineName ? `<span class="dsp-sr-line">${esc(a.lineName)}</span>` : ''}${srDot(a)}
           </a>`).join('');
         const empty = matches.length ? '' : `<div class="dsp-sr-empty">일치하는 자산 없음</div>`;
         box.innerHTML = rows + empty +
@@ -431,6 +508,7 @@
         const dark = document.documentElement.classList.toggle('dark');
         try { localStorage.setItem('twms-theme', dark ? 'dark' : 'light'); } catch (e) {}
         this._syncThemeIcon();
+        this._syncLogo();
         window.dispatchEvent(new CustomEvent('twms-theme-changed', { detail: { dark } }));
       });
     },

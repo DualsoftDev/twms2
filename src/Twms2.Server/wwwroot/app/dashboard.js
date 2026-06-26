@@ -17,6 +17,8 @@
   let bpRenderer = null; // 전체 자산 분포도(도면) 렌더러 — 최초 1회 마운트
   let lastServerDay = null; // 서버가 마지막으로 내려준 오늘 날짜(yyyy-MM-dd) — 자정 변경 감지용
   const localDay = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+  // 서버가 내려준 yyyy-MM-dd 를 'xxxx년 xx월 xx일' 표기로 변환 (형식이 다르면 원본 그대로)
+  const fmtKDate = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? `${m[1]}년 ${m[2]}월 ${m[3]}일` : (s || ''); };
   const lastStats = { type: [], line: [] }; // 토글 시 재조회 없이 다시 그리기 위한 캐시
   const chartMode = (kind) => (localStorage.getItem('twms-dash-chart-' + kind) === 'donut') ? 'donut' : 'bar';
   const segDef = [
@@ -52,9 +54,9 @@
     renderDrive(d.drive);
     if (d.today) {
       lastServerDay = d.today;
-      $('today-label').textContent = d.today;
+      $('today-label').textContent = fmtKDate(d.today);
       const td = $('kpi-total-date');
-      if (td) td.textContent = d.today;
+      if (td) td.textContent = fmtKDate(d.today);
     }
 
     // 전체 자산 분포도(도면) — 최초 1회 마운트. 라인별/개별은 헤더 토글로 사용자가 직접 전환(선택 기억).

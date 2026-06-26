@@ -32,13 +32,14 @@
 
   // ──────────────── 일반 ────────────────
   function renderGeneral(g) {
-    const pad = g.logoPadding ?? 10;
-    const range = $('logo-padding');
-    if (document.activeElement !== range) { range.value = pad; $('logo-padding-val').textContent = pad + 'px'; }
+    // 제목/부제 — 편집 중인 입력은 덮어쓰지 않음(폴링 중 커서 튐 방지)
+    const tEl = $('brand-title'), sEl = $('brand-subtitle');
+    if (tEl && document.activeElement !== tEl) tEl.value = (g.navTitle ?? '');
+    if (sEl && document.activeElement !== sEl) sEl.value = (g.navSubtitle ?? '');
 
     const host = $('logo-preview-host');
     if (g.logoUrl) {
-      host.innerHTML = `<div class="logo-preview-box" style="padding:${esc(String(pad))}px;">
+      host.innerHTML = `<div class="logo-preview-box">
         <img class="logo-preview-img" src="${esc(g.logoUrl)}" alt="현재 로고" /></div>`;
     } else {
       host.innerHTML = `<p class="text-on-surface-variant" style="font-style:italic;margin:0;">설정된 로고 없음</p>`;
@@ -124,20 +125,30 @@
     } catch (e) { toast('삭제 중 오류가 발생했습니다.'); }
   }
 
-  async function saveLogoPadding() {
-    const btn = $('logo-padding-save-btn');
-    const body = {
-      // 헤더 이름 설정은 정적 헤더(shell.js)에서 미사용이라 제거됨.
-      // /api/settings/general 은 appTitle 필수 검증이 있어 기존 저장값을 유지한 채 로고 여백만 갱신한다.
-      appTitle: (_state.general.appTitle || 'TWM'),
-      showDate: !!_state.general.showDate,
-      logoPadding: parseInt($('logo-padding').value, 10) || 0,
-    };
-    btn.disabled = true;
+  // ──────────────── 제목 · 부제 ────────────────
+  const BRAND_DEFAULT = { title: 'TWMS', subtitle: 'Total Web Management System' };
+
+  async function saveBrand() {
+    const title = ($('brand-title').value || '').trim();
+    if (!title) { toast('제목을 입력해주세요.'); return; }
+    const btn = $('brand-save-btn'); btn.disabled = true;
     try {
-      const res = await postJson('/api/settings/general', body);
-      toast(res.ok ? '로고 여유 설정이 저장되었습니다.' : (res.error || '저장 실패'));
-      if (res.ok) await load();
+      const res = await postJson('/api/settings/brand', {
+        navTitle: title,
+        navSubtitle: ($('brand-subtitle').value || '').trim(),
+      });
+      toast(res.ok ? '제목·부제가 저장되었습니다.' : (res.error || '저장 실패'));
+      if (res.ok) { await load(); if (window.Shell && Shell.refresh) Shell.refresh(); } // 사이드바 즉시 갱신
+    } finally { btn.disabled = false; }
+  }
+
+  async function resetBrand() {
+    if (!window.confirm('제목·부제를 기본값(TWMS · Total Web Management System)으로 초기화하시겠습니까?')) return;
+    const btn = $('brand-reset-btn'); btn.disabled = true;
+    try {
+      const res = await postJson('/api/settings/brand', { navTitle: BRAND_DEFAULT.title, navSubtitle: BRAND_DEFAULT.subtitle });
+      toast(res.ok ? '기본값으로 초기화되었습니다.' : (res.error || '초기화 실패'));
+      if (res.ok) { await load(); if (window.Shell && Shell.refresh) Shell.refresh(); }
     } finally { btn.disabled = false; }
   }
 
@@ -271,6 +282,10 @@
     _activeTab = key;
     document.querySelectorAll('.set-tab').forEach(t => t.classList.toggle('active', t.getAttribute('data-tab') === key));
     document.querySelectorAll('.set-panel').forEach(p => p.classList.toggle('active', p.getAttribute('data-panel') === key));
+    // 관리 탭(iframe): 최초 진입 시에만 로드 (지연 로드 — 모든 관리 페이지를 한꺼번에 띄우지 않음)
+    const panel = document.querySelector(`.set-panel[data-panel="${key}"]`);
+    const f = panel && panel.querySelector('iframe[data-src]');
+    if (f && !f.dataset.loaded) { f.src = f.getAttribute('data-src'); f.dataset.loaded = '1'; }
   }
 
   // ──────────────── 헬퍼 ────────────────
@@ -298,9 +313,9 @@
   function bind() {
     // 탭
     document.querySelectorAll('.set-tab').forEach(t => t.addEventListener('click', () => switchTab(t.getAttribute('data-tab'))));
-    // 일반 (로고 여백)
-    $('logo-padding').addEventListener('input', () => { $('logo-padding-val').textContent = $('logo-padding').value + 'px'; });
-    $('logo-padding-save-btn').addEventListener('click', saveLogoPadding);
+    // 제목·부제
+    $('brand-save-btn').addEventListener('click', saveBrand);
+    $('brand-reset-btn').addEventListener('click', resetBrand);
     // 로고 업로드/삭제
     $('logo-pick-btn').addEventListener('click', () => $('logo-file-input').click());
     $('logo-file-input').addEventListener('change', onLogoPicked);

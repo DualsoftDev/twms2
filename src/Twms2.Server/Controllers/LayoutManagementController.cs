@@ -17,10 +17,12 @@ namespace Twms2.Server.Controllers;
 public class LayoutManagementController : ControllerBase
 {
     private readonly LayoutDbService _layoutDb;
+    private readonly AssetStatusService _status;
 
-    public LayoutManagementController(LayoutDbService layoutDb)
+    public LayoutManagementController(LayoutDbService layoutDb, AssetStatusService status)
     {
         _layoutDb = layoutDb;
+        _status = status;
     }
 
     /// <summary>
@@ -131,5 +133,112 @@ public class LayoutManagementController : ControllerBase
 
         await _layoutDb.DeleteLayoutAsync(id);
         return Ok(new { ok = true });
+    }
+
+    // ──────────────── JSON Export / Import / 도면 이미지 다운로드 ────────────────
+    // LayoutManagement.razor 의 ExportLayoutAsync / OnImportFileSelected / DownloadImageAsync 이식.
+    // 직렬화 옵션은 Blazor 원본과 동일(camelCase + indented)해야 export↔import 라운드트립이 호환됨.
+
+    private static readonly System.Text.Json.JsonSerializerOptions ExportJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+    };
+
+    private static readonly System.Text.Json.JsonSerializerOptions ImportJsonOptions = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+    };
+
+    [HttpGet("{id:int}/export")]
+    public async Task<IActionResult> Export(int id)
+    {
+        var layouts = await _layoutDb.GetAllLayoutsAsync();
+        var layout = layouts.FirstOrDefault(l => l.Id == id);
+        if (layout == null)
+            return NotFound(new { error = "레이아웃을 찾을 수 없습니다." });
+
+        var data = await _layoutDb.ExportLayoutAsync(id, layout.Name);
+        var json = System.Text.Json.JsonSerializer.Serialize(data, ExportJsonOptions);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+        var fileName = $"layout-{Sanitize(layout.Name)}-{DateTime.Now:yyyyMMdd-HHmm}.json";
+        return File(bytes, "application/json", fileName);
+    }
+
+    private const long MaxImportSize = 10L * 1024 * 1024; // 10MB (Blazor OnImportFileSelected 와 동일)
+
+    [HttpPost("{id:int}/import")]
+    [RequestSizeLimit(MaxImportSize + 1024 * 1024)]
+    public async Task<IActionResult> Import(int id, IFormFile? file)
+    {
+        var layouts = await _layoutDb.GetAllLayoutsAsync();
+        if (layouts.All(l => l.Id != id))
+            return NotFound(new { error = "레이아웃을 찾을 수 없습니다." });
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "JSON 파일을 선택해주세요." });
+        if (file.Length > MaxImportSize)
+            return BadRequest(new { error = "파일 크기가 10MB를 초과합니다." });
+
+        LayoutExportData? data;
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            data = await System.Text.Json.JsonSerializer.DeserializeAsync<LayoutExportData>(stream, ImportJsonOptions);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return BadRequest(new { error = "JSON 형식이 올바르지 않습니다. 레이아웃 내보내기 파일인지 확인하세요." });
+        }
+
+        if (data == null || data.Version < 1)
+            return BadRequest(new { error = "유효하지 않은 JSON 파일입니다." });
+        if (data.Positions.Count == 0 && data.Groups.Count == 0 && data.BlueprintRects.Count == 0)
+            return BadRequest(new { error = "가져올 데이터가 없는 JSON 파일입니다." });
+
+        // 유효 자산 ID (LayoutManagement.OnImportFileSelected 와 동일 — 현재 자산만 통과, 나머지 skip)
+        var statuses = await _status.GetAssetStatusesAsync();
+        var validIds = statuses.Select(a => a.AssetId).ToHashSet();
+
+        var (positions, groups, rects, skipped) = await _layoutDb.ImportLayoutAsync(id, data, validIds);
+        return Ok(new { ok = true, positions, groups, rects, skipped });
+    }
+
+    [HttpGet("{id:int}/image")]
+    public async Task<IActionResult> DownloadImage(int id)
+    {
+        var layouts = await _layoutDb.GetAllLayoutsAsync();
+        var layout = layouts.FirstOrDefault(l => l.Id == id);
+        if (layout == null)
+            return NotFound(new { error = "레이아웃을 찾을 수 없습니다." });
+
+        var config = await _layoutDb.GetBlueprintConfigAsync(id);
+        if (config == null || string.IsNullOrEmpty(config.ImagePath))
+            return NotFound(new { error = "도면 이미지가 없습니다." });
+
+        // ImagePath 는 서버 생성값("uploads/blueprint-bg-{id}.ext") — 사용자 입력 아님(경로 조작 불가).
+        var filePath = Path.Combine(TwmsDataPath.Base, config.ImagePath);
+        if (!System.IO.File.Exists(filePath))
+            return NotFound(new { error = "이미지 파일을 찾을 수 없습니다." });
+
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        var mime = ext switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".webp" => "image/webp",
+            ".svg" => "image/svg+xml",
+            _ => "application/octet-stream",
+        };
+        var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+        return File(bytes, mime, $"{Sanitize(layout.Name)}{ext}");
+    }
+
+    /// <summary>파일명에 쓸 수 없는 문자를 '_' 로 치환 (한글 레이아웃명 다운로드 안전).</summary>
+    private static string Sanitize(string? name)
+    {
+        var s = (name ?? "layout").Trim();
+        foreach (var c in Path.GetInvalidFileNameChars())
+            s = s.Replace(c, '_');
+        return string.IsNullOrEmpty(s) ? "layout" : s;
     }
 }

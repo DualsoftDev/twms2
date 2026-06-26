@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>통계 — TWMS</title>
+  <!-- 테마 선적용 (FOUC 방지) -->
+  <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
+  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <link rel="stylesheet" href="/lib/fonts/fonts.css" />
+  <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
+  <link rel="stylesheet" href="/app/twms.css" />
+  <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 통계 페이지 전용 컨트롤 (history 페이지 톤과 동일, theme.css 미수록) ── */
+    .st-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .st-filter + .st-filter { margin-top: 14px; }
+    .st-label { font-size: 12px; font-weight: 800; color: var(--c-on-surface-variant); letter-spacing: 0.02em; }
+    .st-divider { width: 1px; height: 24px; background: var(--c-outline-variant); opacity: 0.5; margin: 0 4px; }
+    .st-spacer { flex: 1 1 auto; }
+
+    .st-input {
+      background: var(--c-surface); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px;
+      padding: 8px 12px; font-size: 13px; font-family: inherit;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    select.st-input { cursor: pointer; }
+    .st-input:focus { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light), 0 0 0 2px var(--c-primary); }
+
+    /* 세그먼트 버튼 그룹 (기간 프리셋 / 집계 기준 / 값 종류) */
+    .st-seg { display: inline-flex; border-radius: 10px; overflow: hidden;
+      box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light); }
+    .st-seg-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 13px; font-size: 12px; font-weight: 700; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant); transition: all 0.15s ease;
+    }
+    .st-seg-btn + .st-seg-btn { border-left: 1px solid var(--c-outline-variant); }
+    .st-seg-btn:hover { color: var(--c-primary); }
+    .st-seg-btn.active {
+      color: var(--c-primary);
+      box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light);
+    }
+    .st-seg-btn .material-symbols-outlined { font-size: 17px; }
+
+    /* 개별 자산 검색 콤보박스 */
+    .st-combo { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 10px; min-width: 250px;
+      background: var(--c-surface); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .st-combo input { background: transparent; border: none; outline: none; color: var(--c-on-surface); font-size: 13px; width: 100%; font-family: inherit; }
+    .st-combo input::placeholder { color: var(--c-outline); }
+    .st-combo-results { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40; max-height: 340px; overflow-y: auto;
+      background: var(--c-surface-container); border-radius: 12px; padding: 6px; display: none;
+      box-shadow: 6px 6px 14px var(--nm-dark), -6px -6px 14px var(--nm-light); }
+    .st-combo-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--c-on-surface); }
+    .st-combo-item:hover, .st-combo-item.active { background: var(--c-surface-container-high); }
+    .st-combo-name { font-weight: 700; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .st-combo-meta { font-size: 11px; color: var(--c-on-surface-variant); flex: none; }
+    .st-combo-empty { padding: 10px; font-size: 13px; color: var(--c-on-surface-variant); }
+
+    /* 표 페이저 */
+    .st-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--c-on-surface-variant); }
+    .st-iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light); transition: all 0.15s ease; }
+    .st-iconbtn:hover:not(:disabled) { color: var(--c-primary); }
+    .st-iconbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .st-iconbtn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .st-iconbtn .material-symbols-outlined { font-size: 18px; }
+
+    /* KPI 보조 라벨(증감/비율) */
+    .st-kpi-sub { font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); }
+
+    /* 차트 카드 본문 */
+    .st-chart { position: relative; width: 100%; }
+    /* SVG 는 측정된 컨테이너 너비(px)로 정확히 그린다 — width:100% 스케일링 금지(텍스트/호버 좌표 왜곡 방지). */
+    .st-chart svg { display: block; }
+    .st-chart-empty { display: flex; align-items: center; justify-content: center; min-height: 200px;
+      color: var(--c-on-surface-variant); font-size: 14px; }
+
+    /* SVG 차트 내부 텍스트/격자 (테마 변수로 자동 다크 대응) */
+    .st-axis-label { fill: var(--c-on-surface-variant); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .st-grid-line { stroke: var(--c-outline-variant); stroke-width: 1; opacity: 0.45; }
+    .st-axis-line { stroke: var(--c-outline-variant); stroke-width: 1; opacity: 0.7; }
+
+    /* 호버 툴팁 */
+    .st-tip {
+      position: absolute; pointer-events: none; z-index: 20; display: none;
+      min-width: 130px; max-width: 280px; padding: 10px 12px; border-radius: 12px;
+      background: var(--c-surface-container); color: var(--c-on-surface);
+      box-shadow: 6px 6px 14px var(--nm-dark), -6px -6px 14px var(--nm-light);
+      font-size: 12px; transform: translate(-50%, -100%); transition: opacity 0.08s ease;
+    }
+    .st-tip-title { font-weight: 800; margin-bottom: 6px; font-size: 12px; }
+    .st-tip-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 2px 0; }
+    .st-tip-key { display: inline-flex; align-items: center; gap: 6px; color: var(--c-on-surface-variant); }
+    .st-tip-swatch { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; }
+    .st-tip-val { font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    /* 차트 범례 (클릭으로 시리즈 토글) */
+    .st-legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .st-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+      color: var(--c-on-surface); cursor: pointer; user-select: none; transition: opacity 0.15s ease; }
+    .st-legend-item.off { opacity: 0.38; }
+    .st-legend-swatch { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+
+    /* 그룹 상세 테이블 */
+    .st-table-wrap { border-radius: 16px; padding: 6px 12px; overflow-x: auto;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low); }
+    .st-table-wrap .nm-table th { white-space: nowrap; cursor: pointer; user-select: none; }
+    .st-table-wrap .nm-table th .sort-arrow { font-size: 11px; opacity: 0.6; margin-left: 2px; }
+    .st-table-wrap .nm-table td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .st-table-row-link { cursor: pointer; }
+    .st-table-row-link:hover td { background: var(--c-surface-container); }
+
+    /* 미니 비율 막대 (테이블 셀 내 성공률 시각화) */
+    .st-ratiobar { position: relative; height: 8px; border-radius: 4px; width: 90px;
+      background: var(--c-surface-container-high); overflow: hidden; display: inline-block; vertical-align: middle; }
+    .st-ratiobar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+
+    .st-empty { padding: 24px; color: var(--c-on-surface-variant); font-size: 14px; text-align: center; }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+</head>
+<body class="font-body-md">
+  <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
+  <div class="dsp-page">
+    <div class="flex justify-between items-end mb-element-gap">
+      <div>
+        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">통계</h2>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">기간별 백업 횟수 · 성공/실패 · 변화 추이와 온·오프라인 전환 통계</p>
+      </div>
+    </div>
+
+    <!-- ── 컨트롤 카드: 기간 + 집계 기준 ── -->
+    <div class="nm-card mb-element-gap">
+      <!-- 기간 -->
+      <div class="st-filter">
+        <span class="st-label">기간</span>
+        <input type="date" class="st-input" id="st-start" />
+        <span style="opacity:0.5;">→</span>
+        <input type="date" class="st-input" id="st-end" />
+        <div class="st-seg" id="st-period">
+          <button class="st-seg-btn" data-days="1">하루</button>
+          <button class="st-seg-btn active" data-days="7">7일</button>
+          <button class="st-seg-btn" data-days="30">30일</button>
+        </div>
+        <span class="st-divider"></span>
+        <span class="st-label" id="st-range-label" style="font-weight:600;color:var(--c-on-surface-variant);"></span>
+        <div class="st-spacer"></div>
+        <button class="st-seg-btn" id="st-csv" style="border-radius:10px;box-shadow:3px 3px 6px var(--nm-dark),-3px -3px 6px var(--nm-light);">
+          <span class="material-symbols-outlined">save</span>CSV 저장</button>
+      </div>
+
+      <!-- 집계 기준 -->
+      <div class="st-filter">
+        <span class="st-label">집계 기준</span>
+        <div class="st-seg" id="st-dim">
+          <button class="st-seg-btn active" data-dim="all"><span class="material-symbols-outlined">select_all</span>전체</button>
+          <button class="st-seg-btn" data-dim="line"><span class="material-symbols-outlined">view_week</span>라인별</button>
+          <button class="st-seg-btn" data-dim="type"><span class="material-symbols-outlined">category</span>타입별</button>
+          <button class="st-seg-btn" data-dim="asset"><span class="material-symbols-outlined">memory</span>개별</button>
+        </div>
+        <select class="st-input" id="st-target" style="min-width:200px;display:none;"></select>
+        <!-- 개별 선택: 직접 입력해 찾는 검색 콤보박스 -->
+        <div class="st-combo" id="st-asset-box" style="display:none;">
+          <span class="material-symbols-outlined" style="color:var(--c-outline);font-size:20px;">search</span>
+          <input type="text" id="st-asset-input" placeholder="자산명·라인·타입 검색..." autocomplete="off" />
+          <div class="st-combo-results" id="st-asset-results"></div>
+        </div>
+        <span class="st-label" id="st-scope-count" style="font-weight:600;color:var(--c-on-surface-variant);"></span>
+      </div>
+    </div>
+
+    <!-- ── KPI 요약 ── -->
+    <div class="dsp-grid mb-element-gap" id="st-kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-primary"><span class="material-symbols-outlined">backup</span></div>
+        <div class="kpi-body"><span class="kpi-label">총 백업 횟수</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-total">–</span><span class="kpi-unit">회</span></div>
+          <span class="st-kpi-sub" id="kpi-total-sub"></span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-info"><span class="material-symbols-outlined">task_alt</span></div>
+        <div class="kpi-body"><span class="kpi-label">성공률</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-success" style="color:var(--health-unchanged);">–</span><span class="kpi-unit">%</span></div>
+          <span class="st-kpi-sub" id="kpi-success-sub"></span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-success"><span class="material-symbols-outlined">cached</span></div>
+        <div class="kpi-body"><span class="kpi-label">변화 (내용 변경)</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-changed" style="color:var(--health-backedup);">–</span><span class="kpi-unit">회</span></div>
+          <span class="st-kpi-sub" id="kpi-changed-sub"></span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-error"><span class="material-symbols-outlined fill">error</span></div>
+        <div class="kpi-body"><span class="kpi-label">실패</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-failed" style="color:var(--health-failed);">–</span><span class="kpi-unit">회</span></div>
+          <span class="st-kpi-sub" id="kpi-failed-sub"></span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-success"><span class="material-symbols-outlined">wifi</span></div>
+        <div class="kpi-body"><span class="kpi-label">온라인 전환</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-online" style="color:var(--health-backedup);">–</span><span class="kpi-unit">회</span></div>
+          <span class="st-kpi-sub" id="kpi-online-sub"></span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon-error"><span class="material-symbols-outlined">wifi_off</span></div>
+        <div class="kpi-body"><span class="kpi-label">오프라인 전환</span>
+          <div class="kpi-value-row"><span class="kpi-value" id="kpi-offline" style="color:var(--health-failed);">–</span><span class="kpi-unit">회</span></div>
+          <span class="st-kpi-sub" id="kpi-offline-sub"></span></div>
+      </div>
+    </div>
+
+    <!-- ── 백업 추이 ── -->
+    <div class="nm-card mb-element-gap">
+      <div class="panel-header" style="flex-wrap:wrap;gap:12px;">
+        <span class="panel-title"><span class="material-symbols-outlined" style="color:var(--c-primary);">show_chart</span>백업 추이<span id="st-trend-scope" style="font-size:12px;font-weight:600;color:var(--c-on-surface-variant);margin-left:4px;"></span></span>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <!-- 비교 모드(라인/타입 전체 비교) 시 어떤 지표를 비교할지 -->
+          <select class="st-input" id="st-metric" style="display:none;">
+            <option value="n">백업 횟수</option>
+            <option value="c">변화</option>
+            <option value="f">실패</option>
+            <option value="successRate">성공률</option>
+            <option value="failRate">실패율</option>
+            <option value="changeRate">변화율</option>
+          </select>
+          <!-- 단일 스코프 시 값 종류(횟수/비율) -->
+          <div class="st-seg" id="st-valmode">
+            <button class="st-seg-btn active" data-val="count">횟수</button>
+            <button class="st-seg-btn" data-val="rate">비율(%)</button>
+          </div>
+          <div class="st-legend" id="st-trend-legend"></div>
+        </div>
+      </div>
+      <div class="st-chart" id="st-trend"></div>
+    </div>
+
+    <!-- ── 일자별 백업 구성 + 온·오프라인 전환 ── -->
+    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(12,1fr);">
+      <div class="nm-card" style="grid-column:span 7;">
+        <div class="panel-header" style="flex-wrap:wrap;gap:10px;">
+          <span class="panel-title"><span class="material-symbols-outlined" style="color:var(--c-primary);">stacked_bar_chart</span>일자별 백업 구성</span>
+          <div class="st-legend">
+            <span class="st-legend-item" style="cursor:default;"><span class="st-legend-swatch" style="background:var(--health-backedup);"></span>갱신</span>
+            <span class="st-legend-item" style="cursor:default;"><span class="st-legend-swatch" style="background:var(--health-unchanged);"></span>변경없음</span>
+            <span class="st-legend-item" style="cursor:default;"><span class="st-legend-swatch" style="background:var(--health-failed);"></span>실패</span>
+            <span class="st-legend-item" style="cursor:default;"><span class="st-legend-swatch" style="background:var(--health-inprogress);"></span>작업중</span>
+          </div>
+        </div>
+        <div class="st-chart" id="st-stack"></div>
+      </div>
+      <div class="nm-card" style="grid-column:span 5;">
+        <div class="panel-header" style="flex-wrap:wrap;gap:10px;">
+          <span class="panel-title"><span class="material-symbols-outlined" style="color:var(--c-primary);">swap_vert</span>온·오프라인 전환</span>
+          <div class="st-legend">
+            <span class="st-legend-item" style="cursor:default;"><span class="st-legend-swatch" style="background:var(--health-backedup);"></span>온라인</span>
+            <span class="st-legend-item" style="cursor:default;"><span class="st-legend-swatch" style="background:var(--health-failed);"></span>오프라인</span>
+          </div>
+        </div>
+        <div class="st-chart" id="st-trans"></div>
+      </div>
+    </div>
+
+    <!-- ── 그룹 상세 ── -->
+    <div class="nm-card" style="margin-bottom:24px;">
+      <div class="panel-header">
+        <span class="panel-title"><span class="material-symbols-outlined" style="color:var(--c-primary);">table_rows</span><span id="st-breakdown-title">그룹별 상세</span></span>
+        <span style="font-size:12px;color:var(--c-on-surface-variant);">행을 클릭하면 해당 그룹 추이로 이동합니다.</span>
+      </div>
+      <div class="st-table-wrap"><table class="nm-table" id="st-breakdown"></table></div>
+      <div class="st-pager" id="st-breakdown-pager"></div>
+    </div>
+  </div>
+
+  <script src="/app/shell.js"></script>
+  <script src="/app/statistics.js"></script>
+</body>
+</html>

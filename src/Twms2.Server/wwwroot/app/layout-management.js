@@ -63,6 +63,9 @@
             <a class="lm-iconbtn lm-iconbtn-edit" href="/admin/layout/${l.id}/edit"><span class="material-symbols-outlined">edit</span>편집</a>
             <button class="lm-iconbtn" data-act="duplicate" data-id="${l.id}"><span class="material-symbols-outlined">content_copy</span>복제</button>
             <button class="lm-iconbtn" data-act="rename" data-id="${l.id}"><span class="material-symbols-outlined">drive_file_rename_outline</span>이름변경</button>
+            <button class="lm-iconbtn" data-act="export" data-id="${l.id}"><span class="material-symbols-outlined">download</span>내보내기</button>
+            <button class="lm-iconbtn" data-act="import" data-id="${l.id}"><span class="material-symbols-outlined">upload</span>가져오기</button>
+            ${l.imagePath ? `<button class="lm-iconbtn" data-act="image" data-id="${l.id}"><span class="material-symbols-outlined">image</span>이미지</button>` : ''}
             <a class="lm-iconbtn" href="/admin/layout/${l.id}?tab=dexa"><span class="material-symbols-outlined">file_upload</span>이전 TWMS 가져오기</a>
             <button class="lm-iconbtn lm-iconbtn-danger" data-act="delete" data-id="${l.id}" ${canDelete ? '' : 'disabled'}><span class="material-symbols-outlined">delete</span>삭제</button>
           </div>
@@ -78,6 +81,9 @@
       btn.addEventListener('click', () => {
         if (act === 'duplicate') duplicateLayout(id);
         else if (act === 'rename') renameLayout(id);
+        else if (act === 'export') exportLayout(id);
+        else if (act === 'import') importLayout(id);
+        else if (act === 'image') downloadImage(id);
         else if (act === 'delete') deleteLayout(id);
       });
     });
@@ -102,11 +108,20 @@
     if (r) r(value);
   }
 
-  /* ════════════════ 확인 모달 (삭제) ════════════════ */
+  /* ════════════════ 확인 모달 (삭제 / 가져오기 공용) ════════════════ */
   let _confirmResolve = null;
-  function confirmBox(title, message) {
+  // opts: { okLabel='삭제', okIcon='delete', danger=true }
+  function confirmBox(title, message, opts) {
+    const o = opts || {};
+    const okLabel = o.okLabel || '삭제';
+    const okIcon = o.okIcon || 'delete';
+    const danger = o.danger !== false;
     $('lm-confirm-title').textContent = title;
     $('lm-confirm-msg').textContent = message || '';
+    const ok = $('lm-confirm-ok');
+    ok.innerHTML = `<span class="material-symbols-outlined">${okIcon}</span>${esc(okLabel)}`;
+    ok.classList.toggle('lm-btn-danger', danger);
+    ok.classList.toggle('lm-btn-primary', !danger);
     $('lm-confirm-overlay').classList.add('show');
     return new Promise((resolve) => { _confirmResolve = resolve; });
   }
@@ -171,6 +186,95 @@
     if (r) { if (window.Shell) Shell.toast('레이아웃이 삭제되었습니다.'); await load(); }
   }
 
+  /* ════════════════ JSON Export / Import / 이미지 다운로드 ════════════════ */
+  function toast(msg) { if (window.Shell) Shell.toast(msg); }
+
+  function downloadBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // Content-Disposition 의 filename* / filename 파싱 (없으면 fallback)
+  function filenameFrom(res, fallback) {
+    const cd = res.headers.get('Content-Disposition') || '';
+    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+    if (star) { try { return decodeURIComponent(star[1].replace(/["']/g, '')); } catch (_) {} }
+    const plain = /filename="?([^";]+)"?/i.exec(cd);
+    if (plain) return plain[1];
+    return fallback;
+  }
+
+  // 인증 필요한 GET 파일 다운로드 (export / image 공용)
+  async function downloadAuthedFile(url, fallbackName, okMsg) {
+    try {
+      const res = await fetch(url, { headers: { 'Accept': 'application/octet-stream' } });
+      if (!res.ok) {
+        let msg = '다운로드에 실패했습니다.';
+        try { const e = await res.json(); if (e && e.error) msg = e.error; } catch (_) {}
+        toast(msg); return;
+      }
+      downloadBlob(await res.blob(), filenameFrom(res, fallbackName));
+      if (okMsg) toast(okMsg);
+    } catch (e) { toast('다운로드에 실패했습니다: ' + e.message); }
+  }
+
+  async function exportLayout(id) {
+    const l = findLayout(id); if (!l) return;
+    await downloadAuthedFile(`/api/admin/layout/${id}/export`, `layout-${l.name}.json`,
+      `'${l.name}' 레이아웃을 내보냈습니다.`);
+  }
+
+  async function downloadImage(id) {
+    const l = findLayout(id); if (!l) return;
+    await downloadAuthedFile(`/api/admin/layout/${id}/image`, `${l.name}.png`, null);
+  }
+
+  let _importTargetId = null;
+  function importLayout(id) {
+    _importTargetId = id;
+    const input = $('lm-json-import');
+    input.value = '';
+    input.click();
+  }
+
+  async function onImportFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const id = _importTargetId;
+    const l = findLayout(id);
+
+    // 클라이언트 선검증 + 미리보기 카운트 (Blazor 확인 다이얼로그 이식)
+    let data;
+    try { data = JSON.parse(await file.text()); }
+    catch (_) { toast('JSON 형식이 올바르지 않습니다. 레이아웃 내보내기 파일인지 확인하세요.'); return; }
+    if (!data || (data.version || 0) < 1) { toast('유효하지 않은 JSON 파일입니다.'); return; }
+    const pc = (data.positions || []).length, gc = (data.groups || []).length, rc = (data.blueprintRects || []).length;
+    if (pc + gc + rc === 0) { toast('가져올 데이터가 없는 JSON 파일입니다.'); return; }
+
+    const ok = await confirmBox('레이아웃 데이터 가져오기',
+      `'${l ? l.name : id}'에 다음 데이터를 덮어쓰시겠습니까?\n` +
+      `원본: ${data.layoutName || '알 수 없음'}\n` +
+      `자산 ${pc}개, 그룹 ${gc}개, 라인 영역 ${rc}개\n\n` +
+      `기존 배치 / 그룹 / 라인 영역이 모두 교체됩니다.`,
+      { okLabel: '가져오기', okIcon: 'upload', danger: false });
+    if (!ok) return;
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      const res = await fetch(`/api/admin/layout/${id}/import`, { method: 'POST', body: fd });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(r.error || '가져오기에 실패했습니다.'); return; }
+      let msg = `완료 — 자산 ${r.positions}개, 그룹 ${r.groups}개, 라인 영역 ${r.rects}개 가져옴`;
+      if (r.skipped > 0) msg += ` (건너뜀: ${r.skipped})`;
+      toast(msg);
+      await load();
+    } catch (e) { toast('가져오기에 실패했습니다: ' + e.message); }
+  }
+
   /* ════════════════ 순서 변경 모달 (LayoutReorderDialog 이식) ════════════════ */
   let _reorderItems = [];
   function openReorder() {
@@ -212,6 +316,7 @@
   function bind() {
     $('lm-create').addEventListener('click', createLayout);
     $('lm-reorder').addEventListener('click', openReorder);
+    $('lm-json-import').addEventListener('change', onImportFile);
 
     // 입력 모달
     $('lm-input-ok').addEventListener('click', () => closeInput($('lm-input-field').value));

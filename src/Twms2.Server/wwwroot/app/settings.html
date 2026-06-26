@@ -76,7 +76,19 @@
     .set-range { flex: 1; accent-color: var(--c-primary); }
     .set-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     @media (max-width: 900px) { .set-grid-2 { grid-template-columns: 1fr; } }
+
+    /* 관리 페이지 임베드 iframe (관리 탭) */
+    .set-embed {
+      width: 100%; height: 78vh; min-height: 520px; border: none; border-radius: 16px;
+      background: var(--c-surface-container-low);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
   </style>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
 </head>
 <body class="font-body-md">
   <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
@@ -88,11 +100,16 @@
       </div>
     </div>
 
-    <!-- 탭 (Settings.razor 순서: 라인 관리 / 매뉴얼 / 일반) -->
+    <!-- 탭: 설정(라인/매뉴얼/일반) + 관리(/admin/* 페이지를 iframe 으로 임베드 — 테스트용) -->
     <div class="set-tabs" id="set-tabs">
       <button class="set-tab active" data-tab="lines"><span class="material-symbols-outlined">linear_scale</span>라인 관리</button>
       <button class="set-tab" data-tab="manuals"><span class="material-symbols-outlined">menu_book</span>매뉴얼</button>
       <button class="set-tab" data-tab="general"><span class="material-symbols-outlined">settings</span>일반</button>
+      <button class="set-tab" data-tab="dexa"><span class="material-symbols-outlined">dns</span>DEXA 설정</button>
+      <button class="set-tab" data-tab="layoutmgmt"><span class="material-symbols-outlined">space_dashboard</span>레이아웃 관리</button>
+      <button class="set-tab" data-tab="database"><span class="material-symbols-outlined">database</span>DB 관리</button>
+      <button class="set-tab" data-tab="users"><span class="material-symbols-outlined">group</span>사용자 관리</button>
+      <button class="set-tab" data-tab="assettable"><span class="material-symbols-outlined">table_rows</span>자산 테이블</button>
     </div>
 
     <!-- ── 라인 관리 ── -->
@@ -146,8 +163,8 @@
         <!-- 사이드바 로고 -->
         <div class="nm-card">
           <h3 class="set-section-title"><span class="material-symbols-outlined">image</span>사이드바 로고</h3>
-          <p class="set-hint">사이드바 상단에 표시될 로고 이미지입니다. PNG, JPG, SVG, GIF, WEBP 지원 · 최대 2MB · 권장 크기 210 × 44 px<br>
-            <span style="opacity:0.8;">※ PNG·JPG 는 업로드 시 SVG 로 자동 변환되어 저장됩니다.</span></p>
+          <p class="set-hint">사이드바 상단 <b>왼쪽 심볼(마크)</b> 이미지입니다. PNG, JPG, SVG, GIF, WEBP 지원 · 최대 2MB · 권장: 정사각형에 가까운 심볼<br>
+            <span style="opacity:0.8;">※ PNG·JPG 는 업로드 시 SVG 로 자동 변환되어 저장됩니다. 삭제하면 기본 TWMS 마크로 복원됩니다.</span></p>
 
           <div id="logo-preview-host" style="margin-bottom:14px;"></div>
 
@@ -162,15 +179,49 @@
 
           <div style="height:1px;background:var(--c-outline-variant);opacity:0.4;margin:4px 0 16px;"></div>
 
-          <h4 class="set-section-title" style="font-size:0.9rem;"><span class="material-symbols-outlined" style="font-size:18px;">aspect_ratio</span>로고 여유 조절</h4>
-          <p class="set-hint">사이드바 로고 영역의 안쪽 여백(패딩)을 조절합니다. 값이 클수록 로고가 작아지고 여백이 넓어집니다.</p>
-          <div style="display:flex;align-items:center;gap:14px;">
-            <input class="set-range" id="logo-padding" type="range" min="0" max="30" step="1" />
-            <span id="logo-padding-val" class="font-label-mono text-on-surface" style="min-width:48px;">10px</span>
-            <button class="set-btn set-btn-primary" id="logo-padding-save-btn"><span class="material-symbols-outlined">save</span>적용</button>
+          <h4 class="set-section-title" style="font-size:0.9rem;"><span class="material-symbols-outlined" style="font-size:18px;">title</span>제목 · 부제</h4>
+          <p class="set-hint">로고 마크 오른쪽에 표시되는 제목과 부제입니다. 부제를 비우면 제목만 표시됩니다.</p>
+          <div style="display:grid;gap:12px;margin-bottom:16px;">
+            <div>
+              <label class="set-field-label" for="brand-title">제목</label>
+              <input class="set-input" id="brand-title" type="text" maxlength="40" placeholder="TWMS" />
+            </div>
+            <div>
+              <label class="set-field-label" for="brand-subtitle">부제</label>
+              <input class="set-input" id="brand-subtitle" type="text" maxlength="80" placeholder="Total Web Management System" />
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="set-btn set-btn-primary" id="brand-save-btn"><span class="material-symbols-outlined">save</span>저장</button>
+              <button class="set-btn" id="brand-reset-btn"><span class="material-symbols-outlined">restart_alt</span>기본값으로 초기화</button>
+            </div>
+          </div>
+
+          <div style="height:1px;background:var(--c-outline-variant);opacity:0.4;margin:4px 0 16px;"></div>
+
+          <div class="set-alert" style="align-items:flex-start;">
+            <span class="material-symbols-outlined" style="color:var(--c-primary);">info</span>
+            <span>변경 사항이 사이드바에 바로 보이지 않으면 브라우저를 <b>강력 새로고침</b> 하세요 (이미지·스타일 캐시 때문).<br>
+              Windows: <b>Ctrl + Shift + R</b> (또는 <b>Ctrl + F5</b>) · macOS: <b>⌘ + Shift + R</b></span>
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- ── 관리 페이지 임베드 탭 (기존 /admin/* 페이지를 iframe 으로 재사용 — 탭 최초 진입 시 지연 로드) ── -->
+    <section class="set-panel" data-panel="dexa">
+      <iframe class="set-embed" data-src="/admin/config" title="DEXA 설정"></iframe>
+    </section>
+    <section class="set-panel" data-panel="layoutmgmt">
+      <iframe class="set-embed" data-src="/admin/layout" title="레이아웃 관리"></iframe>
+    </section>
+    <section class="set-panel" data-panel="database">
+      <iframe class="set-embed" data-src="/admin/database" title="DB 관리"></iframe>
+    </section>
+    <section class="set-panel" data-panel="users">
+      <iframe class="set-embed" data-src="/admin/users" title="사용자 관리"></iframe>
+    </section>
+    <section class="set-panel" data-panel="assettable">
+      <iframe class="set-embed" data-src="/assets/table" title="자산 테이블 편집"></iframe>
     </section>
   </div>
 
@@ -179,5 +230,20 @@
   <script src="/js/imagetracer.min.js"></script>
   <script src="/js/logo-converter.js"></script>
   <script src="/app/settings.js"></script>
+  <!-- 관리 탭 iframe 지연 로드 (인라인 — settings.js 캐시와 무관하게 동작; HTML 은 즉시 반영됨) -->
+  <script>
+    (function () {
+      function loadActive() {
+        var panel = document.querySelector('.set-panel.active');
+        var f = panel && panel.querySelector('iframe[data-src]');
+        if (f && !f.getAttribute('src')) f.setAttribute('src', f.getAttribute('data-src'));
+      }
+      document.addEventListener('click', function (e) {
+        var tab = e.target.closest && e.target.closest('.set-tab');
+        if (tab) setTimeout(loadActive, 0); // switchTab 이 active 토글한 뒤 로드
+      });
+      document.addEventListener('DOMContentLoaded', loadActive);
+    })();
+  </script>
 </body>
 </html>

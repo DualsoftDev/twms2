@@ -27,6 +27,22 @@
     }
     .ax-count { font-size: 13px; color: var(--c-on-surface-variant); margin-bottom: 12px; font-weight: 600; }
 
+    /* 묶음(?ids) 진입 안내 배너 */
+    .ax-notice {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+      padding: 8px 14px; border-radius: 12px; font-size: 13px; font-weight: 600;
+      color: var(--c-primary); background: var(--c-surface);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .ax-notice .material-symbols-outlined { font-size: 18px; }
+    .ax-notice-clear {
+      margin-left: auto; padding: 4px 12px; border: none; border-radius: 9px; cursor: pointer;
+      font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant);
+      background: var(--c-surface); font-family: inherit;
+      box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light);
+    }
+    .ax-notice-clear:hover { color: var(--c-primary); }
+
     /* 자산 카드 그리드 (AssetStatusCard 형태 유지) */
     .ax-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
     .ax-asset-card {
@@ -62,6 +78,11 @@
     .ax-hero { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 56px 24px; }
     .ax-hero .material-symbols-outlined { font-size: 56px; color: var(--c-primary); opacity: 0.5; }
   </style>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
 </head>
 <body class="font-body-md">
   <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
@@ -125,6 +146,7 @@
           <span class="material-symbols-outlined" style="font-size:18px;">table_chart</span>통합조회 / 편집
         </a>
       </div>
+      <div class="ax-notice" id="ax-notice" style="display:none;"></div>
       <div class="ax-count" id="ax-count"></div>
       <div id="ax-list"></div>
     </div>
