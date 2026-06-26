@@ -161,11 +161,14 @@ window.blueprintEditor = (() => {
                 const fy = parseFloat(fill.getAttribute('y'));
                 const fw = parseFloat(fill.getAttribute('width'));
                 const fh = parseFloat(fill.getAttribute('height'));
-                inst.dotNetRef.invokeMethodAsync('OnRectMoved', lineId,
-                    Math.round(fx * 100) / 100,
-                    Math.round(fy * 100) / 100,
-                    Math.round(fw * 100) / 100,
-                    Math.round(fh * 100) / 100);
+                // 실제로 위치/크기가 바뀐 경우에만 보고 — 단순 클릭은 '변경됨' 처리하지 않음
+                if (fx !== startRect.x || fy !== startRect.y || fw !== startRect.w || fh !== startRect.h) {
+                    inst.dotNetRef.invokeMethodAsync('OnRectMoved', lineId,
+                        Math.round(fx * 100) / 100,
+                        Math.round(fy * 100) / 100,
+                        Math.round(fw * 100) / 100,
+                        Math.round(fh * 100) / 100);
+                }
             }
 
             startPt = null;

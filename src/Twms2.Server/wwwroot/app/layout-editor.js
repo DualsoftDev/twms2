@@ -22,6 +22,87 @@
   const iconHref = (p) => '/' + String(p || 'images/icons/plc.png').replace(/^\//, '');
   const toast = (m) => { if (window.Shell && Shell.toast) Shell.toast(m); };
 
+  // ── 공용 우클릭 컨텍스트 메뉴 ──────────────────────────────────────────────
+  // items: [{icon,label,danger?,onClick} | {sep:true}]. 도면 위 우클릭 시 브라우저
+  // 기본 메뉴 대신 표시. 메뉴 밖 클릭/ESC/스크롤/리사이즈 시 닫힌다.
+  const CtxMenu = (() => {
+    let el = null;
+    function ensure() {
+      if (el) return el;
+      el = document.createElement('div');
+      el.className = 'le-ctxmenu';
+      el.hidden = true;
+      document.body.appendChild(el);
+      return el;
+    }
+    function hide() { if (el && !el.hidden) { el.hidden = true; el.innerHTML = ''; } }
+    function show(x, y, items) {
+      const m = ensure();
+      m.innerHTML = '';
+      items.forEach(it => {
+        if (it.sep) { const s = document.createElement('div'); s.className = 'le-ctxmenu-sep'; m.appendChild(s); return; }
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'le-ctxmenu-item' + (it.danger ? ' danger' : '');
+        b.innerHTML = `<span class="material-symbols-outlined">${it.icon || 'chevron_right'}</span><span>${esc(it.label)}</span>`;
+        b.addEventListener('click', () => { hide(); try { it.onClick(); } catch (err) { console.error(err); } });
+        m.appendChild(b);
+      });
+      m.style.left = x + 'px'; m.style.top = y + 'px';
+      m.hidden = false;
+      // 화면 밖으로 넘치지 않게 보정
+      const mw = m.offsetWidth, mh = m.offsetHeight;
+      m.style.left = Math.max(4, Math.min(x, window.innerWidth - mw - 8)) + 'px';
+      m.style.top = Math.max(4, Math.min(y, window.innerHeight - mh - 8)) + 'px';
+    }
+    document.addEventListener('pointerdown', (e) => { if (el && !el.hidden && !el.contains(e.target)) hide(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+    window.addEventListener('blur', hide);
+    window.addEventListener('resize', hide);
+    document.addEventListener('scroll', hide, true);
+    return { show, hide };
+  })();
+
+  // ── 공용 선택 다이얼로그 ──────────────────────────────────────────────────
+  // open({title,icon,msg,items:[{label,sub?,icon?,value}],emptyText,onPick}) → 항목 클릭 시 onPick(value)
+  const PickerDialog = (() => {
+    let overlay = null;
+    function ensure() {
+      if (overlay) return overlay;
+      overlay = document.createElement('div');
+      overlay.className = 'le-overlay';
+      overlay.innerHTML = `<div class="le-modal"><div class="le-modal-title" id="le-pick-title"></div>`
+        + `<div class="le-modal-msg" id="le-pick-msg"></div><div class="le-pick-list" id="le-pick-list"></div>`
+        + `<div class="le-modal-actions"><button type="button" class="le-btn" id="le-pick-cancel">취소</button></div></div>`;
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+      overlay.querySelector('#le-pick-cancel').addEventListener('click', close);
+      return overlay;
+    }
+    function close() { if (overlay) overlay.classList.remove('show'); }
+    function open(opts) {
+      const o = ensure();
+      o.querySelector('#le-pick-title').innerHTML = (opts.icon ? `<span class="material-symbols-outlined">${opts.icon}</span>` : '') + `<span>${esc(opts.title || '')}</span>`;
+      o.querySelector('#le-pick-msg').textContent = opts.msg || '';
+      const list = o.querySelector('#le-pick-list');
+      list.innerHTML = '';
+      const items = opts.items || [];
+      if (!items.length) { list.innerHTML = `<div class="le-pick-empty">${esc(opts.emptyText || '항목이 없습니다.')}</div>`; }
+      items.forEach(it => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'le-pick-item';
+        b.innerHTML = `<span class="material-symbols-outlined">${it.icon || 'chevron_right'}</span>`
+          + `<span class="flex-grow-1" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.label)}</span>`
+          + (it.sub ? `<span style="font-size:12px;color:var(--c-on-surface-variant);">${esc(it.sub)}</span>` : '');
+        b.addEventListener('click', () => { close(); try { opts.onPick(it.value); } catch (err) { console.error(err); } });
+        list.appendChild(b);
+      });
+      o.classList.add('show');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    return { open, close };
+  })();
+
   let LID = 0;
   let config = {};        // 도면 설정 (3개 탭 공유; 탭1 저장 시 갱신)
   let allAssets = [];     // 자산 스냅샷
@@ -223,7 +304,7 @@
     function renderPanel() {
       const placedRows = rects.map(r => {
         const name = lineMap[r.lineId] || ('Line ' + r.lineId);
-        return `<div class="ap-list-item" title="${esc(name)}"><span class="material-symbols-outlined" style="font-size:18px;color:var(--c-primary);">map</span>`
+        return `<div class="ap-list-item" data-locate-line="${r.lineId}" title="${esc(name)} — 도면에서 위치 보기"><span class="material-symbols-outlined" style="font-size:18px;color:var(--c-primary);">map</span>`
           + `<div class="flex-grow-1" style="min-width:0;"><div class="ap-list-name">${esc(name)}</div>`
           + `<div class="ap-list-sub">${Math.round(r.width)} × ${Math.round(r.height)}</div></div></div>`;
       }).join('') || `<div class="ap-empty">배치된 라인이 없습니다.</div>`;
@@ -238,8 +319,43 @@
         + `<div class="le-panel-head"><span class="material-symbols-outlined">add_box</span>미배치 라인 (${un.length})</div>`
         + `<div class="ap-asset-list">${unRows}</div>`
         + `<button class="le-pillbtn" id="bp-add" style="margin-top:10px;width:100%;justify-content:center;" ${linesList.length === 0 ? 'disabled' : ''}><span class="material-symbols-outlined">add</span>라인 추가</button>`;
+      $('bp-panel').querySelectorAll('[data-locate-line]').forEach(el => el.addEventListener('click', () => focusRect(parseInt(el.dataset.locateLine, 10))));
       $('bp-panel').querySelectorAll('[data-add-line]').forEach(b => b.addEventListener('click', () => addRect(parseInt(b.dataset.addLine, 10))));
-      const addAll = $('bp-add'); if (addAll) addAll.addEventListener('click', () => { const u = unplaced(); if (u.length) addRect(u[0].id); else toast('모든 라인이 이미 배치되었습니다.'); });
+      const addAll = $('bp-add'); if (addAll) addAll.addEventListener('click', promptAddLine);
+    }
+
+    // '라인 추가' → 다이얼로그로 라인 선택 후 배치 + 해당 영역으로 화면 이동
+    function promptAddLine() {
+      const un = unplaced();
+      if (!un.length) { toast('모든 라인이 이미 배치되었습니다.'); return; }
+      PickerDialog.open({
+        title: '라인 추가', icon: 'add_road', msg: '도면에 배치할 라인을 선택하세요.',
+        items: un.map(l => ({ label: l.name, value: l.id, icon: 'map' })),
+        emptyText: '추가할 라인이 없습니다.',
+        onPick: lineId => addRect(lineId),   // addRect 가 배치 후 focusRect 로 화면 이동
+      });
+    }
+
+    // 좌측 라인 클릭 → 도면 위 해당 영역으로 뷰 이동 + 플래시 하이라이트
+    function focusRect(lineId) {
+      const r = rects.find(x => x.lineId === lineId);
+      if (!r) return;
+      if (window.blueprintZoom && inited) {
+        const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+        const margin = 1.8;
+        const vbW = clamp(Math.max(r.width * margin, r.height * margin * (1000 / 600)), 200, 2000);
+        const vbH = vbW * (600 / 1000);
+        window.blueprintZoom.setViewBox('bp-editor-container', { x: cx - vbW / 2, y: cy - vbH / 2, w: vbW, h: vbH });
+      }
+      flashRect(lineId);
+    }
+    function flashRect(lineId) {
+      const g = $('bp-editor-svg').querySelector(`.bp-edit-rect[data-line-id="${lineId}"]`);
+      if (!g) return;
+      g.classList.remove('bp-flash');
+      void g.getBoundingClientRect();   // 애니메이션 재시작용 강제 리플로우
+      g.classList.add('bp-flash');
+      setTimeout(() => g.classList.remove('bp-flash'), 1300);
     }
 
     function updateToolbar() {
@@ -265,11 +381,12 @@
       markChanged(); renderSvg(); renderPanel();
     }
     function addRect(lineId) {
-      if (rects.some(r => r.lineId === lineId)) return;
+      if (rects.some(r => r.lineId === lineId)) { focusRect(lineId); return; }
       pushUndo();
       const idx = rects.length;
       rects.push({ lineId, x: 50 + (idx % 4) * 220, y: 50 + Math.floor(idx / 4) * 150, width: 180, height: 120 });
       markChanged(); renderSvg(); renderPanel();
+      focusRect(lineId);   // 배치된 라인으로 화면 이동 + 플래시
     }
     function doUndo() { if (!undo.length) return; redo.push(snapshot()); restore(undo.pop()); markChanged(); renderSvg(); renderPanel(); }
     function doRedo() { if (!redo.length) return; undo.push(snapshot()); restore(redo.pop()); markChanged(); renderSvg(); renderPanel(); }
@@ -312,6 +429,23 @@
       $('bp-undo').addEventListener('click', doUndo);
       $('bp-redo').addEventListener('click', doRedo);
       $('bp-save').addEventListener('click', save);
+
+      // 도면 위 우클릭 → 커스텀 메뉴
+      $('bp-editor-container').addEventListener('contextmenu', e => {
+        e.preventDefault();
+        const g = e.target.closest('.bp-edit-rect');
+        const items = [];
+        if (g) {
+          const lineId = parseInt(g.dataset.lineId, 10);
+          const name = lineMap[lineId] || ('Line ' + lineId);
+          items.push({ icon: 'center_focus_strong', label: '이 영역으로 확대', onClick: () => focusRect(lineId) });
+          items.push({ icon: 'delete', label: `'${name}' 영역 삭제`, danger: true, onClick: () => { if (confirm(`'${name}' 라인 영역을 삭제하시겠습니까?`)) onRectDeleted(lineId); } });
+          items.push({ sep: true });
+        }
+        items.push({ icon: 'add', label: '라인 추가', onClick: promptAddLine });
+        items.push({ icon: 'center_focus_weak', label: '100% 보기', onClick: () => window.blueprintZoom.reset('bp-editor-container') });
+        CtxMenu.show(e.clientX, e.clientY, items);
+      });
     }
 
     return { load, bind, activate, deactivate, hasUnsaved };
@@ -484,8 +618,9 @@
       $('ap-include-other').addEventListener('change', e => { includeOther = e.target.checked; checked.clear(); renderUnplaced(); });
       $('ap-check-all').addEventListener('change', e => toggleCheckAll(e.target.checked));
 
-      // 리스트 클릭 위임
+      // 리스트 클릭 위임 — 미배치는 체크박스를 눌러야 배치(단순 행 클릭으로는 배치하지 않음)
       $('ap-unplaced-list').addEventListener('click', e => {
+        if (e.target.tagName !== 'INPUT') return;
         const item = e.target.closest('[data-uid]'); if (!item) return;
         toggleCheck(parseInt(item.dataset.uid, 10));
       });
@@ -495,9 +630,11 @@
         const item = e.target.closest('[data-pid]'); if (item) focusAsset(parseInt(item.dataset.pid, 10));
       });
       $('ap-groups-list').addEventListener('click', e => {
-        const del = e.target.closest('[data-grp-del]'); if (del) { deleteGroup(parseInt(del.dataset.grpDel, 10)); return; }
+        const ung = e.target.closest('[data-grp-ungroup]'); if (ung) { ungroupToCanvas(parseInt(ung.dataset.grpUngroup, 10)); return; }
         const rem = e.target.closest('[data-grp-rem]'); if (rem) { removeFromGroup(parseInt(rem.dataset.grp, 10), parseInt(rem.dataset.grpRem, 10)); return; }
-        const head = e.target.closest('[data-grp-exp]'); if (head) toggleGroupExpand(parseInt(head.dataset.grpExp, 10));
+        const mem = e.target.closest('[data-locate-asset]'); if (mem) { focusAsset(parseInt(mem.dataset.locateAsset, 10)); return; }
+        const exp = e.target.closest('[data-grp-exp]'); if (exp) { toggleGroupExpand(parseInt(exp.dataset.grpExp, 10)); return; }  // 화살표만 펼침/접기
+        const head = e.target.closest('[data-grp-locate]'); if (head) locateGroup(parseInt(head.dataset.grpLocate, 10)); // 행 클릭은 도면 위치만
       });
       $('ap-groups-list').addEventListener('change', e => {
         const f = e.target.closest('[data-grp-floor]');
@@ -513,8 +650,8 @@
       $('ap-unplaced-list').innerHTML = list.map(a => {
         const ck = checked.has(a.assetId);
         const tag = a.lineName ? `<span class="ap-line-tag">${esc(a.lineName)}</span>` : '';
-        return `<div class="ap-list-item ${ck ? 'checked' : ''}" data-uid="${a.assetId}">`
-          + `<input type="checkbox" ${ck ? 'checked' : ''} style="accent-color:#4caf50;pointer-events:none;"/>`
+        return `<div class="ap-list-item ${ck ? 'checked' : ''}" data-uid="${a.assetId}" style="cursor:default;">`
+          + `<input type="checkbox" ${ck ? 'checked' : ''} style="accent-color:#4caf50;cursor:pointer;"/>`
           + `<img src="${iconHref(a.icon)}" class="asset-type-icon-sm"/>`
           + `<div class="flex-grow-1" style="min-width:0;"><div class="ap-list-name">${esc(a.name)}</div>`
           + `<div class="ap-list-sub">${esc(a.ip || '')}${tag}</div></div></div>`;
@@ -529,18 +666,18 @@
         let members = '';
         if (isExp) members = `<div class="ap-group-members">` + ids.map(aid => {
           const a = assetMap.get(aid); if (!a) return '';
-          return `<div class="ap-list-item small"><img src="${iconHref(a.icon)}" class="asset-type-icon-sm"/>`
+          return `<div class="ap-list-item small" data-locate-asset="${aid}" title="${esc(a.name)} — 도면에서 위치 보기"><img src="${iconHref(a.icon)}" class="asset-type-icon-sm"/>`
             + `<span class="flex-grow-1 ap-list-name">${esc(a.name)}</span>`
             + `<button class="le-mini danger" data-grp="${g.id}" data-grp-rem="${aid}" title="그룹에서 제거"><span class="material-symbols-outlined">remove_circle_outline</span></button></div>`;
         }).join('') + `</div>`;
         return `<div class="ap-group-item ${selCls}">`
-          + `<div class="ap-group-header" data-grp-exp="${g.id}">`
-          + `<span class="material-symbols-outlined" style="font-size:18px;">${isExp ? 'expand_more' : 'chevron_right'}</span>`
+          + `<div class="ap-group-header" data-grp-locate="${g.id}" title="도면에서 위치 보기">`
+          + `<span class="material-symbols-outlined" data-grp-exp="${g.id}" style="font-size:18px;cursor:pointer;border-radius:6px;" title="${isExp ? '접기' : '펼치기'}">${isExp ? 'expand_more' : 'chevron_right'}</span>`
           + `<span class="ap-group-color" style="background:${g.color || '#4a90d9'}"></span>`
           + `<span class="flex-grow-1 ap-list-name" style="font-size:.72rem;">${esc(groupLabel(g.id))}</span>`
           + `<input type="number" class="le-floor-input" data-grp-floor="${g.id}" value="${g.floor}" min="-20" max="100" title="층" onclick="event.stopPropagation()"/>`
           + `<span class="ap-group-count">${ids.length}</span>`
-          + `<button class="le-mini danger" data-grp-del="${g.id}" title="그룹 삭제"><span class="material-symbols-outlined">delete</span></button>`
+          + `<button class="le-mini" data-grp-ungroup="${g.id}" title="그룹 해제 (도면에 개별 배치)"><span class="material-symbols-outlined">grid_view</span></button>`
           + `</div>${members}</div>`;
       }).join('');
     }
@@ -574,6 +711,14 @@
           + `<option value="grid">그리드 정렬</option><option value="row">가로 정렬</option><option value="col">세로 정렬</option>`
           + `<option value="h">가로 균등 분배</option><option value="v">세로 균등 분배</option></select>`;
       }
+      if (selAssets.size >= 1) {
+        const sizeScales = [...selAssets].map(id => { const s = posOf(id).scale; return s > 0 ? s : 1; });
+        const initSize = Math.round((sizeScales.reduce((a, b) => a + b, 0) / sizeScales.length) * 100) / 100;
+        html += `<span class="ap-sel-size-wrap" title="선택 자산 크기 (${selAssets.size}개)">`
+          + `<span class="material-symbols-outlined" style="font-size:18px;color:var(--c-on-surface-variant);">photo_size_select_large</span>`
+          + `<input type="range" id="ap-sel-size" min="0.1" max="3" step="0.05" value="${clamp(initSize, 0.1, 3)}" style="width:104px;accent-color:var(--c-primary);"/>`
+          + `<span id="ap-sel-size-val" style="min-width:36px;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--c-on-surface-variant);">${initSize.toFixed(2)}×</span></span>`;
+      }
       if (selGroups.size > 0) {
         html += `<input type="number" class="le-floor-input" id="ap-sel-floor" style="width:64px;" min="-20" max="100" placeholder="혼합" value="${selectedSharedFloor()}" title="선택 그룹 층"/>`;
       }
@@ -582,6 +727,12 @@
       const gb = $('ap-group-btn'); if (gb) gb.addEventListener('click', createGroupFromSelection);
       const al = $('ap-align'); if (al) al.addEventListener('change', e => { const v = e.target.value; e.target.value = ''; if (v === 'h' || v === 'v') distribute(v); else if (v) align(v); });
       const sf = $('ap-sel-floor'); if (sf) sf.addEventListener('change', e => onSelectedGroupsFloor(parseInt(e.target.value, 10)));
+      const ss = $('ap-sel-size');
+      if (ss) {
+        let undoPushed = false;
+        ss.addEventListener('pointerdown', () => { undoPushed = false; });
+        ss.addEventListener('input', e => { if (!undoPushed) { pushUndo(); undoPushed = true; } setSelectedScale(parseFloat(e.target.value)); });
+      }
       const ds = $('ap-del-sel'); if (ds) ds.addEventListener('click', () => { pushUndo(); unplaceSelected(); refresh(); });
     }
 
@@ -672,6 +823,7 @@
       markChanged();
     }
     function unplaceAsset(assetId) {
+      pushUndo();
       const pos = getPosition(assetId); pos.visible = false;
       for (const [gid, mems] of groupMembers) { const i = mems.indexOf(assetId); if (i >= 0) { mems.splice(i, 1); if (!mems.length) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); } break; } }
       checked.delete(assetId);
@@ -692,8 +844,12 @@
     }
     function focusAsset(assetId) {
       selAssets = new Set([assetId]); selGroups.clear();
+      refresh();   // 먼저 SVG 재생성(선택 표시) → 새 노드에 스크롤/플래시 적용
       if (inited) { try { window.assetPlacementEditor.scrollToAsset('ap-editor-container', assetId); } catch (_) {} }
-      refresh();
+    }
+    // 좌측 그룹 클릭 → 도면 위 해당 그룹으로 뷰 이동 + 플래시 (그룹 펼침은 SVG를 재생성하지 않으므로 노드 유지됨)
+    function locateGroup(gid) {
+      if (inited) { try { window.assetPlacementEditor.scrollToGroup('ap-editor-container', gid); } catch (_) {} }
     }
 
     // ── 그룹 ──
@@ -710,10 +866,76 @@
       rebuildIndexes(); selAssets.clear(); markChanged(); refresh();
       toast('그룹이 생성되었습니다.');
     }
-    function deleteGroup(gid) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); expanded.delete(gid); selGroups.delete(gid); rebuildIndexes(); markChanged(); refresh(); }
+    // 그룹 해제 → 멤버를 숨기지 않고 그룹 근처 빈 공간에 그리드로 펼쳐 개별 배치
+    function ungroupToCanvas(gid) {
+      const g = groups.find(x => x.id === gid);
+      if (!g) return;
+      const ids = memberIdsOf(gid).slice();
+      pushUndo();
+      if (ids.length) {
+        const layout = scatterNearGroup(g, ids);
+        const sc = globalScale > 0 ? globalScale : 1;
+        ids.forEach(aid => {
+          const pos = getPosition(aid);
+          pos.visible = true;
+          pos.scale = sc;   // 그룹 해제된 자산은 도면 기본 크기(globalScale)로 맞춤 — 그리드 간격과 일치
+          const t = layout.get(aid);
+          if (t) { pos.x = t.x; pos.y = t.y; }
+        });
+      }
+      groups = groups.filter(x => x.id !== gid);
+      groupMembers.delete(gid);
+      expanded.delete(gid);
+      selGroups.clear(); selAssets = new Set(ids);
+      rebuildIndexes(); markChanged(); refresh();
+      toast(ids.length ? `그룹 해제 — ${ids.length}개 자산을 도면에 배치했습니다.` : '그룹을 해제했습니다.');
+    }
+    // 그룹 멤버용 그리드 블록을 그룹 중심 부근의 빈 공간에서 찾아 각 멤버의 중심 좌표를 반환
+    function scatterNearGroup(g, ids) {
+      const out = new Map();
+      const n = ids.length;
+      const scale = globalScale > 0 ? globalScale : 1;
+      const sz = 32 * scale, gap = 14, step = sz + gap;
+      const cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.ceil(n / cols);
+      const blockW = cols * step, blockH = rows * step;
+      const maxX = Math.max(4, 1000 - blockW - 4), maxY = Math.max(4, 600 - blockH - 4);
+
+      // 장애물: 해제 대상이 아닌 '보이는' 자산 + 다른 그룹의 바운딩박스
+      const memberSet = new Set(ids), obstacles = [];
+      for (const a of allAssets) {
+        if (memberSet.has(a.assetId) || groupedIds.has(a.assetId)) continue;
+        const p = posOf(a.assetId); if (!p.visible) continue;
+        const s = 32 * (p.scale > 0 ? p.scale : 1);
+        obstacles.push({ x: p.x - s / 2, y: p.y - s / 2, w: s, h: s });
+      }
+      groups.forEach(gr => { if (gr.id !== g.id) obstacles.push({ x: gr.x, y: gr.y, w: gr.width, h: gr.height }); });
+      const hit = (x, y) => obstacles.some(o => x < o.x + o.w && x + blockW > o.x && y < o.y + o.h && y + blockH > o.y);
+
+      const cx = g.x + g.width / 2, cy = g.y + g.height / 2;
+      let bx = clamp(cx - blockW / 2, 4, maxX), by = clamp(cy - blockH / 2, 4, maxY);
+      if (hit(bx, by)) {
+        // 그룹 중심에서 바깥 링으로 한 칸씩 넓혀 가며 빈 공간 탐색
+        outer:
+        for (let r = 1; r <= 14; r++) {
+          for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // 링 둘레만
+            const tx = clamp(bx + dx * step, 4, maxX), ty = clamp(by + dy * step, 4, maxY);
+            if (!hit(tx, ty)) { bx = tx; by = ty; break outer; }
+          }
+        }
+        // 못 찾으면 원래(그룹 중심) 위치 그대로 사용 — 그래도 보이게는 둔다
+      }
+      ids.forEach((aid, i) => {
+        const c = i % cols, r = Math.floor(i / cols);
+        out.set(aid, { x: Math.round((bx + c * step + sz / 2) * 100) / 100, y: Math.round((by + r * step + sz / 2) * 100) / 100 });
+      });
+      return out;
+    }
     function removeFromGroup(gid, aid) {
       const mems = groupMembers.get(gid); if (!mems) return;
-      const i = mems.indexOf(aid); if (i >= 0) mems.splice(i, 1);
+      const i = mems.indexOf(aid); if (i < 0) return;
+      pushUndo();
+      mems.splice(i, 1);
       if (!mems.length) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); expanded.delete(gid); }
       rebuildIndexes(); markChanged(); refresh();
     }
@@ -763,7 +985,15 @@
     function setGlobalScale(v) {
       v = Math.round(clamp(v, 0.1, 5) * 100) / 100; globalScale = v;
       for (const p of positions.values()) p.scale = v;
-      markChanged(); refresh();
+      const lbl = $('ap-scale-val'); if (lbl) lbl.textContent = v.toFixed(2) + '×';
+      markChanged(); renderSvg(); updateToolbar();   // 슬라이더 드래그 중 가벼운 라이브 반영
+    }
+    // 선택한 개별 자산만 크기(스케일) 조절 — 슬라이더 드래그 중 라이브 반영
+    function setSelectedScale(v) {
+      v = Math.round(clamp(v, 0.1, 5) * 100) / 100;
+      for (const aid of selAssets) getPosition(aid).scale = v;
+      const lbl = $('ap-sel-size-val'); if (lbl) lbl.textContent = v.toFixed(2) + '×';
+      markChanged(); renderSvg(); updateToolbar();
     }
 
     // ── 저장 (PlacementEditor.ApplyChangesAsync 이식) ──
@@ -785,6 +1015,7 @@
       $('ap-editor-svg').setAttribute('viewBox', '0 0 1000 600');
       if (!shellBuilt) buildShell();
       $('ap-scale').value = globalScale.toFixed(2);
+      const gsv = $('ap-scale-val'); if (gsv) gsv.textContent = globalScale.toFixed(2) + '×';
       renderSvg(); renderPanel(); updateSelActions(); updateToolbar();
       window.assetPlacementEditor.init('ap-editor-container', shim);
       window.assetPlacementEditor.setSnapConfig('ap-editor-container', snapEnabled, snapGridSize);
@@ -805,8 +1036,38 @@
       $('ap-zoom-fit').addEventListener('click', () => { window.assetPlacementEditor.fitAll('ap-editor-container'); updateToolbar(); });
       $('ap-undo').addEventListener('click', doUndo);
       $('ap-redo').addEventListener('click', doRedo);
-      $('ap-scale').addEventListener('change', e => setGlobalScale(parseFloat(e.target.value) || 1));
+      const gscale = $('ap-scale');
+      if (gscale) {
+        let gUndo = false;
+        gscale.addEventListener('pointerdown', () => { gUndo = false; });
+        gscale.addEventListener('input', e => { if (!gUndo) { pushUndo(); gUndo = true; } setGlobalScale(parseFloat(e.target.value) || 1); });
+      }
       $('ap-save').addEventListener('click', save);
+
+      // 도면 위 우클릭 → 커스텀 메뉴 (자산/그룹/빈 영역에 따라 항목 구성)
+      $('ap-editor-container').addEventListener('contextmenu', e => {
+        e.preventDefault();
+        const assetEl = e.target.closest('.ap-asset-icon');
+        const groupEl = e.target.closest('.ap-group-container');
+        const items = [];
+        if (assetEl) {
+          const aid = parseInt(assetEl.dataset.assetId, 10);
+          const selCount = selAssets.size + selGroups.size;
+          const many = selAssets.has(aid) && selCount > 1;
+          items.push({ icon: 'visibility_off', label: many ? `미배치로 제거 (${selCount}개)` : '미배치로 제거',
+            onClick: many ? () => { pushUndo(); unplaceSelected(); refresh(); } : () => unplaceAsset(aid) });
+          if (selAssets.size >= 2) items.push({ icon: 'workspaces', label: `선택 자산 그룹화 (${selAssets.size}개)`, onClick: createGroupFromSelection });
+          items.push({ sep: true });
+        } else if (groupEl) {
+          const gid = parseInt(groupEl.dataset.groupId, 10);
+          items.push({ icon: 'grid_view', label: '그룹 해제 (개별 배치)', onClick: () => ungroupToCanvas(gid) });
+          items.push({ sep: true });
+        }
+        items.push({ icon: 'fit_screen', label: '전체 보기', onClick: () => { window.assetPlacementEditor.fitAll('ap-editor-container'); updateToolbar(); } });
+        items.push({ icon: 'center_focus_weak', label: '100% 보기', onClick: () => { window.assetPlacementEditor.resetZoom('ap-editor-container'); updateToolbar(); } });
+        items.push({ icon: 'select_all', label: '전체 선택', onClick: () => onKeyAction('selectAll') });
+        CtxMenu.show(e.clientX, e.clientY, items);
+      });
     }
 
     return { load, bind, activate, deactivate, hasUnsaved };

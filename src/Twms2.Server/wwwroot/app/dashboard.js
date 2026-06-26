@@ -373,11 +373,11 @@
     document.addEventListener('click', () => { menu.hidden = true; });
   }
 
-  // 전체 자산 분포도 편집 버튼: 관리자에게만 노출 → 현재 표시 중인 레이아웃 편집기로 이동.
+  // 전체 자산 분포도 편집 버튼: 로그인(인증)한 관리자에게만 노출 → 현재 표시 중인 레이아웃 편집기로 이동.
   function bindBpEdit() {
     const btn = $('dash-bp-edit');
     if (!btn) return;
-    const reveal = () => { btn.hidden = !(window.Shell && Shell.isAdmin); };
+    const reveal = () => { btn.hidden = !(window.Shell && Shell.isAuthenticated && Shell.isAdmin); };
     reveal();
     document.addEventListener('shell:auth', reveal);
     btn.addEventListener('click', async () => {

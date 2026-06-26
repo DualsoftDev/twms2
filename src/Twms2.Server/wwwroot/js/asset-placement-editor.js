@@ -1265,6 +1265,26 @@ window.assetPlacementEditor = (() => {
         setTimeout(() => el.classList.remove('ap-flash'), 1200);
     }
 
+    function scrollToGroup(containerId, groupId) {
+        const inst = _inst[containerId];
+        if (!inst) return;
+        const el = inst.svg.querySelector(`.ap-group-container[data-group-id="${groupId}"]`);
+        if (!el) return;
+        const x = parseFloat(el.dataset.x) || 0, y = parseFloat(el.dataset.y) || 0;
+        const w = parseFloat(el.dataset.w) || 0, h = parseFloat(el.dataset.h) || 0;
+        const cx = x + w / 2, cy = y + h / 2;
+        // 그룹 전체가 보이도록 줌 산정 (여백 포함), 단 과도한 축소/확대는 제한
+        const fitZoom = Math.min(ORIG_W / (w + 80), ORIG_H / (h + 80));
+        const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(Math.max(inst.zoom, 1.5), fitZoom)));
+        const vbW = ORIG_W / zoom, vbH = ORIG_H / zoom;
+        inst.viewBox = { x: cx - vbW / 2, y: cy - vbH / 2, w: vbW, h: vbH };
+        inst.zoom = zoom;
+        applyViewBox(inst);
+        // 플래시 하이라이트
+        el.classList.add('ap-flash');
+        setTimeout(() => el.classList.remove('ap-flash'), 1200);
+    }
+
     function scrollListGroupIntoView(groupId) {
         const el = document.querySelector(`[data-list-group-id="${groupId}"]`);
         if (!el) return;
@@ -1281,7 +1301,7 @@ window.assetPlacementEditor = (() => {
         init, dispose,
         setTool, setSnapConfig,
         zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel,
-        scrollToAsset,
+        scrollToAsset, scrollToGroup,
         scrollListGroupIntoView,
         scrollListAssetIntoView,
     };

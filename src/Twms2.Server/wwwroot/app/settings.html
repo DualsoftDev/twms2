@@ -77,12 +77,120 @@
     .set-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     @media (max-width: 900px) { .set-grid-2 { grid-template-columns: 1fr; } }
 
-    /* 관리 페이지 임베드 iframe (관리 탭) */
-    .set-embed {
-      width: 100%; height: 78vh; min-height: 520px; border: none; border-radius: 16px;
-      background: var(--c-surface-container-low);
-      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
-    }
+    /* ── 이식: DEXA 설정(admin-config) 전용 ── */
+    .ac-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 12px; cursor: pointer; font-size: 13px; font-weight: 700; border: none; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light); transition: all 0.15s ease; }
+    .ac-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .ac-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ac-btn .material-symbols-outlined { font-size: 18px; }
+    .ac-btn-primary { color: var(--c-primary); }
+    .ac-iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light); transition: all 0.15s ease; text-decoration: none; }
+    .ac-iconbtn:hover:not(:disabled) { color: var(--c-primary); }
+    .ac-iconbtn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-iconbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ac-iconbtn .material-symbols-outlined { font-size: 18px; }
+    .ac-iconbtn-success:hover:not(:disabled) { color: var(--health-backedup); }
+    .ac-iconbtn-info:hover:not(:disabled) { color: var(--c-primary); }
+    .ac-iconbtn-danger:hover:not(:disabled) { color: var(--health-failed); }
+    .ac-input { background: var(--c-surface); color: var(--c-on-surface); border: none; outline: none; border-radius: 10px; padding: 8px 12px; font-size: 13px; font-family: inherit; width: 100%; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-input::placeholder { color: var(--c-outline); }
+    .ac-cron-link { color: var(--c-primary); font-weight: 700; cursor: pointer; text-decoration: none; border-bottom: 1px dashed transparent; }
+    .ac-cron-link:hover { border-bottom-color: var(--c-primary); }
+    .ac-checkbox { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--c-on-surface-variant); cursor: pointer; user-select: none; }
+    .ac-checkbox input { width: 16px; height: 16px; accent-color: var(--c-primary); cursor: pointer; }
+    .ac-table-wrap { border-radius: 16px; padding: 6px 12px; overflow-x: auto; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); background: var(--c-surface-container-low); }
+    .ac-table-wrap .nm-table td { white-space: nowrap; }
+    .ac-table-wrap .nm-table td.wrap { white-space: normal; max-width: 260px; }
+    .ac-empty { padding: 18px; color: var(--c-on-surface-variant); font-size: 14px; }
+    .ac-loading { padding: 18px; color: var(--c-on-surface-variant); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .ac-actions { display: inline-flex; gap: 6px; align-items: center; }
+    .ac-spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--c-outline-variant); border-top-color: var(--health-inprogress); animation: ac-spin 0.8s linear infinite; display: inline-block; }
+    @keyframes ac-spin { to { transform: rotate(360deg); } }
+    .ac-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .ac-modal-backdrop.open { display: flex; }
+    .ac-modal { background: var(--c-surface); border-radius: 24px; padding: 28px; width: 100%; max-width: 460px; margin: 16px; box-shadow: 8px 8px 18px var(--nm-dark), -8px -8px 18px var(--nm-light); }
+    .ac-modal h3 { font-weight: 800; font-size: 1.1rem; color: var(--c-on-surface); margin: 0 0 18px; }
+    .ac-field { margin-bottom: 14px; }
+    .ac-field label { display: block; font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); margin-bottom: 6px; }
+    .ac-field .ac-hint { font-size: 11px; color: var(--c-outline); margin-top: 4px; }
+    .ac-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+    .ac-map-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .ac-map-list { max-height: 50vh; overflow-y: auto; padding-right: 4px; }
+    .ac-map-group { padding: 8px 12px; border-radius: 12px; margin-bottom: 8px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-map-grouphead { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-on-surface); cursor: pointer; padding-bottom: 6px; border-bottom: 1px solid var(--c-outline-variant); margin-bottom: 4px; }
+    .ac-map-grouphead input, .ac-map-asset input { width: 16px; height: 16px; accent-color: var(--c-primary); cursor: pointer; flex-shrink: 0; }
+    .ac-map-gcount { color: var(--c-on-surface-variant); font-size: 12px; }
+    .ac-map-asset { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-on-surface); padding: 3px 0 3px 22px; cursor: pointer; }
+    .ac-map-ico { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+    .ac-map-ip { color: var(--c-on-surface-variant); font-size: 12px; margin-left: 4px; }
+
+    /* ── 이식: 레이아웃 관리(layout-management) 전용 ── */
+    .lm-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 12px; cursor: pointer; font-size: 13px; font-weight: 700; border: none; text-decoration: none; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light); transition: all 0.15s ease; }
+    .lm-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .lm-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .lm-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .lm-btn .material-symbols-outlined { font-size: 18px; }
+    .lm-btn-primary { color: var(--c-primary); }
+    .lm-btn-danger:hover:not(:disabled) { color: var(--health-failed); }
+    .lm-iconbtn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 9px; cursor: pointer; border: none; font-size: 12px; font-weight: 700; text-decoration: none; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light); transition: all 0.15s ease; }
+    .lm-iconbtn:hover { color: var(--c-primary); }
+    .lm-iconbtn:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .lm-iconbtn .material-symbols-outlined { font-size: 16px; }
+    .lm-iconbtn-edit { color: var(--c-primary); }
+    .lm-iconbtn-danger:hover { color: var(--health-failed); }
+    .lm-table-wrap { border-radius: 16px; padding: 6px 12px; overflow-x: auto; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); background: var(--c-surface-container-low); }
+    .lm-table-wrap .nm-table td { white-space: nowrap; vertical-align: middle; }
+    .lm-table-wrap .nm-table th { white-space: nowrap; }
+    .lm-name { font-weight: 600; color: var(--c-on-surface); }
+    .lm-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+    .lm-thumb { height: 40px; border-radius: 4px; object-fit: cover; cursor: pointer; }
+    .lm-thumb-none { color: var(--c-outline); font-size: 22px; }
+    .lm-empty { padding: 24px; color: var(--c-on-surface-variant); font-size: 14px; text-align: center; }
+    .lm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 9000; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .lm-overlay.show { display: flex; }
+    .lm-modal { background: var(--c-surface); border-radius: 18px; padding: 24px; width: 100%; max-width: 460px; box-shadow: 8px 8px 18px var(--nm-dark), -8px -8px 18px var(--nm-light); }
+    .lm-modal-title { font-size: 18px; font-weight: 800; color: var(--c-on-surface); margin-bottom: 6px; }
+    .lm-modal-msg { font-size: 14px; color: var(--c-on-surface-variant); margin-bottom: 16px; white-space: pre-line; }
+    .lm-modal-input { width: 100%; background: var(--c-surface); color: var(--c-on-surface); border: none; outline: none; border-radius: 10px; padding: 10px 14px; font-size: 14px; font-family: inherit; margin-bottom: 18px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .lm-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .lm-reorder-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+    .lm-reorder-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--c-surface); color: var(--c-on-surface); font-weight: 600; font-size: 14px; box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light); }
+    .lm-reorder-item .lm-reorder-idx { font-family: 'JetBrains Mono', monospace; color: var(--c-on-surface-variant); font-size: 12px; min-width: 20px; }
+    .lm-reorder-item .lm-reorder-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .lm-reorder-move { display: inline-flex; gap: 4px; }
+    .lm-reorder-move button { width: 28px; height: 28px; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 2px 2px 4px var(--nm-dark), -2px -2px 4px var(--nm-light); }
+    .lm-reorder-move button:hover:not(:disabled) { color: var(--c-primary); }
+    .lm-reorder-move button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .lm-reorder-move button .material-symbols-outlined { font-size: 18px; }
+
+    /* ── 이식: DB 관리(admin-database) 전용 ── */
+    .db-stat { background: var(--c-surface); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; box-shadow: 6px 6px 12px var(--nm-dark), -6px -6px 12px var(--nm-light); }
+    .db-stat-icon { width: 52px; height: 52px; border-radius: 16px; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .db-stat-icon .material-symbols-outlined { font-size: 28px; }
+    .db-stat-value { font-size: 28px; font-weight: 800; color: var(--c-on-surface); line-height: 1.1; }
+    .db-stat-label { font-size: 13px; color: var(--c-on-surface-variant); font-weight: 600; }
+    .db-mini { border-radius: 14px; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .db-mini-value { font-size: 22px; font-weight: 800; line-height: 1.1; }
+    .db-mini-label { font-size: 12px; color: var(--c-on-surface-variant); font-weight: 600; }
+    .db-btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 12px; font-weight: 700; font-size: 14px; border: none; cursor: pointer; background: var(--c-surface); color: var(--c-primary); box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light); transition: all 0.15s ease; text-decoration: none; }
+    .db-btn:hover { transform: translateY(-1px); }
+    .db-btn:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); transform: none; }
+    .db-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .db-btn-primary { color: var(--c-on-primary); background: var(--c-primary); }
+    .db-btn .material-symbols-outlined { font-size: 18px; }
+    .db-hint { font-size: 13px; color: var(--c-on-surface-variant); margin: 0 0 16px; line-height: 1.5; }
+    .db-section-title { font-weight: 700; font-size: 1rem; color: var(--c-on-surface); display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+    .db-dropzone { border-radius: 18px; padding: 18px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .db-alert { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-radius: 14px; font-size: 13px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .db-alert-error { color: var(--health-failed); }
+    .db-alert-success { color: var(--health-backedup); }
+    .db-select { background: var(--c-surface); color: var(--c-on-surface); border: none; outline: none; padding: 9px 12px; border-radius: 10px; font-size: 13px; font-family: inherit; min-width: 200px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .db-divider { height: 1px; background: var(--c-outline-variant); opacity: 0.4; margin: 18px 0; }
+
+    /* 탭 그룹 구분: 기본 / 고급 */
+    .set-tab-sep { width: 1px; align-self: stretch; background: var(--c-outline-variant); opacity: 0.5; margin: 4px 6px; }
+    .set-tab-grouplabel { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; letter-spacing: 0.3px; color: var(--c-on-surface-variant); padding: 0 4px; user-select: none; align-self: center; }
+    .set-tab-grouplabel .material-symbols-outlined { font-size: 16px; }
   </style>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -100,16 +208,16 @@
       </div>
     </div>
 
-    <!-- 탭: 설정(라인/매뉴얼/일반) + 관리(/admin/* 페이지를 iframe 으로 임베드 — 테스트용) -->
+    <!-- 탭: 기본(라인/매뉴얼/일반) + 고급(관리 — 직접 이식, 최상위 컨텍스트라 쿠키 정상 전송) -->
     <div class="set-tabs" id="set-tabs">
       <button class="set-tab active" data-tab="lines"><span class="material-symbols-outlined">linear_scale</span>라인 관리</button>
       <button class="set-tab" data-tab="manuals"><span class="material-symbols-outlined">menu_book</span>매뉴얼</button>
       <button class="set-tab" data-tab="general"><span class="material-symbols-outlined">settings</span>일반</button>
+      <span class="set-tab-sep"></span>
+      <span class="set-tab-grouplabel"><span class="material-symbols-outlined">tune</span>고급</span>
       <button class="set-tab" data-tab="dexa"><span class="material-symbols-outlined">dns</span>DEXA 설정</button>
       <button class="set-tab" data-tab="layoutmgmt"><span class="material-symbols-outlined">space_dashboard</span>레이아웃 관리</button>
       <button class="set-tab" data-tab="database"><span class="material-symbols-outlined">database</span>DB 관리</button>
-      <button class="set-tab" data-tab="users"><span class="material-symbols-outlined">group</span>사용자 관리</button>
-      <button class="set-tab" data-tab="assettable"><span class="material-symbols-outlined">table_rows</span>자산 테이블</button>
     </div>
 
     <!-- ── 라인 관리 ── -->
@@ -207,43 +315,184 @@
       </div>
     </section>
 
-    <!-- ── 관리 페이지 임베드 탭 (기존 /admin/* 페이지를 iframe 으로 재사용 — 탭 최초 진입 시 지연 로드) ── -->
+    <!-- ── DEXA 설정 (admin-config 직접 이식) ── -->
     <section class="set-panel" data-panel="dexa">
-      <iframe class="set-embed" data-src="/admin/config" title="DEXA 설정"></iframe>
+      <div class="nm-card mb-element-gap">
+        <div class="panel-header">
+          <span class="panel-title">에이전트 목록</span>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <label class="ac-checkbox"><input type="checkbox" id="show-offline" />오프라인 에이전트도 보기</label>
+            <button class="ac-btn" id="agents-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+          </div>
+        </div>
+        <div id="agents-host"><div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div></div>
+      </div>
+      <div class="nm-card" style="margin-bottom:24px;">
+        <div class="panel-header">
+          <span class="panel-title">트리거 목록</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="ac-btn ac-btn-primary" id="trigger-add"><span class="material-symbols-outlined">add</span>트리거 추가</button>
+            <button class="ac-btn" id="triggers-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+          </div>
+        </div>
+        <div id="triggers-host"><div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div></div>
+      </div>
     </section>
+
+    <!-- ── 레이아웃 관리 (layout-management 직접 이식) ── -->
     <section class="set-panel" data-panel="layoutmgmt">
-      <iframe class="set-embed" data-src="/admin/layout" title="레이아웃 관리"></iframe>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;">
+        <button class="lm-btn lm-btn-primary" id="lm-create"><span class="material-symbols-outlined">add</span>새 레이아웃</button>
+        <button class="lm-btn" id="lm-reorder"><span class="material-symbols-outlined">swap_vert</span>순서 변경</button>
+      </div>
+      <div class="nm-card">
+        <div class="lm-table-wrap"><table class="nm-table" id="lm-table"></table></div>
+      </div>
     </section>
+
+    <!-- ── DB 관리 (admin-database 직접 이식) ── -->
     <section class="set-panel" data-panel="database">
-      <iframe class="set-embed" data-src="/admin/database" title="DB 관리"></iframe>
-    </section>
-    <section class="set-panel" data-panel="users">
-      <iframe class="set-embed" data-src="/admin/users" title="사용자 관리"></iframe>
-    </section>
-    <section class="set-panel" data-panel="assettable">
-      <iframe class="set-embed" data-src="/assets/table" title="자산 테이블 편집"></iframe>
+      <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(3,1fr);">
+        <div class="db-stat">
+          <div class="db-stat-icon kpi-icon-primary"><span class="material-symbols-outlined">storage</span></div>
+          <div class="db-stat-value" id="stat-version">–</div>
+          <div class="db-stat-label">스키마 버전</div>
+        </div>
+        <div class="db-stat">
+          <div class="db-stat-icon kpi-icon-info"><span class="material-symbols-outlined">extension</span></div>
+          <div class="db-stat-value" id="stat-aug">–</div>
+          <div class="db-stat-label">자산 확장정보</div>
+        </div>
+        <div class="db-stat">
+          <div class="db-stat-icon kpi-icon-success"><span class="material-symbols-outlined">cable</span></div>
+          <div class="db-stat-value" id="stat-conn">–</div>
+          <div class="db-stat-label">연결정보 (PLC/Servo)</div>
+        </div>
+      </div>
+      <div class="nm-card mb-element-gap">
+        <h3 class="db-section-title"><span class="material-symbols-outlined">file_upload</span>DEXA 데이터 가져오기</h3>
+        <p class="db-hint">DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 가져옵니다. 기존 라인·그룹 데이터는 전체 교체됩니다.</p>
+        <div class="db-dropzone">
+          <button class="db-btn" id="import-pick-btn" type="button"><span class="material-symbols-outlined">folder_open</span>파일 선택</button>
+          <span id="import-file-name" class="text-on-surface-variant" style="font-size:13px;">선택된 파일 없음</span>
+          <input id="import-file-input" type="file" accept=".sqlite3,.sqlite,.db" style="display:none;" />
+          <button class="db-btn db-btn-primary" id="import-run-btn" disabled><span class="material-symbols-outlined">download</span><span id="import-run-label">가져오기</span></button>
+        </div>
+        <div id="import-result-host"></div>
+      </div>
+      <div class="nm-card mb-element-gap" id="batch-card" style="display:none;">
+        <h3 class="db-section-title"><span class="material-symbols-outlined">map</span>배치 가져오기</h3>
+        <p class="db-hint">TWM1 라인을 TWM2 레이아웃(도면)에 매핑하면 자산 위치와 그룹이 자동 배치됩니다. 같은 도면 이미지를 사용해야 좌표가 정확히 맞습니다.</p>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <select class="db-select" id="bulk-layout"><option value="">-- 일괄 선택 / 건너뛰기 --</option></select>
+          <button class="db-btn" id="bulk-apply-btn" type="button"><span class="material-symbols-outlined">select_all</span>일괄 적용</button>
+        </div>
+        <div id="batch-table-host"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+          <button class="db-btn db-btn-primary" id="batch-run-btn" disabled><span class="material-symbols-outlined">play_arrow</span><span id="batch-run-label">배치 가져오기</span></button>
+          <button class="db-btn" id="batch-close-btn" type="button">닫기</button>
+        </div>
+        <div id="batch-result-host"></div>
+      </div>
+      <div class="nm-card" style="margin-bottom:24px;">
+        <div class="panel-header"><span class="panel-title">마이그레이션 이력</span></div>
+        <div id="migrations-host"></div>
+      </div>
     </section>
   </div>
+
+  <!-- ── 이식한 관리 모듈의 모달/오버레이 (position:fixed — DOM 위치 무관) ── -->
+  <!-- DEXA 설정: 트리거 추가 -->
+  <div class="ac-modal-backdrop" id="add-modal">
+    <div class="ac-modal">
+      <h3>트리거 추가</h3>
+      <div class="ac-field"><label for="add-name">이름</label>
+        <input type="text" class="ac-input" id="add-name" placeholder="예: 야간 정기 백업" /></div>
+      <div class="ac-field"><label for="add-cron">Cron 표현식</label>
+        <input type="text" class="ac-input" id="add-cron" placeholder="0 0 2 * * ?" />
+        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드). 예) 매일 02:00 → 0 0 2 * * ?</div></div>
+      <div class="ac-field"><label for="add-desc">설명 (선택)</label>
+        <input type="text" class="ac-input" id="add-desc" placeholder="설명" /></div>
+      <div class="ac-modal-actions">
+        <button class="ac-btn" data-close="add-modal">취소</button>
+        <button class="ac-btn ac-btn-primary" id="add-save"><span class="material-symbols-outlined">save</span>추가</button>
+      </div>
+    </div>
+  </div>
+  <!-- DEXA 설정: 스케줄(cron) 수정 -->
+  <div class="ac-modal-backdrop" id="cron-modal">
+    <div class="ac-modal">
+      <h3>스케줄 수정</h3>
+      <div class="ac-field"><label id="cron-trigger-label">트리거</label>
+        <input type="text" class="ac-input" id="cron-value" placeholder="0 0 2 * * ?" />
+        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드).</div></div>
+      <div class="ac-modal-actions">
+        <button class="ac-btn" data-close="cron-modal">취소</button>
+        <button class="ac-btn ac-btn-primary" id="cron-save"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+    </div>
+  </div>
+  <!-- DEXA 설정: 트리거 ↔ 자산 매핑 -->
+  <div class="ac-modal-backdrop" id="map-modal">
+    <div class="ac-modal" style="max-width:640px;">
+      <h3 id="map-title">자산 매핑</h3>
+      <div class="ac-map-toolbar">
+        <span class="chip chip-info" id="map-count">0개 선택</span>
+        <div style="flex:1 1 auto;"></div>
+        <button class="ac-btn" id="map-all"><span class="material-symbols-outlined">done_all</span>전체 선택</button>
+        <button class="ac-btn" id="map-none"><span class="material-symbols-outlined">remove_done</span>전체 해제</button>
+      </div>
+      <div class="ac-map-list" id="map-list"><div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div></div>
+      <div class="ac-modal-actions">
+        <button class="ac-btn" data-close="map-modal">취소</button>
+        <button class="ac-btn ac-btn-primary" id="map-save"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+    </div>
+  </div>
+  <!-- 레이아웃 관리: 입력 / 확인 / 순서변경 / JSON 가져오기 -->
+  <div class="lm-overlay" id="lm-input-overlay">
+    <div class="lm-modal">
+      <div class="lm-modal-title" id="lm-input-title">제목</div>
+      <div class="lm-modal-msg" id="lm-input-msg"></div>
+      <input type="text" class="lm-modal-input" id="lm-input-field" />
+      <div class="lm-modal-actions">
+        <button class="lm-btn" id="lm-input-cancel">취소</button>
+        <button class="lm-btn lm-btn-primary" id="lm-input-ok"><span class="material-symbols-outlined">check</span>확인</button>
+      </div>
+    </div>
+  </div>
+  <div class="lm-overlay" id="lm-confirm-overlay">
+    <div class="lm-modal">
+      <div class="lm-modal-title" id="lm-confirm-title">확인</div>
+      <div class="lm-modal-msg" id="lm-confirm-msg"></div>
+      <div class="lm-modal-actions">
+        <button class="lm-btn" id="lm-confirm-cancel">취소</button>
+        <button class="lm-btn lm-btn-danger" id="lm-confirm-ok"><span class="material-symbols-outlined">delete</span>삭제</button>
+      </div>
+    </div>
+  </div>
+  <div class="lm-overlay" id="lm-reorder-overlay">
+    <div class="lm-modal">
+      <div class="lm-modal-title">레이아웃 순서 변경</div>
+      <div class="lm-modal-msg">위/아래 버튼으로 순서를 조정한 뒤 저장하세요.</div>
+      <ul class="lm-reorder-list" id="lm-reorder-list"></ul>
+      <div class="lm-modal-actions">
+        <button class="lm-btn" id="lm-reorder-cancel">취소</button>
+        <button class="lm-btn lm-btn-primary" id="lm-reorder-ok"><span class="material-symbols-outlined">check</span>저장</button>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="lm-json-import" accept=".json,application/json" style="display:none;" />
 
   <script src="/app/shell.js"></script>
   <!-- 로고 업로드 시 PNG/JPG → SVG 변환 (Blazor SettingsGeneral 와 동일한 logoConverter) -->
   <script src="/js/imagetracer.min.js"></script>
   <script src="/js/logo-converter.js"></script>
   <script src="/app/settings.js"></script>
-  <!-- 관리 탭 iframe 지연 로드 (인라인 — settings.js 캐시와 무관하게 동작; HTML 은 즉시 반영됨) -->
-  <script>
-    (function () {
-      function loadActive() {
-        var panel = document.querySelector('.set-panel.active');
-        var f = panel && panel.querySelector('iframe[data-src]');
-        if (f && !f.getAttribute('src')) f.setAttribute('src', f.getAttribute('data-src'));
-      }
-      document.addEventListener('click', function (e) {
-        var tab = e.target.closest && e.target.closest('.set-tab');
-        if (tab) setTimeout(loadActive, 0); // switchTab 이 active 토글한 뒤 로드
-      });
-      document.addEventListener('DOMContentLoaded', loadActive);
-    })();
-  </script>
+  <!-- 이식한 관리 모듈 — 각자 DOMContentLoaded 에서 Shell.init(멱등) → bind → load.
+       최상위 settings 컨텍스트에서 /api/admin/* 호출 → 쿠키 정상 전송(iframe 401 문제 없음). -->
+  <script src="/app/admin-config.js"></script>
+  <script src="/app/layout-management.js"></script>
+  <script src="/app/admin-database.js"></script>
 </body>
 </html>

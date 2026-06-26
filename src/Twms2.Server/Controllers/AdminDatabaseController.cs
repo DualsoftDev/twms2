@@ -7,10 +7,11 @@ namespace Twms2.Server.Controllers;
 /// <summary>
 /// DB 관리(DatabaseManagement.razor) 정적 페이지용 API. 관리자 전용.
 /// - GET    /api/admin/database         : DB 통계 + 마이그레이션 이력 + 레이아웃 목록(배치 매핑용) 1회 조회.
-/// - POST   /api/admin/database/import   : DEXA.sqlite3 업로드 → aug/연결/라인/그룹 가져오기(전체 교체).
-///                                         결과 + 라인 프리뷰 + 임시파일 토큰 반환(2단계 배치용).
-/// - POST   /api/admin/database/positions: 1단계 토큰 + 라인↔레이아웃 매핑으로 자산/그룹 배치 가져오기.
-/// - POST   /api/admin/database/cancel   : 보류 중인 임시파일 정리(배치 단계 닫기).
+/// - POST   /api/admin/database/import   : DEXA.sqlite3 업로드 → 분석(미리보기)만. 커밋하지 않음.
+///                                         미리보기(신규/덮어쓰기 건수) + 라인 프리뷰 + 임시파일 토큰 반환.
+/// - POST   /api/admin/database/apply-aug: 토큰으로 aug/연결/라인/그룹 실제 이전(전체 교체 커밋).
+/// - POST   /api/admin/database/positions: 토큰 + 라인↔레이아웃 매핑으로 자산/그룹 배치 가져오기.
+/// - POST   /api/admin/database/cancel   : 보류 중인 임시파일 정리(닫기/취소).
 /// 기존 서비스(TwmDbService / LayoutDbService / DexaFileImportService)를 얇게 래핑 — 신규 비즈니스 로직 없음.
 /// 모든 가져오기는 기존 데이터를 전체 교체하는 파괴적 작업이므로 컨트롤러 전체를 Admin 으로 보호한다.
 /// </summary>
@@ -75,7 +76,7 @@ public class AdminDatabaseController : ControllerBase
         });
     }
 
-    // ──────────────── 1단계: DEXA 데이터 가져오기 ────────────────
+    // ──────────────── 1단계: DEXA 파일 업로드 → 분석(미리보기, 커밋 없음) ────────────────
 
     [HttpPost("import")]
     [RequestSizeLimit(MaxImportSize + 1024 * 1024)]
@@ -99,36 +100,27 @@ public class AdminDatabaseController : ControllerBase
             await using (var fs = System.IO.File.Create(tempPath))
                 await file.CopyToAsync(fs);
 
-            var result = await _import.ImportFromFileAsync(tempPath);
-
-            if (result.HasFatalError)
-            {
-                TryDelete(tempPath);
-                return Ok(new
-                {
-                    ok = false,
-                    fatalError = result.FatalError,
-                });
-            }
-
-            // 라인 프리뷰 로드 → 배치 매핑 UI 표시용. 토큰은 배치 가져오기까지 임시파일 유지.
+            // 커밋 없이 분석만 — 무엇이 업데이트될지 미리보기. 실제 반영은 apply-aug 에서.
+            var preview = await _import.PreviewImportAsync(tempPath);
             var previews = await _import.PreviewLinesFromFileAsync(tempPath);
             var layouts = await _layoutDb.GetAllLayoutsAsync();
-            var stats = await _twmDb.GetStatsAsync();
 
             return Ok(new
             {
                 ok = true,
                 token,
-                result = new
+                preview = new
                 {
-                    totalRead = result.TotalRead,
-                    augImported = result.AugImported,
-                    connImported = result.ConnImported,
-                    connSkipped = result.ConnSkipped,
-                    lineImported = result.LineImported,
-                    groupImported = result.GroupImported,
-                    errorCount = result.ErrorCount,
+                    totalRead    = preview.TotalRead,
+                    augInsert    = preview.AugInsert,
+                    augUpdate    = preview.AugUpdate,
+                    connInsert   = preview.ConnInsert,
+                    connUpdate   = preview.ConnUpdate,
+                    connSkipped  = preview.ConnSkipped,
+                    lineCurrent  = preview.LineCurrent,
+                    lineFile     = preview.LineFile,
+                    groupCurrent = preview.GroupCurrent,
+                    groupFile    = preview.GroupFile,
                 },
                 linePreviews = previews
                     .Select(p => new { id = p.Id, name = p.Name, selfW = p.SelfW, selfH = p.SelfH })
@@ -136,25 +128,67 @@ public class AdminDatabaseController : ControllerBase
                 layouts = layouts
                     .Select(l => new { id = l.Id, name = l.Name })
                     .ToList(),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DEXA 분석 실패");
+            TryDelete(tempPath);
+            return Ok(new { ok = false, fatalError = ex.Message });
+        }
+    }
+
+    // ──────────────── 2단계: aug/연결/라인/그룹 이전하기(실제 커밋) ────────────────
+
+    public record ApplyAugDto(string? Token);
+
+    [HttpPost("apply-aug")]
+    public async Task<IActionResult> ApplyAug([FromBody] ApplyAugDto dto)
+    {
+        var tempPath = ResolveTokenPath(dto?.Token);
+        if (tempPath == null || !System.IO.File.Exists(tempPath))
+            return BadRequest(new { error = "임시 파일을 찾을 수 없습니다. 먼저 데이터를 가져오세요." });
+
+        try
+        {
+            var result = await _import.ImportFromFileAsync(tempPath);
+
+            if (result.HasFatalError)
+                return Ok(new { ok = false, fatalError = result.FatalError });
+
+            var stats = await _twmDb.GetStatsAsync();
+            return Ok(new
+            {
+                ok = true,
+                result = new
+                {
+                    totalRead     = result.TotalRead,
+                    augImported   = result.AugImported,
+                    connImported  = result.ConnImported,
+                    connSkipped   = result.ConnSkipped,
+                    lineImported  = result.LineImported,
+                    groupImported = result.GroupImported,
+                    errorCount    = result.ErrorCount,
+                },
                 stats = new
                 {
-                    schemaVersion = stats.SchemaVersion,
-                    assetAugCount = stats.AssetAugCount,
-                    assetConnCount = stats.AssetConnCount,
-                    layoutLineCount = stats.LayoutLineCount,
+                    schemaVersion    = stats.SchemaVersion,
+                    assetAugCount    = stats.AssetAugCount,
+                    assetConnCount   = stats.AssetConnCount,
+                    layoutLineCount  = stats.LayoutLineCount,
                     layoutGroupCount = stats.LayoutGroupCount,
                 },
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "DEXA 가져오기 실패");
-            TryDelete(tempPath);
+            _logger.LogError(ex, "DEXA aug 이전 실패");
             return Ok(new { ok = false, fatalError = ex.Message });
         }
+        // 임시파일은 배치 단계까지 유지 — 여기서 삭제하지 않는다 (닫기/취소 시 정리).
     }
 
-    // ──────────────── 2단계: 배치(라인→레이아웃 매핑) 가져오기 ────────────────
+    // ──────────────── 3단계: 배치(라인→레이아웃 매핑) 가져오기 ────────────────
 
     public record PositionImportDto(string? Token, List<LineMapDto>? Mappings);
     public record LineMapDto(int LineId, int LayoutId);
@@ -196,11 +230,7 @@ public class AdminDatabaseController : ControllerBase
             _logger.LogError(ex, "DEXA 배치 가져오기 실패");
             return Ok(new { ok = false, fatalError = ex.Message });
         }
-        finally
-        {
-            // 배치 단계 완료 → 임시파일 정리
-            TryDelete(tempPath);
-        }
+        // 임시파일은 닫기/취소(cancel) 시 정리 — aug 이전·배치를 임의 순서로 반복할 수 있도록 유지한다.
     }
 
     // ──────────────── 배치 단계 취소(임시파일 정리) ────────────────

@@ -144,6 +144,68 @@ public class DexaFileImportService(TwmDbService twmDb, LayoutDbService layoutDb,
         result.ConnImported++;
     }
 
+    // ──────────────── 분석(미리보기) — 커밋 없음 ────────────────
+
+    /// <summary>
+    /// 실제 커밋 없이 DEXA.sqlite3 파일을 분석해 "무엇이 업데이트될지" 미리보기를 반환.
+    /// aug/연결정보는 기존 DexaId와 대조해 신규/덮어쓰기를 구분하고, 라인/그룹은 전체 교체 건수를 보고한다.
+    /// </summary>
+    public async Task<DexaImportPreview> PreviewImportAsync(string sqliteFilePath)
+    {
+        var preview = new DexaImportPreview();
+        var connStr = $"Data Source={sqliteFilePath};Mode=ReadOnly;";
+
+        List<DexaAssetRow> assetRows;
+        using (var conn = new SqliteConnection(connStr))
+        {
+            await conn.OpenAsync();
+
+            assetRows = (await conn.QueryAsync<DexaAssetRow>("""
+                SELECT id, assetTypeId,
+                       augStationNumber, augVendor, augSpec, augLineId,
+                       augIp, augIpVia, augBaseNumber, augSlotNumber, augIsRobotPLC
+                FROM asset
+                WHERE deleted = 0
+                  AND assetTypeId BETWEEN 3 AND 99
+                """)).ToList();
+
+            preview.LineFile  = (await SafeQueryAsync<DexaLineRow>(conn,  "SELECT id, name FROM layoutLine")).Count;
+            preview.GroupFile = (await SafeQueryAsync<DexaGroupRow>(conn, "SELECT id, assetId, floor, assets FROM layoutGroup")).Count;
+        }
+        SqliteConnection.ClearAllPools();
+
+        preview.TotalRead = assetRows.Count;
+
+        // 기존 DexaId 집합과 대조 → 신규/덮어쓰기 구분 (ImportAssetRowAsync 와 동일 판정)
+        var existingAssetIds = await twmDb.GetExistingAssetDexaIdsAsync();
+        var existingConnIds  = await twmDb.GetExistingConnDexaIdsAsync();
+
+        foreach (var row in assetRows)
+        {
+            bool hasAug = row.AugStationNumber.HasValue || row.AugVendor != null
+                          || row.AugSpec != null || row.AugLineId.HasValue;
+            if (hasAug)
+            {
+                if (existingAssetIds.Contains(row.Id)) preview.AugUpdate++;
+                else                                   preview.AugInsert++;
+            }
+
+            bool isPlcOrServo = row.AssetTypeId == AssetTypeXgtPlc || row.AssetTypeId == AssetTypeServo;
+            if (isPlcOrServo)
+            {
+                if (string.IsNullOrWhiteSpace(row.AugIp))  preview.ConnSkipped++;
+                else if (existingConnIds.Contains(row.Id)) preview.ConnUpdate++;
+                else                                       preview.ConnInsert++;
+            }
+        }
+
+        var stats = await twmDb.GetStatsAsync();
+        preview.LineCurrent  = stats.LayoutLineCount;
+        preview.GroupCurrent = stats.LayoutGroupCount;
+
+        return preview;
+    }
+
     // ──────────────── 좌표 임포트 ────────────────
 
     /// <summary>
@@ -525,6 +587,21 @@ public class DexaLinePreview
     public string Name  { get; set; } = "";
     public double SelfW { get; set; }
     public double SelfH { get; set; }
+}
+
+/// <summary>커밋 전 "무엇이 업데이트될지" 미리보기 결과.</summary>
+public class DexaImportPreview
+{
+    public int TotalRead    { get; set; }
+    public int AugInsert    { get; set; }  // 확장정보 신규
+    public int AugUpdate    { get; set; }  // 확장정보 덮어쓰기
+    public int ConnInsert   { get; set; }  // 연결정보 신규
+    public int ConnUpdate   { get; set; }  // 연결정보 덮어쓰기
+    public int ConnSkipped  { get; set; }  // IP 없어 건너뜀
+    public int LineCurrent  { get; set; }  // 현재 라인 수
+    public int LineFile     { get; set; }  // 파일 라인 수 (전체 교체)
+    public int GroupCurrent { get; set; }  // 현재 그룹 수
+    public int GroupFile    { get; set; }  // 파일 그룹 수 (전체 교체)
 }
 
 public class DexaPositionImportResult

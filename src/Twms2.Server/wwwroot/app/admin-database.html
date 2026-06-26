@@ -109,8 +109,8 @@
     <div class="nm-card mb-element-gap">
       <h3 class="db-section-title"><span class="material-symbols-outlined">file_upload</span>DEXA 데이터 가져오기</h3>
       <p class="db-hint">
-        DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 가져옵니다.
-        기존 라인·그룹 데이터는 전체 교체됩니다.
+        DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 분석합니다.
+        가져오기를 눌러도 바로 저장되지 않으며, 아래 <b>'aug 데이터 이전하기'</b>에서 <b>적용</b>을 눌러야 DB에 반영됩니다.
       </p>
 
       <div class="db-dropzone">
@@ -124,8 +124,30 @@
         </button>
       </div>
 
-      <!-- 가져오기 결과 -->
+      <!-- 가져오기(분석) 오류 -->
       <div id="import-result-host"></div>
+    </div>
+
+    <!-- aug 데이터 이전하기 (실제 커밋) — 분석 후에만 표시 -->
+    <div class="nm-card mb-element-gap" id="aug-card" style="display:none;">
+      <h3 class="db-section-title"><span class="material-symbols-outlined">sync_alt</span>aug 데이터 이전하기</h3>
+      <p class="db-hint">
+        아래 내용이 TWM2 DB에 반영됩니다. <b>적용</b>을 눌러야 실제로 저장됩니다.
+        기존 자산의 확장·연결정보는 덮어쓰며, 라인·그룹은 전체 교체됩니다.
+      </p>
+
+      <!-- 무엇이 업데이트되는지 미리보기 -->
+      <div id="aug-preview-host"></div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+        <button class="db-btn db-btn-primary" id="aug-apply-btn" disabled>
+          <span class="material-symbols-outlined">check</span><span id="aug-apply-label">적용</span>
+        </button>
+        <button class="db-btn" id="aug-close-btn" type="button">닫기</button>
+      </div>
+
+      <!-- 적용 결과 -->
+      <div id="aug-result-host"></div>
     </div>
 
     <!-- 배치 가져오기 (라인→레이아웃 매핑) — import 후에만 표시 -->
@@ -151,7 +173,6 @@
         <button class="db-btn db-btn-primary" id="batch-run-btn" disabled>
           <span class="material-symbols-outlined">play_arrow</span><span id="batch-run-label">배치 가져오기</span>
         </button>
-        <button class="db-btn" id="batch-close-btn" type="button">닫기</button>
       </div>
 
       <div id="batch-result-host"></div>
