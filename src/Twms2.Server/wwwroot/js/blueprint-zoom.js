@@ -171,6 +171,16 @@ window.blueprintZoom = (() => {
         return { x: inst.vb.x, y: inst.vb.y, w: inst.vb.w, h: inst.vb.h };
     }
 
+    // 외부에서 viewBox(줌/팬 상태)를 복원 — 폴링 재렌더 후 줌 유지용.
+    function setViewBox(containerId, vb) {
+        const inst = getInstance(containerId);
+        if (!inst || !vb || !(vb.w > 0)) return;
+        inst.vb = { x: vb.x, y: vb.y, w: vb.w, h: vb.h };
+        inst.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ORIG_W / vb.w));
+        applyViewBox(inst);
+        inst.svg.style.cursor = inst.zoom > 1.01 ? 'grab' : '';
+    }
+
     function dispose(containerId) {
         const inst = instances[containerId];
         if (!inst) return;
@@ -183,5 +193,5 @@ window.blueprintZoom = (() => {
         delete instances[containerId];
     }
 
-    return { init, zoomIn, zoomOut, reset, toggleFullscreen, getViewBox, dispose };
+    return { init, zoomIn, zoomOut, reset, toggleFullscreen, getViewBox, setViewBox, dispose };
 })();

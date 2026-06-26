@@ -16,6 +16,8 @@
       viewmode: 'lv-viewmode',
       tabs: 'lv-layout-tabs',
       count: 'lv-count',
+      zoom: true,       // 줌/팬 + 줌·전체화면 컨트롤 (blueprint-zoom.js)
+      popover: true,    // 자산/라인 클릭 시 상세 팝오버
       poll: 30000,
     });
   });

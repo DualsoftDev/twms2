@@ -11,6 +11,45 @@
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
   <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* ── 도면 뷰 줌/전체화면 컨트롤 + 클릭 팝오버 (layout-render.js 가 뷰포트에 주입) ── */
+    .lv-controls { position: absolute; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 6px; z-index: 20; }
+    .lv-ctrl-btn {
+      width: 36px; height: 36px; border-radius: 10px; border: none; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light); transition: all 0.15s ease;
+    }
+    .lv-ctrl-btn:hover { color: var(--c-primary); }
+    .lv-ctrl-btn:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .lv-ctrl-btn .material-symbols-outlined { font-size: 20px; }
+
+    .lv-pop {
+      position: absolute; z-index: 30; min-width: 200px; max-width: 300px; max-height: 60%; overflow-y: auto;
+      background: var(--c-surface); border-radius: 14px; padding: 12px 14px; font-size: 13px;
+      box-shadow: 6px 6px 14px var(--nm-dark), -6px -6px 14px var(--nm-light);
+    }
+    .lv-pop-close {
+      position: absolute; top: 6px; right: 8px; border: none; background: transparent;
+      color: var(--c-on-surface-variant); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px;
+    }
+    .lv-pop-close:hover { color: var(--c-primary); }
+    .lv-pop-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--c-primary); text-decoration: none; }
+    .lv-pop-link .material-symbols-outlined { font-size: 16px; }
+    .lv-pop-count { margin-left: 8px; font-size: 12px; color: var(--c-on-surface-variant); }
+    .lv-pop-list { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+    .lv-pop-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; text-decoration: none; color: var(--c-on-surface); }
+    .lv-pop-row:hover { background: var(--c-surface-container-low); }
+    .lv-pop-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .lv-pop-row-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lv-pop-row-ip { color: var(--c-on-surface-variant); font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+    .lv-pop-empty { color: var(--c-on-surface-variant); padding: 6px; }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
 </head>
 <body class="font-body-md">
   <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
@@ -50,6 +89,7 @@
   </div>
 
   <script src="/app/shell.js"></script>
+  <script src="/js/blueprint-zoom.js"></script>
   <script src="/app/layout-render.js"></script>
   <script src="/app/layout-view.js"></script>
 </body>

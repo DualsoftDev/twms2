@@ -8,6 +8,8 @@
 
 :root {
   color-scheme: light;
+  /* 사이드바(네비) 너비 — 사이드바/헤더/본문이 공유. 한 줄로 전체 조절. */
+  --sidebar-w: 18rem;
   /* MD3 색상 토큰 — 라이트 (white_sample) */
   --c-background: #f6f9ff;
   --c-surface: #f6f9ff;
@@ -134,20 +136,43 @@ body {
 
 /* ── 셸: 사이드바 / 헤더 ─────────────────────────────────────────────── */
 .dsp-sidebar {
-  position: fixed; left: 0; top: 0; height: 100vh; width: 16rem;
+  position: fixed; left: 0; top: 0; height: 100vh; width: var(--sidebar-w);
   background: var(--c-surface); z-index: 50;
   display: flex; flex-direction: column; padding: 20px 16px; gap: 12px;
   box-shadow: 6px 6px 12px var(--nm-dark), -6px -6px 12px var(--nm-light);
 }
 .dsp-header {
-  position: fixed; top: 0; right: 0; width: calc(100% - 16rem); height: 64px; z-index: 40;
+  position: fixed; top: 0; right: 0; width: calc(100% - var(--sidebar-w)); height: 64px; z-index: 40;
   background: var(--c-surface); display: flex; justify-content: space-between; align-items: center;
   padding: 0 24px;
   box-shadow: 4px 4px 10px var(--nm-dark), -4px -4px 10px var(--nm-light);
 }
-.dsp-main { margin-left: 16rem; padding-top: 64px; min-height: 100vh; }
+.dsp-main { margin-left: var(--sidebar-w); padding-top: 64px; min-height: 100vh; }
 /* 초광폭 화면에서 콘텐츠가 끝까지 늘어지지 않도록 최대 폭 제한 + 중앙 정렬 */
 .dsp-content { padding: 24px; max-width: 1600px; margin: 0 auto; }
+
+/* ── 사이드바 브랜드 로고 ──
+ * 좌: 배경 제거한 TWMS 심볼 마크 / 우: 제목(TWMS) + 부제. 좌측 정렬.
+ * 다크 테마에선 shell.js 가 밝은 마크(twms-mark-dark.png)로 자동 교체. */
+.dsp-logo-area {
+  display: flex; align-items: center; gap: 12px;
+  text-decoration: none; padding: 4px 6px 12px; margin-bottom: 2px;
+}
+.dsp-logo-img {
+  max-height: 46px; max-width: 132px; width: auto; height: auto;
+  flex: none; object-fit: contain; display: block;
+  transition: transform 0.2s ease;
+}
+.dsp-logo-area:hover .dsp-logo-img { transform: scale(1.04); }
+.dsp-logo-text { display: flex; flex-direction: column; min-width: 0; line-height: 1; }
+.dsp-logo-title {
+  font-weight: 800; font-size: 22px; color: var(--c-primary);
+  letter-spacing: 0.5px; line-height: 1.05;
+}
+.dsp-logo-sub {
+  margin-top: 3px; font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--c-on-surface-variant); opacity: 0.85; line-height: 1.25;
+}
 
 /* ── 네비 사이드바 접기/펼치기 ──
  * body.nav-collapsed 시 사이드바를 왼쪽으로 밀어 숨기고 본문/헤더를 전체 폭으로 확장.
@@ -174,12 +199,31 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .dsp-tree-row { display: flex; align-items: center; gap: 4px; padding: 5px 6px; border-radius: 8px; cursor: pointer; color: var(--c-on-surface-variant); font-size: 13px; text-decoration: none; }
 .dsp-tree-row:hover { background: var(--c-surface-container-high); }
 .dsp-tree-row.line { font-weight: 700; color: var(--c-on-surface); }
+/* 현재 보고 있는 자산 강조 — 좌측 프라이머리 바 + 틴트 */
+.dsp-tree-row.is-active { background: var(--c-surface-container-high); color: var(--c-primary); font-weight: 600; box-shadow: inset 3px 0 0 var(--c-primary); }
+/* 오프라인(ping 불가) — 행 흐리게 + 아이콘 탈색 */
+.dsp-tree-row.is-offline { opacity: 0.5; }
+.dsp-tree-row.is-offline .dsp-tree-ico { filter: grayscale(1); }
 .dsp-tree-toggle { width: 18px; text-align: center; color: var(--c-outline); flex-shrink: 0; font-size: 18px; }
 .dsp-tree-children { margin-left: 14px; border-left: 1px solid var(--c-outline-variant); padding-left: 6px; }
 .dsp-tree-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .dsp-tree-ico { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
-.dsp-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.dsp-tree-aggdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin: 0 2px; }
+/* 상태 LED 점 — 색상은 인라인(color/background)으로 주입. 표면 링 + 은은한 글로우. */
+.dsp-status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--c-surface), 0 0 5px 0 currentColor; }
+.dsp-tree-aggdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin: 0 2px;
+  box-shadow: 0 0 0 2px var(--c-surface), 0 0 5px 0 currentColor; }
+/* 오프라인 점 — 채움 없이 속 빈 링(신호 없음) */
+.dsp-status-dot.is-offline { background: transparent !important; box-shadow: none; border: 2px solid currentColor; }
+/* 실패/작업중 점 — 시선을 끌도록 글로우 펄스 */
+.dsp-status-dot.pulse, .dsp-tree-aggdot.pulse { animation: nm-pulse-glow 1.6s infinite ease-in-out; }
+/* 라인 단위 문제 배지 — 접힌 상태에서도 실패/작업중/오프라인 수를 노출 */
+.dsp-tree-badge { flex-shrink: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; line-height: 1; color: #fff; }
+.dsp-tree-badge.fail { background: var(--health-failed); }
+.dsp-tree-badge.prog { background: var(--health-inprogress); }
+.dsp-tree-badge.off  { background: var(--c-outline); }
 
 /* 사이드바 미니 KPI */
 .dsp-mini-kpi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px 6px 4px; }
@@ -361,8 +405,17 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .lv-asset-icon { transition: opacity 0.15s ease; }
 .lv-asset-icon:hover { opacity: 1 !important; }
 
-/* 자산 아이콘 hover 정보 툴팁 (마우스 추적) */
-.lv-tip { position: absolute; z-index: 20; pointer-events: none; max-width: 280px; padding: 8px 11px; font-size: 12px; line-height: 1.55; white-space: pre-line; color: var(--c-on-surface); background: var(--c-surface); border-radius: 10px; box-shadow: 4px 4px 10px var(--nm-dark), -4px -4px 10px var(--nm-light); }
+/* 자산 아이콘 hover 정보 툴팁 (마우스 추적) — 어두운 도면 위에서도 또렷하게:
+   입체 그림자 + 외곽선 + 머리글(상태색 점)/키·값 표 구조 */
+.lv-tip { position: absolute; z-index: 20; pointer-events: none; min-width: 172px; max-width: 320px; padding: 0; font-size: 12px; line-height: 1.5; color: var(--c-on-surface); background: var(--c-surface-container-highest); border: 1px solid var(--c-outline-variant); border-radius: 12px; overflow: hidden; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4); }
+.lv-tip-head { display: flex; align-items: center; gap: 7px; padding: 8px 13px; font-size: 13.5px; font-weight: 700; letter-spacing: 0.2px; border-bottom: 1px solid var(--c-outline-variant); }
+.lv-tip-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22); }
+.lv-tip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-tip-body { padding: 8px 13px 9px; display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; }
+.lv-tip-row { display: contents; }
+.lv-tip-k { color: var(--c-on-surface-variant); white-space: nowrap; }
+.lv-tip-v { font-weight: 600; text-align: right; word-break: break-all; }
+.lv-tip-hint { grid-column: 1 / -1; margin-top: 5px; padding-top: 6px; border-top: 1px dashed var(--c-outline-variant); color: var(--c-on-surface-variant); font-size: 11px; }
 
 .lv-empty { padding: 32px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }
 .lv-loading { padding: 32px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }

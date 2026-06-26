@@ -4,6 +4,7 @@ using Twms2.Server.Components;
 using Twms2.Server.Data;
 using Twms2.Server.Services;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.FileProviders;
 using MudBlazor.Services;
@@ -74,6 +75,12 @@ builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, AuthStateProvider>();
 builder.Services.AddScoped<AuthStateProvider>();
+
+// 인증 쿠키(twms_auth) 서명/암호화 키를 디스크에 영속 + 앱 이름 고정.
+// 미설정 시(특히 Windows 서비스 실행) 재시작마다 키링이 재생성 → 기존 쿠키 무효화 → 로그인 풀림/401.
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(TwmsDataPath.Base, "dp-keys")))
+    .SetApplicationName("Twms2");
 
 // DEXA Client (CommProxy in-process — DexaBridge 프로세스 불필요)
 builder.Services.Configure<DexaClientOptions>(builder.Configuration.GetSection("DexaServer"));
@@ -418,6 +425,7 @@ var staticRoutes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCa
 {
     ["/"] = "dashboard.html",
     ["/overview"] = "dashboard.html",
+    ["/statistics"] = "statistics.html",
     ["/login"] = "login.html",
     ["/history"] = "history.html",
     ["/admin"] = "admin.html",

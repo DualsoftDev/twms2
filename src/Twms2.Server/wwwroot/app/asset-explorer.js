@@ -21,7 +21,22 @@
   const S = {
     assets: [], typeNames: [], lineNames: [],
     search: '', filterType: '', filterLine: '', filterHealth: '',
+    filterIds: null,   // 도면 묶음 클릭 진입 시(?ids=) 그 멤버만 표시. null = 미적용
   };
+
+  /* ── URL 쿼리 복원 (도면 묶음 클릭이 /assets?ids=1,2,3 등으로 진입) ── */
+  function applyQuery() {
+    const q = new URLSearchParams(location.search);
+    const ids = q.get('ids');
+    if (ids) {
+      const set = new Set(ids.split(',').map(s => parseInt(s, 10)).filter(n => !Number.isNaN(n)));
+      if (set.size) S.filterIds = set;
+    }
+    if (q.get('type')) S.filterType = q.get('type');
+    if (q.get('line')) S.filterLine = q.get('line');
+    if (q.get('health')) S.filterHealth = q.get('health');
+    if (q.get('q')) S.search = q.get('q');
+  }
 
   function fmtShort(s) {
     if (!s) return '';
@@ -75,6 +90,7 @@
   function filtered() {
     const term = (S.search || '').trim().toLowerCase();
     return S.assets.filter(a => {
+      if (S.filterIds && !S.filterIds.has(a.assetId)) return false;
       if (term) {
         const hay = [a.name, a.ip].filter(v => v != null).map(v => String(v).toLowerCase());
         if (!hay.some(v => v.includes(term))) return false;
@@ -86,7 +102,25 @@
     });
   }
 
+  // 묶음(?ids) 진입 시 "선택한 자산만 표시" 안내 + 전체 보기 해제 버튼.
+  function renderNotice() {
+    const el = $('ax-notice');
+    if (!el) return;
+    if (!S.filterIds) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = 'flex';
+    el.innerHTML = `<span class="material-symbols-outlined">filter_alt</span>`
+      + `<span>도면 묶음에서 선택한 자산 ${S.filterIds.size}개만 표시 중</span>`
+      + `<button type="button" class="ax-notice-clear" id="ax-notice-clear">전체 보기</button>`;
+    $('ax-notice-clear').addEventListener('click', () => {
+      S.filterIds = null;
+      try { history.replaceState(null, '', '/assets'); } catch (e) { /* 무시 */ }
+      renderNotice();
+      render();
+    });
+  }
+
   function render() {
+    renderNotice();
     const rows = filtered();
     $('ax-count').textContent = `${rows.length} 건`;
     if (rows.length === 0) {
@@ -135,7 +169,10 @@
 
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: '' });
+    applyQuery();
     bind();
+    if (S.search) $('ax-search').value = S.search;
+    if (S.filterHealth) $('ax-health').value = S.filterHealth;
     await load();
     setInterval(load, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });

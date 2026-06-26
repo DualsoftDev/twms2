@@ -20,12 +20,14 @@ public class NavController : ControllerBase
     private readonly AssetStatusService _status;
     private readonly DexaReadService _dexa;
     private readonly DexaDbConnection _dexaDb;
+    private readonly AppSettingsEditor _settings;
 
-    public NavController(AssetStatusService status, DexaReadService dexa, DexaDbConnection dexaDb)
+    public NavController(AssetStatusService status, DexaReadService dexa, DexaDbConnection dexaDb, AppSettingsEditor settings)
     {
         _status = status;
         _dexa = dexa;
         _dexaDb = dexaDb;
+        _settings = settings;
     }
 
     [HttpGet]
@@ -46,9 +48,14 @@ public class NavController : ControllerBase
         var failed = total - backupSuccess - noBackup;
         var unchanged = backupSuccess - changed;
 
+        var brand = _settings.GetBrand();
+
         return Ok(new
         {
             logoUrl = ScanLogoUrl(),
+            // 사이드바 브랜드 — 로고 마크 우측 제목/부제(일반설정에서 변경, 저장 즉시 반영).
+            navTitle = brand.Title,
+            navSubtitle = brand.Subtitle,
             isAdmin,
             dexaOnline,
             kpi = new { total, backedUp = changed, unchanged, failed },
@@ -147,6 +154,11 @@ public class NavController : ControllerBase
                 lineName = lineGrp.Key,
                 expanded = false,
                 aggColor = LayoutHelpers.AggregateHealthColor(lineAssets),
+                // 라인 단위 문제 집계 — 접힌 상태에서도 사이드바에 배지로 노출
+                total = lineAssets.Count,
+                failed = lineAssets.Count(a => a.Health == AssetHealthStatus.Failed),
+                inProgress = lineAssets.Count(a => a.Health == AssetHealthStatus.InProgress),
+                offline = lineAssets.Count(a => a.LatestPing is { Reachable: false }),
                 plcNodes,
                 standalone,
             });
@@ -161,6 +173,9 @@ public class NavController : ControllerBase
         displayName = a.Name,
         icon = LayoutHelpers.GetAssetIcon(a.AssetTypeName, a.AugIsRobotPLC),
         statusColor = LayoutHelpers.GetHealthColor(a.Health),
+        // 상태 키(css/펄스 분기용) + 한글 라벨(툴팁용)
+        health = a.Health.ToString().ToLowerInvariant(),  // backedup/unchanged/failed/inprogress/unknown
+        healthLabel = LayoutHelpers.GetHealthLabel(a.Health),
         offline = a.LatestPing is { Reachable: false },
     };
 

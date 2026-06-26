@@ -16,6 +16,10 @@
     showOffline: false,
     runningTriggerIds: new Set(),
     cronEditId: null,
+    // 자산 매핑 모달 상태
+    mapTriggerId: null,
+    mapGroups: [],
+    mapSelected: new Set(),
   };
 
   /* ── 데이터 로드 ── */
@@ -54,17 +58,25 @@
       const statusChip = a.online
         ? `<span class="chip chip-success">온라인</span>`
         : `<span class="chip chip-default">오프라인</span>`;
+      // 재시작: 온라인 에이전트만 (피어 매칭은 서버에서 수행, 없으면 에러 토스트)
+      const restartCell = a.online
+        ? `<button class="ac-iconbtn ac-iconbtn-info" data-act="restart" data-id="${a.id}" title="에이전트 재시작"><span class="material-symbols-outlined">restart_alt</span></button>`
+        : `<span style="color:var(--c-outline);font-size:12px;">오프라인</span>`;
       return `<tr>
         <td>${esc(a.name || '-')}</td>
         <td>${esc(a.ip || '-')}</td>
         <td>${esc(a.swVersion || '-')}</td>
         <td>${statusChip}</td>
         <td>${fmtDateTime(a.connected)}</td>
+        <td>${restartCell}</td>
       </tr>`;
     }).join('');
     host.innerHTML = `<div class="ac-table-wrap"><table class="nm-table">
-      <thead><tr><th>이름</th><th>IP</th><th>버전</th><th>상태</th><th>접속 시간</th></tr></thead>
+      <thead><tr><th>이름</th><th>IP</th><th>버전</th><th>상태</th><th>접속 시간</th><th>작업</th></tr></thead>
       <tbody>${body}</tbody></table></div>`;
+
+    host.querySelectorAll('[data-act="restart"]').forEach(b =>
+      b.addEventListener('click', () => restartAgent(parseInt(b.getAttribute('data-id'), 10))));
   }
 
   /* ════════════════ 트리거 목록 ════════════════ */
@@ -111,6 +123,7 @@
         <td class="wrap" title="${esc(t.description || '')}">${esc(t.description || '-')}</td>
         <td>${mapChip}</td>
         <td><div class="ac-actions">
+          <button class="ac-iconbtn ac-iconbtn-info" data-act="map" data-id="${t.id}" title="자산 매핑"><span class="material-symbols-outlined">account_tree</span></button>
           ${runBtn}
           <button class="ac-iconbtn ac-iconbtn-danger" data-act="del" data-id="${t.id}" title="삭제"><span class="material-symbols-outlined">delete</span></button>
         </div></td>
@@ -127,6 +140,7 @@
         if (act === 'run') executeTrigger(id);
         else if (act === 'del') deleteTrigger(id);
         else if (act === 'cron') openCronModal(id);
+        else if (act === 'map') openMapModal(id);
       });
     });
   }
@@ -210,6 +224,103 @@
     try { const d = await r.json(); return d && d.error; } catch (e) { return null; }
   }
 
+  /* ════════════════ 에이전트 재시작 (ServerConfig.RestartAgent 이식) ════════════════ */
+  async function restartAgent(id) {
+    const a = S.agents.find(x => x.id === id);
+    if (!a) return;
+    if (!confirm(`에이전트 '${a.name}' (${a.ip || '-'})을(를) 재시작하시겠습니까?`)) return;
+    try {
+      const r = await fetch(`/api/admin/config/agents/${id}/restart`, { method: 'POST' });
+      if (r.ok) { toast(`에이전트 '${a.name}' 재시작 요청됨`); setTimeout(load, 2000); }
+      else toast((await safeErr(r)) || '재시작 요청 실패');
+    } catch (e) { toast('재시작 요청 실패: ' + e.message); }
+  }
+
+  /* ════════════════ 트리거 ↔ 자산 매핑 (ScheduleAssetEditor 이식) ════════════════ */
+  async function openMapModal(id) {
+    const t = S.triggers.find(x => x.id === id);
+    if (!t) return;
+    S.mapTriggerId = id;
+    S.mapGroups = [];
+    S.mapSelected = new Set();
+    $('map-title').textContent = `자산 매핑 — ${t.name}`;
+    $('map-list').innerHTML = `<div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>`;
+    $('map-count').textContent = '0개 선택';
+    openModal('map-modal');
+    try {
+      const res = await fetch(`/api/admin/config/triggers/${id}/assets`, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) { toast((await safeErr(res)) || '자산 목록 조회 실패'); closeModal('map-modal'); return; }
+      const d = await res.json();
+      S.mapGroups = d.groups || [];
+      S.mapSelected = new Set(d.selectedIds || []);
+      renderMap();
+    } catch (e) { toast('자산 목록 조회 실패: ' + e.message); closeModal('map-modal'); }
+  }
+
+  function renderMap() {
+    const host = $('map-list');
+    const sc = host.scrollTop; // 토글 시 스크롤 위치 보존
+    $('map-count').textContent = `${S.mapSelected.size}개 선택`;
+    if (!S.mapGroups.length) {
+      host.innerHTML = `<div class="ac-empty">선택 가능한 자산이 없습니다.</div>`;
+      return;
+    }
+    host.innerHTML = S.mapGroups.map(g => {
+      const sel = g.assets.filter(a => S.mapSelected.has(a.assetId)).length;
+      const allOn = g.assets.length > 0 && sel === g.assets.length;
+      const rows = g.assets.map(a => `
+        <label class="ac-map-asset">
+          <input type="checkbox" data-asset="${a.assetId}" ${S.mapSelected.has(a.assetId) ? 'checked' : ''} />
+          ${a.icon ? `<img src="${esc(a.icon)}" class="ac-map-ico" onerror="this.style.visibility='hidden'" />` : ''}
+          <span>${esc(a.name || '')}</span>
+          ${a.ip ? `<span class="ac-map-ip">${esc(a.ip)}</span>` : ''}
+        </label>`).join('');
+      return `<div class="ac-map-group">
+        <label class="ac-map-grouphead">
+          <input type="checkbox" data-group="${esc(g.lineName)}" ${allOn ? 'checked' : ''} />
+          <strong>${esc(g.lineName)}</strong>
+          <span class="ac-map-gcount">(${sel} / ${g.assets.length})</span>
+        </label>
+        ${rows}
+      </div>`;
+    }).join('');
+    host.scrollTop = sc;
+
+    host.querySelectorAll('input[data-asset]').forEach(cb => cb.addEventListener('change', () => {
+      const aid = parseInt(cb.getAttribute('data-asset'), 10);
+      if (cb.checked) S.mapSelected.add(aid); else S.mapSelected.delete(aid);
+      renderMap();
+    }));
+    host.querySelectorAll('input[data-group]').forEach(cb => cb.addEventListener('change', () => {
+      const g = S.mapGroups.find(x => x.lineName === cb.getAttribute('data-group'));
+      if (!g) return;
+      g.assets.forEach(a => { if (cb.checked) S.mapSelected.add(a.assetId); else S.mapSelected.delete(a.assetId); });
+      renderMap();
+    }));
+  }
+
+  function mapSelectAll(on) {
+    if (on) S.mapGroups.forEach(g => g.assets.forEach(a => S.mapSelected.add(a.assetId)));
+    else S.mapSelected.clear();
+    renderMap();
+  }
+
+  async function saveMap() {
+    const id = S.mapTriggerId;
+    if (id == null) return;
+    const btn = $('map-save'); btn.disabled = true;
+    try {
+      const r = await fetch(`/api/admin/config/triggers/${id}/assets`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetIds: Array.from(S.mapSelected) }),
+      });
+      if (r.ok) { closeModal('map-modal'); toast('자산 매핑이 저장되었습니다.'); await load(); }
+      else toast((await safeErr(r)) || '자산 매핑 저장 실패');
+    } catch (e) { toast('자산 매핑 저장 실패: ' + e.message); }
+    finally { btn.disabled = false; }
+  }
+
   /* ════════════════ 모달 제어 ════════════════ */
   function openModal(id) { $(id).classList.add('open'); }
   function closeModal(id) { $(id).classList.remove('open'); }
@@ -240,6 +351,9 @@
     $('trigger-add').addEventListener('click', openAddModal);
     $('add-save').addEventListener('click', addTrigger);
     $('cron-save').addEventListener('click', saveCron);
+    $('map-save').addEventListener('click', saveMap);
+    $('map-all').addEventListener('click', () => mapSelectAll(true));
+    $('map-none').addEventListener('click', () => mapSelectAll(false));
 
     document.querySelectorAll('[data-close]').forEach(b =>
       b.addEventListener('click', () => closeModal(b.getAttribute('data-close'))));

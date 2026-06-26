@@ -109,7 +109,29 @@
       margin-top: 10px;
     }
     .ac-deviation .material-symbols-outlined { font-size: 18px; color: var(--health-inprogress); flex-shrink: 0; }
+
+    /* 자산 매핑 모달 (ScheduleAssetEditor 이식) */
+    .ac-map-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .ac-map-list { max-height: 50vh; overflow-y: auto; padding-right: 4px; }
+    .ac-map-group {
+      padding: 8px 12px; border-radius: 12px; margin-bottom: 8px;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .ac-map-grouphead {
+      display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-on-surface);
+      cursor: pointer; padding-bottom: 6px; border-bottom: 1px solid var(--c-outline-variant); margin-bottom: 4px;
+    }
+    .ac-map-grouphead input, .ac-map-asset input { width: 16px; height: 16px; accent-color: var(--c-primary); cursor: pointer; flex-shrink: 0; }
+    .ac-map-gcount { color: var(--c-on-surface-variant); font-size: 12px; }
+    .ac-map-asset { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-on-surface); padding: 3px 0 3px 22px; cursor: pointer; }
+    .ac-map-ico { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+    .ac-map-ip { color: var(--c-on-surface-variant); font-size: 12px; margin-left: 4px; }
   </style>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
 </head>
 <body class="font-body-md">
   <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
@@ -133,10 +155,6 @@
       <div id="agents-host">
         <div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>
       </div>
-      <div class="ac-deviation">
-        <span class="material-symbols-outlined">info</span>
-        <span>에이전트 <strong>재시작</strong> 기능은 DEXA 서버와의 실시간(Akka) 연결이 필요하여 정적 페이지에서는 제공되지 않습니다. 재시작은 기존 관리 콘솔을 이용하세요.</span>
-      </div>
     </div>
 
     <!-- ─── 트리거 목록 ─── -->
@@ -150,10 +168,6 @@
       </div>
       <div id="triggers-host">
         <div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>
-      </div>
-      <div class="ac-deviation">
-        <span class="material-symbols-outlined">info</span>
-        <span>트리거↔자산 <strong>매핑 편집</strong>은 자산 선택 UI가 필요하여 이번 정적 페이지에서는 매핑 개수만 표시(읽기 전용)합니다.</span>
       </div>
     </div>
   </div>
@@ -194,6 +208,26 @@
       <div class="ac-modal-actions">
         <button class="ac-btn" data-close="cron-modal">취소</button>
         <button class="ac-btn ac-btn-primary" id="cron-save"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 모달: 트리거 ↔ 자산 매핑 ─── -->
+  <div class="ac-modal-backdrop" id="map-modal">
+    <div class="ac-modal" style="max-width:640px;">
+      <h3 id="map-title">자산 매핑</h3>
+      <div class="ac-map-toolbar">
+        <span class="chip chip-info" id="map-count">0개 선택</span>
+        <div style="flex:1 1 auto;"></div>
+        <button class="ac-btn" id="map-all"><span class="material-symbols-outlined">done_all</span>전체 선택</button>
+        <button class="ac-btn" id="map-none"><span class="material-symbols-outlined">remove_done</span>전체 해제</button>
+      </div>
+      <div class="ac-map-list" id="map-list">
+        <div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>
+      </div>
+      <div class="ac-modal-actions">
+        <button class="ac-btn" data-close="map-modal">취소</button>
+        <button class="ac-btn ac-btn-primary" id="map-save"><span class="material-symbols-outlined">save</span>저장</button>
       </div>
     </div>
   </div>

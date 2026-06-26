@@ -34,6 +34,7 @@
     backedup: '백업 갱신', unchanged: '변경 없음', failed: '작업 실패',
     inprogress: '작업중', unknown: '내역 없음',
   };
+  let _vpSeq = 0; // viewport 자동 id 시퀀스 (blueprintZoom 은 getElementById 필요)
 
   // ── 무상태 유틸 ───────────────────────────────────────────────────────────
   function svgEl(name, attrs) {
@@ -53,14 +54,35 @@
   }
   function floorLabel(f) { return f == null ? '' : (f < 0 ? `B${-f}` : `${f}F`); }
 
-  // SVG <title> 툴팁 (LayoutHelpers.RenderSvgTitle 이식)
+  // 툴팁 키/값 한 줄 (lv-tip-body 의 2열 그리드 한 행). vHtml 는 이미 안전한 HTML.
+  function tipRow(k, vHtml) {
+    return `<div class="lv-tip-row"><span class="lv-tip-k">${escapeHtml(k)}</span><span class="lv-tip-v">${vHtml}</span></div>`;
+  }
+  // 자산 hover 툴팁 HTML — 머리글(상태색 점 + 이름) + 키/값 표, 상태/연결은 색상 구분.
   function titleFor(asset, floor) {
-    const online = asset.pingReachable == null ? 'Ping 내역없음'
-      : (asset.pingReachable ? '온라인' : '오프라인');
+    const hc = colorFor(asset);
     const health = HEALTH_LABEL[asset.health] || HEALTH_LABEL.unknown;
-    const via = asset.ipVia ? `\n경유IP: ${asset.ipVia}` : '';
-    const fl = (floor != null) ? `\n층: ${floorLabel(floor)}` : '';
-    return `${asset.name}\nIP: ${asset.ip || '-'}${via}${fl}\n상태: ${health}\n${online}\n최근 백업: ${fmtMinute(asset.lastBackupTime)}`;
+    let conn, connColor;
+    if (asset.pingReachable == null) { conn = 'Ping 내역없음'; connColor = 'var(--c-on-surface-variant)'; }
+    else if (asset.pingReachable) { conn = '온라인'; connColor = HEALTH_COLOR.backedup; }
+    else { conn = '오프라인'; connColor = HEALTH_COLOR.failed; }
+    const rows = [tipRow('IP', escapeHtml(asset.ip || '-'))];
+    if (asset.ipVia) rows.push(tipRow('경유IP', escapeHtml(asset.ipVia)));
+    if (floor != null) rows.push(tipRow('층', escapeHtml(floorLabel(floor))));
+    rows.push(tipRow('상태', `<span style="color:${hc}">${escapeHtml(health)}</span>`));
+    rows.push(tipRow('연결', `<span style="color:${connColor}">${escapeHtml(conn)}</span>`));
+    rows.push(tipRow('최근 백업', escapeHtml(fmtMinute(asset.lastBackupTime))));
+    return `<div class="lv-tip-head"><span class="lv-tip-dot" style="background:${hc}"></span>`
+      + `<span class="lv-tip-name">${escapeHtml(asset.name)}</span></div>`
+      + `<div class="lv-tip-body">${rows.join('')}</div>`;
+  }
+  // 그룹(다수 동종 자산) hover 툴팁 HTML. 다수면 "자산 목록", 단일이면 "상세"로 안내.
+  function groupTipHtml(grp) {
+    const hint = grp.count > 1 ? '클릭 시 자산 목록 보기' : '클릭 시 자산 상세';
+    return `<div class="lv-tip-head"><span class="lv-tip-name">`
+      + `${escapeHtml(grp.rep.typeName || '자산')} ${grp.count}개</span></div>`
+      + `<div class="lv-tip-body">${tipRow('경유', escapeHtml(grp.rep.ipVia || '-'))}`
+      + `<div class="lv-tip-hint">${hint}</div></div>`;
   }
 
   // 도면 이미지 렌더 영역 계산 (LayoutHelpers.CalcImageRect 이식 — xMidYMid meet)
@@ -82,6 +104,7 @@
       style: 'cursor:pointer',
       opacity: '0.92',
       'data-tip': titleFor(asset, floor),
+      'data-asset-id': asset.assetId, // 클릭은 인스턴스 위임 핸들러가 처리(네비/팝오버)
     });
     g.appendChild(svgEl('rect', {
       width: size, height: size, rx: Math.max(1, size * 0.12),
@@ -92,7 +115,6 @@
       href: '/' + String(asset.icon || 'images/icons/plc.png').replace(/^\//, ''),
       x: size * 0.08, y: size * 0.08, width: size * 0.84, height: size * 0.84,
     }));
-    g.addEventListener('click', (e) => { e.stopPropagation(); location.href = `/assets/${asset.assetId}`; });
     return g;
   }
 
@@ -293,6 +315,7 @@
         card.groups.push({
           x: childX, y: belowY, size: childSz, rep: grp.items[0],
           count: grp.items.length, color: aggregateColor(grp.items), icon: grp.icon,
+          ids: grp.items.map(it => it.assetId),
         });
         childX += childSz + innerGap;
       }
@@ -315,6 +338,7 @@
         card.groups.push({
           x: childX, y: childY, size: childSz, rep: grp.items[0],
           count: grp.items.length, color: aggregateColor(grp.items), icon: grp.icon,
+          ids: grp.items.map(it => it.assetId),
         });
         childX += childSz + innerGap;
       }
@@ -322,11 +346,15 @@
     return card;
   }
 
-  // 2단 자산 그룹 아이콘 <g> (아이콘 + 개수 배지). 클릭 → 대표 자산 상세.
+  // 2단 자산 그룹 아이콘 <g> (아이콘 + 개수 배지).
+  // 다수(>1) → 자산표 필터 이동(멤버 전체), 단일 → 그 자산 상세.
   function childGroupNode(grp) {
+    const multi = grp.count > 1 && Array.isArray(grp.ids) && grp.ids.length > 1;
     const g = svgEl('g', {
       class: 'lv-asset-icon', style: 'cursor:pointer',
-      'data-tip': `${grp.rep.typeName || '자산'} ${grp.count}개 (경유: ${grp.rep.ipVia || '-'})\n클릭 시 대표 자산 상세`,
+      'data-tip': groupTipHtml(grp),
+      'data-asset-id': grp.rep.assetId,                       // 단일 묶음 클릭 시 상세 (위임)
+      'data-asset-ids': multi ? grp.ids.join(',') : null,     // 다수 묶음 → 자산표 필터 이동
     });
     g.appendChild(svgEl('rect', {
       x: grp.x, y: grp.y, width: grp.size, height: grp.size, rx: 2,
@@ -345,14 +373,13 @@
     });
     bt.textContent = grp.count;
     g.appendChild(bt);
-    g.addEventListener('click', (e) => { e.stopPropagation(); location.href = `/assets/${grp.rep.assetId}`; });
     return g;
   }
 
   // PLC 카드 <g> (카드 배경 + PLC 아이콘 + IP 인셋 + 2단 그룹). 카드 클릭 → PLC 상세.
   function plcCardGroup(card) {
     const plc = card.plc;
-    const g = svgEl('g', { style: 'cursor:pointer' });
+    const g = svgEl('g', { style: 'cursor:pointer', 'data-asset-id': plc.assetId });
     g.appendChild(svgEl('rect', {
       x: card.x, y: card.y, width: card.cardW, height: card.cardH, rx: 5,
       fill: '#1e1e38', stroke: 'rgba(255,255,255,0.25)', 'stroke-width': 0.8,
@@ -368,6 +395,7 @@
       href: '/' + String(plc.icon || 'images/icons/plc.png').replace(/^\//, ''),
       x: plcIx + 2, y: plcIy + 2, width: card.plcSize - 4, height: card.plcSize - 4,
     }));
+    // 카드의 자식 그룹 노드는 자체 data-asset-id 를 가지므로 위임 핸들러가 우선 처리.
     g.appendChild(ico);
     if (card.hasIp && card.ip) {
       g.appendChild(svgEl('rect', {
@@ -387,7 +415,6 @@
         }));
       }
     }
-    g.addEventListener('click', (e) => { e.stopPropagation(); location.href = `/assets/${plc.assetId}`; });
     for (const grp of card.groups) g.appendChild(childGroupNode(grp));
     return g;
   }
@@ -404,6 +431,11 @@
     const splitBtn = resolve(opts.splitBtn);
     const splitKey = opts.splitStoreKey || null;
     if (!viewport) { console.warn('LayoutRenderer: viewport 요소 없음'); return null; }
+
+    // 줌/팬 + 컨트롤(blueprint-zoom.js 필요) · 클릭 팝오버 — 둘 다 opt-in(/layout 만 사용, 대시보드 위젯은 미사용)
+    const zoomEnabled = !!opts.zoom && !!window.blueprintZoom;
+    const popoverEnabled = !!opts.popover;
+    if ((zoomEnabled || popoverEnabled) && !viewport.id) viewport.id = 'lv-vp-' + (++_vpSeq);
 
     // forceMode(고정): 한 모드만 표시할 때. localStorage/토글 무시.
     const lockMode = (opts.forceMode === 0 || opts.forceMode === 1);
@@ -460,11 +492,119 @@
         if (!tip) { hideTip(); return; }
         const t = ensureTip();
         if (t.style.display === 'none' || t._tip !== tip) {
-          t.textContent = tip; t._tip = tip; t.style.display = 'block';
+          t.innerHTML = tip; t._tip = tip; t.style.display = 'block';
         }
         moveTip(e);
       });
       svg.addEventListener('mouseleave', hideTip);
+    }
+
+    // ── 클릭 팝오버 (자산 / 라인) — BlueprintView 의 클릭 다이얼로그 이식 ──────────
+    let popEl = null;
+    function ensurePop() {
+      if (popEl && popEl.parentNode === viewport) return popEl;
+      popEl = document.createElement('div');
+      popEl.className = 'lv-pop';
+      popEl.style.display = 'none';
+      viewport.appendChild(popEl);
+      return popEl;
+    }
+    function positionPop(evt) {
+      const r = viewport.getBoundingClientRect();
+      popEl.style.left = '0px'; popEl.style.top = '0px'; popEl.style.display = 'block';
+      let x = (evt ? evt.clientX - r.left : 20) + 12;
+      let y = (evt ? evt.clientY - r.top : 20) + 12;
+      if (x + popEl.offsetWidth > r.width) x = Math.max(4, r.width - popEl.offsetWidth - 8);
+      if (y + popEl.offsetHeight > r.height) y = Math.max(4, r.height - popEl.offsetHeight - 8);
+      popEl.style.left = Math.max(4, x) + 'px';
+      popEl.style.top = Math.max(4, y) + 'px';
+    }
+    function closePop() { if (popEl) popEl.style.display = 'none'; }
+
+    function openAssetPopover(id, evt) {
+      const a = assetById(id);
+      if (!a) { location.href = `/assets/${id}`; return; }
+      const p = ensurePop();
+      p.innerHTML = `<button class="lv-pop-close" title="닫기">&times;</button>`
+        + titleFor(a, a.floor)
+        + `<a class="lv-pop-link" href="/assets/${a.assetId}"><span class="material-symbols-outlined">open_in_new</span>상세 보기</a>`;
+      p.querySelector('.lv-pop-close').addEventListener('click', (e) => { e.stopPropagation(); closePop(); });
+      positionPop(evt);
+    }
+
+    function openLinePopover(lineId, evt) {
+      const line = (inst.data.lines || []).find(l => l.id === lineId);
+      const assets = (inst.data.assets || []).filter(a => a.lineId === lineId)
+        .slice().sort((x, y) => String(x.name || '').localeCompare(String(y.name || '')));
+      const rows = assets.map(a => {
+        const hc = colorFor(a);
+        return `<a class="lv-pop-row" href="/assets/${a.assetId}">`
+          + `<span class="lv-pop-dot" style="background:${hc}"></span>`
+          + `<span class="lv-pop-row-name">${escapeHtml(a.name || '')}</span>`
+          + `<span class="lv-pop-row-ip">${escapeHtml(a.ip || '')}</span></a>`;
+      }).join('');
+      const p = ensurePop();
+      p.innerHTML = `<button class="lv-pop-close" title="닫기">&times;</button>`
+        + `<div class="lv-tip-head"><span class="lv-tip-name">${escapeHtml(line ? line.name : '라인')}</span>`
+        + `<span class="lv-pop-count">${assets.length}개</span></div>`
+        + `<div class="lv-pop-list">${rows || '<div class="lv-pop-empty">자산 없음</div>'}</div>`;
+      p.querySelector('.lv-pop-close').addEventListener('click', (e) => { e.stopPropagation(); closePop(); });
+      positionPop(evt);
+    }
+
+    // 위임 클릭: 다수묶음(data-asset-ids) → 자산표 필터 이동, 자산(data-asset-id) → 팝오버/네비,
+    // 라인영역(data-line-id, 라인별 뷰) → 라인 팝오버.
+    // blueprintZoom 의 capture 핸들러가 드래그-클릭을 먼저 억제하므로, 여기 도달하는 건 순수 클릭뿐.
+    function attachClicks(svg) {
+      svg.addEventListener('click', (e) => {
+        const usePop = popoverEnabled && !inst.split;
+        // 여러 자산 묶음은 대표 1개로 점프하지 않고, 그 멤버만 필터된 자산 목록으로 이동.
+        const groupEl = e.target.closest('[data-asset-ids]');
+        if (groupEl) {
+          e.stopPropagation();
+          location.href = `/assets?ids=${encodeURIComponent(groupEl.getAttribute('data-asset-ids'))}`;
+          return;
+        }
+        const assetEl = e.target.closest('[data-asset-id]');
+        if (assetEl) {
+          const id = parseInt(assetEl.getAttribute('data-asset-id'), 10);
+          if (usePop) { e.stopPropagation(); openAssetPopover(id, e); }
+          else location.href = `/assets/${id}`;
+          return;
+        }
+        if (usePop && inst.viewMode === 0) {
+          const lineEl = e.target.closest('[data-line-id]');
+          if (lineEl) { e.stopPropagation(); openLinePopover(parseInt(lineEl.getAttribute('data-line-id'), 10), e); }
+        }
+      });
+    }
+
+    // 팝오버 바깥 클릭 시 닫기 (자산/라인 클릭은 stopPropagation 으로 여기 도달 안 함)
+    const _onDocClick = (e) => {
+      if (!popEl || popEl.style.display === 'none') return;
+      if (e.target.closest && e.target.closest('.lv-pop')) return;
+      closePop();
+    };
+    if (popoverEnabled) document.addEventListener('click', _onDocClick);
+
+    // ── 줌/전체화면 컨트롤 오버레이 (뷰포트 내부 → 전체화면에서도 노출, 재렌더마다 재생성) ──
+    function toggleFs() {
+      if (document.fullscreenElement === viewport) { if (document.exitFullscreen) document.exitFullscreen(); }
+      else if (viewport.requestFullscreen) viewport.requestFullscreen();
+    }
+    function buildControls() {
+      const c = document.createElement('div');
+      c.className = 'lv-controls';
+      c.innerHTML =
+        `<button class="lv-ctrl-btn" data-z="in" title="확대"><span class="material-symbols-outlined">add</span></button>`
+        + `<button class="lv-ctrl-btn" data-z="out" title="축소"><span class="material-symbols-outlined">remove</span></button>`
+        + `<button class="lv-ctrl-btn" data-z="reset" title="원래대로"><span class="material-symbols-outlined">fit_screen</span></button>`
+        + `<button class="lv-ctrl-btn" data-z="fs" title="전체화면"><span class="material-symbols-outlined">fullscreen</span></button>`;
+      c.querySelector('[data-z="in"]').addEventListener('click', () => window.blueprintZoom.zoomIn(viewport.id));
+      c.querySelector('[data-z="out"]').addEventListener('click', () => window.blueprintZoom.zoomOut(viewport.id));
+      c.querySelector('[data-z="reset"]').addEventListener('click', () => window.blueprintZoom.reset(viewport.id));
+      c.querySelector('[data-z="fs"]').addEventListener('click', toggleFs);
+      return c;
     }
 
     // ── 라인별(도면) 뷰 SVG ──
@@ -479,7 +619,7 @@
         const topLevel = lineAssets.filter(a => !hier.childIds.has(a.assetId));
         const healthColor = aggregateColor(lineAssets);
 
-        const g = svgEl('g');
+        const g = svgEl('g', { 'data-line-id': rect.lineId, style: 'cursor:pointer' });
         // 영역 배경
         g.appendChild(svgEl('rect', {
           x: rect.x, y: rect.y, width: rect.width, height: rect.height, rx: 6, ry: 6,
@@ -601,7 +741,7 @@
       tabsEl.querySelectorAll('.lv-tab').forEach(btn => {
         btn.addEventListener('click', () => {
           const id = parseInt(btn.dataset.layout, 10);
-          if (id !== inst.selectedLayout) { inst.selectedLayout = id; inst.hiddenFloors = null; refresh(); }
+          if (id !== inst.selectedLayout) { inst.selectedLayout = id; inst.hiddenFloors = null; inst._resetZoom = true; refresh(); }
         });
       });
     }
@@ -675,13 +815,27 @@
       }
       initFloorFilter();
       inst.clipNs = '0';
+      // 줌 viewBox 보존: 폴링 재렌더 시 줌/팬 유지(모드·레이아웃 변경 시엔 _resetZoom 로 초기화).
+      let savedVb = null;
+      if (zoomEnabled && !inst._resetZoom) {
+        const vb = window.blueprintZoom.getViewBox(viewport.id);
+        if (vb && vb.w < VB_W - 0.5) savedVb = vb;
+      }
+      inst._resetZoom = false;
       const svg = buildSvg(data);
       viewport.innerHTML = '';
-      tipEl = null;            // viewport 비움 → 툴팁 재생성 필요
+      tipEl = null; popEl = null;   // viewport 비움 → 툴팁/팝오버 재생성 필요
       viewport.appendChild(svg);
       attachTooltip(svg);
+      attachClicks(svg);
+      if (zoomEnabled) {
+        window.blueprintZoom.init(viewport.id, { clampMargin: 0.3 });
+        if (savedVb) window.blueprintZoom.setViewBox(viewport.id, savedVb);
+        viewport.appendChild(buildControls());
+        onFsChange(); // 전체화면 아이콘 동기화
+      }
       const shown = svg.querySelectorAll('.lv-asset-icon').length;
-      if (countEl) countEl.textContent = `${shown}개 표시 · 자산 클릭 시 상세 보기`;
+      if (countEl) countEl.textContent = `${shown}개 표시 · 자산/라인 클릭 시 상세 보기`;
     }
 
     // 분할 뷰: 모든 레이아웃을 그리드 셀(미니 화면)로 나란히 렌더.
@@ -704,6 +858,7 @@
           const svg = buildSvgFor(data, String(i));
           body.appendChild(svg);
           attachTooltip(svg);
+          attachClicks(svg); // 분할 셀: 팝오버 없이 네비게이션
           const shown = svg.querySelectorAll('.lv-asset-icon').length;
           total += shown;
           title.textContent = `${layout.name || '도면'} · ${shown}개`;
@@ -725,17 +880,19 @@
     function setMode(m) {
       if (lockMode) return; // 고정 모드에서는 토글 무시
       inst.viewMode = m;
+      inst._resetZoom = true; // 모드 변경 → 줌 초기화
       try { localStorage.setItem(storeKey, String(m)); } catch (e) { /* ignore */ }
       if (viewmodeEl) viewmodeEl.querySelectorAll('[data-view]').forEach(b =>
         b.classList.toggle('active', parseInt(b.dataset.view, 10) === m));
       render();
     }
 
-    function setLayout(id) { inst.selectedLayout = id; inst.hiddenFloors = null; refresh(); }
+    function setLayout(id) { inst.selectedLayout = id; inst.hiddenFloors = null; inst._resetZoom = true; refresh(); }
 
     // 분할 on/off 전환(옵션: 단일로 전환 시 특정 레이아웃 선택). localStorage 기억.
     function setSplit(on, selectId) {
       inst.split = !!on;
+      inst._resetZoom = true;
       if (typeof selectId === 'number') { inst.selectedLayout = selectId; inst.hiddenFloors = null; }
       if (splitKey) { try { localStorage.setItem(splitKey, inst.split ? '1' : '0'); } catch (e) { /* ignore */ } }
       renderControls();
@@ -781,18 +938,20 @@
     // 분할(도면 여러 개 동시) 토글 버튼
     if (splitBtn) splitBtn.addEventListener('click', () => setSplit(!inst.split));
 
-    // 전체화면 버튼 (선택 — viewport 를 Fullscreen API 로 확대)
+    // 전체화면 아이콘 동기화 — 외부 버튼(opts.fullscreenBtn) + 오버레이 버튼(.lv-controls) 둘 다.
     function onFsChange() {
-      const ico = fullscreenBtn && fullscreenBtn.querySelector('.material-symbols-outlined');
-      if (ico) ico.textContent = (document.fullscreenElement === viewport) ? 'fullscreen_exit' : 'fullscreen';
+      const inFs = document.fullscreenElement === viewport;
+      const setIco = (btn) => { const i = btn && btn.querySelector('.material-symbols-outlined'); if (i) i.textContent = inFs ? 'fullscreen_exit' : 'fullscreen'; };
+      setIco(fullscreenBtn);
+      setIco(viewport.querySelector('.lv-ctrl-btn[data-z="fs"]'));
     }
     if (fullscreenBtn) {
       fullscreenBtn.addEventListener('click', () => {
         if (document.fullscreenElement === viewport) { if (document.exitFullscreen) document.exitFullscreen(); }
         else if (viewport.requestFullscreen) { viewport.requestFullscreen(); }
       });
-      document.addEventListener('fullscreenchange', onFsChange);
     }
+    if (fullscreenBtn || zoomEnabled) document.addEventListener('fullscreenchange', onFsChange);
 
     function onVis() { if (!document.hidden) refresh(); }
 
@@ -807,6 +966,8 @@
       if (inst.pollTimer) clearInterval(inst.pollTimer);
       document.removeEventListener('visibilitychange', onVis);
       document.removeEventListener('fullscreenchange', onFsChange);
+      if (popoverEnabled) document.removeEventListener('click', _onDocClick);
+      if (zoomEnabled && viewport.id && window.blueprintZoom) window.blueprintZoom.dispose(viewport.id);
     }
 
     function getLayoutId() { return inst.selectedLayout; }

@@ -8,7 +8,7 @@ namespace Twms2.Server.Controllers;
 /// <summary>
 /// 설정(Settings.razor + 자식 탭) 정적 페이지용 API.
 /// - GET  /api/settings        : 일반(App 설정) + 라인 목록 + 매뉴얼 목록 1회 조회.
-/// - POST /api/settings/general: 헤더 이름/날짜표시/로고여백 저장 (AppSettingsEditor 래핑).
+/// - POST /api/settings/brand  : 사이드바 제목/부제 저장 (App:NavTitle/NavSubtitle).
 /// - POST /api/settings/lines  : 라인 추가/수정 (Upsert).
 /// - DELETE /api/settings/lines/{id} : 라인 삭제 (배정 자산 있으면 거부).
 /// - POST /api/settings/manuals: 매뉴얼(키워드+PDF) 업로드.
@@ -65,36 +65,44 @@ public class SettingsController : ControllerBase
             })
             .ToList();
 
+        // 브랜드는 캐시에서(저장 즉시 반영). 그 외 App 설정은 IConfiguration 경유.
+        var brand = _settings.GetBrand();
+
         return Ok(new
         {
             general = new
             {
                 appTitle = _config["App:Title"] ?? "TWM",
                 showDate = _config.GetValue<bool>("App:ShowDate"),
-                logoPadding = _config.GetValue("App:LogoPadding", 10),
                 logoUrl = ScanLogoUrl(),
+                // 사이드바 브랜드 — 로고 마크 우측의 제목/부제(저장 즉시 반영). 미설정 시 기본값.
+                navTitle = brand.Title,
+                navSubtitle = brand.Subtitle,
             },
             lines,
             manuals,
         });
     }
 
-    // ──────────────── 일반(App) 저장 ────────────────
+    // ──────────────── 사이드바 브랜드(제목/부제) 저장 ────────────────
 
-    public record GeneralDto(string? AppTitle, bool ShowDate, int LogoPadding);
+    public record BrandDto(string? NavTitle, string? NavSubtitle);
 
     [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
-    [HttpPost("general")]
-    public async Task<IActionResult> SaveGeneral([FromBody] GeneralDto dto)
+    [HttpPost("brand")]
+    public async Task<IActionResult> SaveBrand([FromBody] BrandDto dto)
     {
-        var title = (dto.AppTitle ?? "").Trim();
+        var title = (dto.NavTitle ?? "").Trim();
         if (string.IsNullOrWhiteSpace(title))
-            return BadRequest(new { error = "이름을 입력해주세요." });
+            return BadRequest(new { error = "제목을 입력해주세요." });
 
-        var padding = Math.Clamp(dto.LogoPadding, 0, 30);
-        await _settings.SaveAppSectionAsync(title, dto.ShowDate);
-        await _settings.SaveLogoPaddingAsync(padding);
-        return Ok(new { ok = true });
+        // 부제는 비워둘 수 있음(숨김). 과도한 길이는 잘라 저장.
+        var subtitle = (dto.NavSubtitle ?? "").Trim();
+        if (title.Length > 40) title = title[..40];
+        if (subtitle.Length > 80) subtitle = subtitle[..80];
+
+        await _settings.SaveBrandAsync(title, subtitle);
+        return Ok(new { ok = true, navTitle = title, navSubtitle = subtitle });
     }
 
     // ──────────────── 라인 관리 ────────────────
