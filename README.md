@@ -362,7 +362,7 @@ dotnet run --project src/DexaWeb.Server
 | .NET 10.0 SDK | C#/F# 프로젝트 빌드 | `dotnet` CLI 사용 |
 | Visual Studio Build Tools | C++ DeepPinger DLL 빌드 | MSBuild + C++ 워크로드 필요 |
 | [InnoSetup 6](https://jrsoftware.org/isinfo.php) | 설치파일(.exe) 생성 | 기본 경로 설치 권장 |
-| vc_redist.x64.exe | VC++ 런타임 재배포 패키지 | 선택사항, `installer/` 폴더에 배치 |
+| vc_redist.x64.exe | VC++ 런타임 재배포 패키지 | 빌드 시 `installer/redist/`에 자동 다운로드(인터넷 필요). 오프라인 빌드 PC는 수동 배치 |
 
 ### 빌드 과정
 
@@ -378,6 +378,9 @@ build-installer.bat
 4. **DLL 복사** — DeepPinger.dll을 publish 출력에 복사
 5. **InnoSetup 컴파일** — `installer/twms2.0-setup.iss` → `installer/output/Twms2.0-Setup-{version}.exe`
 
+> 사전 요구 사항 확인 단계에서 `installer/redist/vc_redist.x64.exe`가 없으면 자동으로 다운로드하여
+> 인스톨러에 포함합니다. 다운로드 실패 시 빌드가 중단됩니다(오프라인 강제 빌드는 `SKIP_VCREDIST=1`).
+
 빌드 완료 후 `installer/output/` 디렉토리에 설치파일이 생성됩니다.
 
 ### 인스톨러 포함 사항
@@ -388,7 +391,7 @@ build-installer.bat
 - 방화벽 규칙 자동 추가 (HTTP 80, HTTPS 443)
 - ProgramData 디렉토리 자동 생성
 - HTTPS 설정 (선택 구성요소, `setup-https.ps1`)
-- VC++ 런타임 재배포 패키지 (선택, `installer/`에 배치 시)
+- VC++ 런타임 재배포 패키지 (`vc_redist.x64.exe`, 대상 PC에 미설치 시 자동 설치 → 오프라인 설치 보장)
 
 ---
 

@@ -35,6 +35,8 @@
     inprogress: '작업중', unknown: '내역 없음',
   };
   let _vpSeq = 0; // viewport 자동 id 시퀀스 (blueprintZoom 은 getElementById 필요)
+  // 카드 내부 여백/간격 (cardGeometry 와 plcCardGroup 가 공유)
+  const CARD_PAD = 3, CARD_GAP = 3, CARD_CHILD_GAP = 3, CARD_IP_PAD = 4;
 
   // ── 무상태 유틸 ───────────────────────────────────────────────────────────
   function svgEl(name, attrs) {
@@ -218,25 +220,22 @@
     }
     const childSz = Math.round(Math.min(sz * 0.5, 24) * 10) / 10;
 
-    // 1) 자연 크기 계산
+    // 1) 자연 크기 계산 — 카드는 내용 크기(IP 길이·자식 개수)에 맞춰 잡고,
+    //    가로 카드가 영역보다 넓거나 영역이 세로로 길면 세로 카드로 전환한다.
     const plans = [];
     for (const asset of topLevel) {
       const children = plcChildren.get(asset.assetId);
       if (children) {
         const groups = groupByIcon(children);
         const hasIp = !!asset.ip;
-        const ipLen = asset.ip ? asset.ip.length : 0;
-        const ipTextW = ipLen * ipFontSz * 0.62 + 8;
-        const childrenW = groups.length > 0
-          ? groups.length * childSz + (groups.length - 1) * innerGap : 0;
-        const rightW = Math.max(Math.max(childrenW + 8, ipTextW), 40);
-        const horizW = sz + innerGap + rightW + 3;
-        const vertW = Math.max(sz, Math.max(ipTextW, childrenW));
-        const vertH = sz + (hasIp ? ipLineH : 0) + (groups.length > 0 ? childSz + 2 : 0) + 4;
-        const useVert = horizW > availW || availH > availW * 1.5;
+        const horiz = cardGeometry(asset, groups, hasIp, false, 0, 0, sz, childSz, ipLineH, ipFontSz);
+        const useVert = horiz.cardW > availW || availH > availW * 1.5;
+        const geom = useVert
+          ? cardGeometry(asset, groups, hasIp, true, 0, 0, sz, childSz, ipLineH, ipFontSz)
+          : horiz;
         plans.push({
           asset, isPlc: true, plcGroups: groups, vertical: useVert, hasIp,
-          natW: useVert ? vertW : horizW, natH: useVert ? vertH : sz,
+          natW: geom.cardW, natH: geom.cardH,
         });
       } else {
         plans.push({ asset, isPlc: false, plcGroups: [], natW: sz, natH: sz });
@@ -263,11 +262,11 @@
       const row = rowsPacked[ri];
       const natW = row.reduce((s, i) => s + i.natW, 0) + innerGap * Math.max(0, row.length - 1);
       const extraW = Math.max(0, availW - natW);
-      const plcsInRow = row.filter(i => i.isPlc).length;
 
-      let perPlcExtra = 0, edgePad = 0, extraInter = 0;
-      if (plcsInRow > 0) { perPlcExtra = extraW / plcsInRow; }
-      else if (row.length === 1) { edgePad = extraW / 2; }
+      // 카드/아이콘은 내용 크기로 고정하고, 남는 가로 여백은 행을 가운데 정렬하는 데 쓴다.
+      // (이전엔 PLC 카드가 여백을 전부 흡수 → 한 줄에 카드 하나면 비정상적으로 넓어졌다.)
+      let edgePad, extraInter;
+      if (row.length === 1) { edgePad = extraW / 2; extraInter = 0; }
       else { const slots = row.length + 1; edgePad = extraW / slots; extraInter = extraW / slots; }
 
       const rowH = rowHeights[ri];
@@ -275,75 +274,82 @@
       let x = rect.x + padSide + edgePad;
 
       for (const it of row) {
-        const itemW = it.natW + (it.isPlc ? perPlcExtra : 0);
         const itemY = y + (rowH - it.natH) / 2;
         if (it.isPlc) {
-          plcCards.push(buildPlcCard(it, x, itemY, itemW, sz, childSz, innerGap, ipLineH, ipFontSz));
+          plcCards.push(buildPlcCard(it, x, itemY, it.natW, sz, childSz, innerGap, ipLineH, ipFontSz));
         } else {
-          standalones.push({ x: x + (itemW - sz) / 2, y: itemY, size: sz, asset: it.asset });
+          standalones.push({ x, y: itemY, size: sz, asset: it.asset });
         }
-        x += itemW + innerGap + extraInter;
+        x += it.natW + innerGap + extraInter;
       }
     }
 
     return { standalones, plcCards };
   }
 
-  // PLC 카드 1개의 기하 계산 (BlueprintView.BuildPlcCard 이식)
-  function buildPlcCard(plan, x, y, cardW, plcSize, childSz, innerGap, ipLineH, ipFontSz) {
-    const card = {
-      x, y, cardW, plcSize, plc: plan.asset, ip: plan.asset.ip,
-      vertical: plan.vertical, hasIp: plan.hasIp, groups: [],
+  // ── 카드 기하 계산 ─────────────────────────────────────────────────────────
+  // 자식 그룹 칩 1개의 절대 좌표 묶음 (childGroupNode 가 그린다).
+  function childChip(grp, x, y, size) {
+    return {
+      x, y, size, rep: grp.items[0], count: grp.items.length,
+      color: aggregateColor(grp.items), icon: grp.icon,
+      ids: grp.items.map(it => it.assetId),
     };
-    const ipLen = plan.asset.ip ? plan.asset.ip.length : 0;
+  }
 
-    if (plan.vertical) {
-      const childRowH = plan.plcGroups.length > 0 ? childSz + 2 : 0;
-      card.cardH = plcSize + (plan.hasIp ? ipLineH : 0) + childRowH + 4;
-      let belowY = y + plcSize + 2;
-      if (plan.hasIp) {
-        const ipTextW = ipLen * ipFontSz * 0.62;
-        card.ipBgX = x + 1; card.ipBgY = belowY - 1; card.ipBgW = cardW - 2; card.ipBgH = ipLineH;
-        card.ipX = x + Math.max(2, (cardW - ipTextW) / 2); card.ipY = belowY + 7;
-        card.divX1 = x + 3; card.divX2 = x + cardW - 3; card.divY = belowY + ipLineH - 1;
-        belowY += ipLineH;
+  // 카드 1개의 전체 기하(절대 좌표). x=y=0 으로 호출하면 자연 크기(cardW/cardH) 측정용으로도 쓴다.
+  // 카드는 항상 내용 크기(PLC 아이콘 + IP 칩 + 자식 칩 줄)에 맞춰 잡히고, 호출부가 슬롯 안에서 가운데 둔다.
+  // 가로: [PLC 아이콘] | (IP 칩 ↑ / 자식 칩 ↓) 좌측 정렬.  세로: PLC ↓ IP ↓ 자식, 전부 가운데.
+  function cardGeometry(asset, plcGroups, hasIp, vertical, x, y, plcSize, childSz, ipLineH, ipFontSz) {
+    const nGroups = plcGroups.length;
+    const ipW = hasIp ? (asset.ip ? asset.ip.length : 0) * ipFontSz * 0.62 : 0;
+    const ipPillW = hasIp ? ipW + CARD_IP_PAD * 2 : 0;
+    const childrenW = nGroups > 0 ? nGroups * childSz + (nGroups - 1) * CARD_CHILD_GAP : 0;
+    const card = { plc: asset, ip: asset.ip, plcSize, hasIp, vertical, x, y, groups: [] };
+
+    if (vertical) {
+      const contentW = Math.max(plcSize, ipPillW, childrenW);
+      card.cardW = contentW + CARD_PAD * 2;
+      card.cardH = CARD_PAD + plcSize + (hasIp ? 2 + ipLineH : 0) + (nGroups > 0 ? 2 + childSz : 0) + CARD_PAD;
+      const cx = x + card.cardW / 2;
+      card.plcIx = cx - plcSize / 2; card.plcIy = y + CARD_PAD;
+      let cy = card.plcIy + plcSize;
+      if (hasIp) {
+        cy += 2;
+        card.ipBgX = cx - ipPillW / 2; card.ipBgY = cy; card.ipBgW = ipPillW; card.ipBgH = ipLineH;
+        card.ipX = card.ipBgX + CARD_IP_PAD; card.ipY = cy + ipLineH - 3;
+        cy += ipLineH;
       }
-      const childrenTotalW = plan.plcGroups.length * childSz + Math.max(0, plan.plcGroups.length - 1) * innerGap;
-      let childX = x + Math.max(2, (cardW - childrenTotalW) / 2);
-      for (const grp of plan.plcGroups) {
-        if (childX + childSz > x + cardW - 1) break;
-        card.groups.push({
-          x: childX, y: belowY, size: childSz, rep: grp.items[0],
-          count: grp.items.length, color: aggregateColor(grp.items), icon: grp.icon,
-          ids: grp.items.map(it => it.assetId),
-        });
-        childX += childSz + innerGap;
+      if (nGroups > 0) {
+        cy += 2;
+        let childX = cx - childrenW / 2;
+        for (const grp of plcGroups) { card.groups.push(childChip(grp, childX, cy, childSz)); childX += childSz + CARD_CHILD_GAP; }
       }
     } else {
-      card.cardH = plcSize;
-      const rightAreaX = x + plcSize + innerGap;
-      const rightAreaW = Math.max(0, cardW - plcSize - innerGap - 3);
-      if (plan.hasIp) {
-        const ipTextW = ipLen * ipFontSz * 0.62;
-        card.ipBgX = x + plcSize + 2; card.ipBgY = y + 1; card.ipBgW = cardW - plcSize - 4; card.ipBgH = ipLineH + 2;
-        card.ipX = rightAreaX + Math.max(0, (rightAreaW - ipTextW) / 2); card.ipY = y + 10;
-        card.divX1 = x + plcSize + 4; card.divX2 = x + cardW - 4; card.divY = y + ipLineH + 3;
+      const contentW = Math.max(ipPillW, childrenW);
+      const contentH = (hasIp ? ipLineH : 0) + (hasIp && nGroups > 0 ? 2 : 0) + (nGroups > 0 ? childSz : 0);
+      card.cardW = CARD_PAD + plcSize + CARD_GAP + contentW + CARD_PAD;
+      card.cardH = Math.max(plcSize, contentH + 2);
+      card.plcIx = x + CARD_PAD; card.plcIy = y + (card.cardH - plcSize) / 2;
+      const contentX = card.plcIx + plcSize + CARD_GAP;
+      let cy = y + (card.cardH - contentH) / 2;  // IP+자식 블록을 카드 높이 기준 세로 중앙
+      if (hasIp) {
+        card.ipBgX = contentX; card.ipBgY = cy; card.ipBgW = ipPillW; card.ipBgH = ipLineH;
+        card.ipX = contentX + CARD_IP_PAD; card.ipY = cy + ipLineH - 3;
+        cy += ipLineH + (nGroups > 0 ? 2 : 0);
       }
-      const childrenTotalW = plan.plcGroups.length * childSz + Math.max(0, plan.plcGroups.length - 1) * innerGap;
-      let childX = rightAreaX + Math.max(0, (rightAreaW - childrenTotalW) / 2);
-      const childY = y + card.cardH - childSz - 3;
-      const childMaxX = x + cardW - 3;
-      for (const grp of plan.plcGroups) {
-        if (childX + childSz > childMaxX) break;
-        card.groups.push({
-          x: childX, y: childY, size: childSz, rep: grp.items[0],
-          count: grp.items.length, color: aggregateColor(grp.items), icon: grp.icon,
-          ids: grp.items.map(it => it.assetId),
-        });
-        childX += childSz + innerGap;
+      if (nGroups > 0) {
+        let childX = contentX;
+        for (const grp of plcGroups) { card.groups.push(childChip(grp, childX, cy, childSz)); childX += childSz + CARD_CHILD_GAP; }
       }
     }
     return card;
+  }
+
+  // PLC 카드 1개의 기하(BlueprintView.BuildPlcCard 이식 → cardGeometry 로 일원화).
+  // slotW(슬롯 폭)는 쓰지 않는다 — 카드는 내용 크기로 고정되고 호출부가 슬롯 안에서 가운데 둔다.
+  function buildPlcCard(plan, x, y, slotW, plcSize, childSz, innerGap, ipLineH, ipFontSz) {
+    return cardGeometry(plan.asset, plan.plcGroups, plan.hasIp, plan.vertical, x, y, plcSize, childSz, ipLineH, ipFontSz);
   }
 
   // 2단 자산 그룹 아이콘 <g> (아이콘 + 개수 배지).
@@ -357,63 +363,61 @@
       'data-asset-ids': multi ? grp.ids.join(',') : null,     // 다수 묶음 → 자산표 필터 이동
     });
     g.appendChild(svgEl('rect', {
-      x: grp.x, y: grp.y, width: grp.size, height: grp.size, rx: 2,
-      fill: iconBgFromHex(grp.color), stroke: grp.color, 'stroke-width': 1, opacity: 0.9,
+      x: grp.x, y: grp.y, width: grp.size, height: grp.size, rx: Math.max(2, grp.size * 0.2),
+      fill: iconBgFromHex(grp.color), stroke: grp.color, 'stroke-width': 1, opacity: 0.92,
     }));
     g.appendChild(svgEl('image', {
       href: '/' + String(grp.icon || 'images/icons/plc.png').replace(/^\//, ''),
       x: grp.x + 1, y: grp.y + 1, width: grp.size - 2, height: grp.size - 2,
     }));
-    g.appendChild(svgEl('circle', {
-      cx: grp.x + grp.size - 2, cy: grp.y + 2, r: 5, fill: '#555', stroke: 'white', 'stroke-width': 0.8,
-    }));
-    const bt = svgEl('text', {
-      x: grp.x + grp.size - 2, y: grp.y + 4.5, 'text-anchor': 'middle',
-      'font-size': 6, fill: 'white', 'font-weight': 'bold',
-    });
-    bt.textContent = grp.count;
-    g.appendChild(bt);
+    // 개수 배지는 묶음(2개 이상)일 때만 — 단일(1)은 표시 안 함(잡음 제거).
+    if (grp.count > 1) {
+      const r = Math.min(5, Math.max(3.4, grp.size * 0.34));
+      g.appendChild(svgEl('circle', {
+        cx: grp.x + grp.size - r * 0.4, cy: grp.y + r * 0.4, r, fill: '#333', stroke: 'white', 'stroke-width': 0.8,
+      }));
+      const bt = svgEl('text', {
+        x: grp.x + grp.size - r * 0.4, y: grp.y + r * 0.4 + 2.2, 'text-anchor': 'middle',
+        'font-size': Math.min(6, r * 1.3), fill: 'white', 'font-weight': 'bold',
+      });
+      bt.textContent = grp.count;
+      g.appendChild(bt);
+    }
     return g;
   }
 
-  // PLC 카드 <g> (카드 배경 + PLC 아이콘 + IP 인셋 + 2단 그룹). 카드 클릭 → PLC 상세.
+  // PLC 카드 <g> (카드 배경 + PLC 아이콘 + IP 칩 + 2단 그룹 칩). 카드 클릭 → PLC 상세.
+  // 카드 테두리는 PLC 상태색으로 은은하게 칠해 한눈에 건강도를 읽게 한다. 기하는 cardGeometry 산출.
   function plcCardGroup(card) {
     const plc = card.plc;
+    const hc = plc.healthColor || colorFor(plc);
     const g = svgEl('g', { style: 'cursor:pointer', 'data-asset-id': plc.assetId });
     g.appendChild(svgEl('rect', {
       x: card.x, y: card.y, width: card.cardW, height: card.cardH, rx: 5,
-      fill: '#1e1e38', stroke: 'rgba(255,255,255,0.25)', 'stroke-width': 0.8,
+      fill: 'rgba(18,18,38,0.86)', stroke: hc, 'stroke-width': 0.8, 'stroke-opacity': 0.55,
     }));
-    const plcIx = card.vertical ? card.x + (card.cardW - card.plcSize) / 2 : card.x + 2;
-    const plcIy = card.vertical ? card.y + 2 : card.y + (card.cardH - card.plcSize) / 2;
     const ico = svgEl('g', { class: 'lv-asset-icon', 'data-tip': titleFor(plc, plc.floor) });
     ico.appendChild(svgEl('rect', {
-      x: plcIx, y: plcIy, width: card.plcSize, height: card.plcSize, rx: 4,
-      fill: plc.iconBgColor || '#e0e0e0', stroke: plc.healthColor || '#999', 'stroke-width': 0.7, opacity: 0.95,
+      x: card.plcIx, y: card.plcIy, width: card.plcSize, height: card.plcSize, rx: 4,
+      fill: plc.iconBgColor || '#e0e0e0', stroke: hc, 'stroke-width': 0.7, opacity: 0.96,
     }));
     ico.appendChild(svgEl('image', {
       href: '/' + String(plc.icon || 'images/icons/plc.png').replace(/^\//, ''),
-      x: plcIx + 2, y: plcIy + 2, width: card.plcSize - 4, height: card.plcSize - 4,
+      x: card.plcIx + 2, y: card.plcIy + 2, width: card.plcSize - 4, height: card.plcSize - 4,
     }));
     // 카드의 자식 그룹 노드는 자체 data-asset-id 를 가지므로 위임 핸들러가 우선 처리.
     g.appendChild(ico);
     if (card.hasIp && card.ip) {
       g.appendChild(svgEl('rect', {
-        x: card.ipBgX, y: card.ipBgY, width: card.ipBgW, height: card.ipBgH, rx: 2,
-        fill: 'rgba(0,0,0,0.3)', stroke: 'rgba(0,0,0,0.2)', 'stroke-width': 0.5,
+        x: card.ipBgX, y: card.ipBgY, width: card.ipBgW, height: card.ipBgH, rx: 2.5,
+        fill: 'rgba(0,0,0,0.34)', stroke: hc, 'stroke-width': 0.4, 'stroke-opacity': 0.4,
       }));
       const ipt = svgEl('text', {
-        x: card.ipX, y: card.ipY, 'font-size': 6.5, fill: 'rgba(200,220,255,0.9)',
-        'font-family': "'Consolas','Monaco',monospace", 'letter-spacing': 0.3,
+        x: card.ipX, y: card.ipY, 'font-size': 6.5, fill: 'rgba(208,224,255,0.95)',
+        'font-family': "'Consolas','Monaco',monospace", 'letter-spacing': 0.2,
       });
       ipt.textContent = card.ip;
       g.appendChild(ipt);
-      if (card.groups.length > 0) {
-        g.appendChild(svgEl('line', {
-          x1: card.divX1, y1: card.divY, x2: card.divX2, y2: card.divY,
-          stroke: 'rgba(255,255,255,0.15)', 'stroke-width': 0.5,
-        }));
-      }
     }
     for (const grp of card.groups) g.appendChild(childGroupNode(grp));
     return g;

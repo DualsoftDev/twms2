@@ -377,7 +377,8 @@
   function bindBpEdit() {
     const btn = $('dash-bp-edit');
     if (!btn) return;
-    const reveal = () => { btn.hidden = !(window.Shell && Shell.isAuthenticated && Shell.isAdmin); };
+    // .dsp-iconbtn 이 display:flex 라서 [hidden] 속성은 무시됨 → style.display 로 토글해야 실제로 숨겨진다.
+    const reveal = () => { btn.style.display = (window.Shell && Shell.isAuthenticated && Shell.isAdmin) ? '' : 'none'; };
     reveal();
     document.addEventListener('shell:auth', reveal);
     btn.addEventListener('click', async () => {

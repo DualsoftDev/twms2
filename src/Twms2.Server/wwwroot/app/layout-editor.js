@@ -463,7 +463,8 @@
     let placedOnOther = new Set();
     let selAssets = new Set(), selGroups = new Set(), checked = new Set(), expanded = new Set();
     let searchText = '', selLineId = null, displayFilter = null, includeOther = false;
-    let globalScale = 1, snapEnabled = true, snapGridSize = 20, activeTool = 'select';
+    // 개별 자산 배치: 주변 자산/그룹 스냅은 기본 ON, 격자 스냅은 기본 OFF
+    let globalScale = 1, neighborSnap = true, gridSnap = false, snapGridSize = 20, activeTool = 'select';
     let hasChanges = false, nextTempGroupId = -1, inited = false, shellBuilt = false;
     let undo = [], redo = [];
     const MAX_UNDO = 30;
@@ -515,7 +516,9 @@
       const rawSz = Math.min(availW / cols, availH / rows);
       const gap = Math.max(1.0, Math.min(rawSz * 0.1, 2.0));
       const cellW = (availW - gap * (cols - 1)) / cols, cellH = (availH - gap * (rows - 1)) / rows;
-      const sz = Math.max(4, Math.min(cellW, cellH));
+      // 개별 자산 크기(32*scale)를 넘지 않도록 제한 → 그룹 안에서도 지정한 크기로 표시(박스를 채우려 키우지 않음)
+      const avgScale = members.reduce((s, m) => s + (posOf(m.assetId).scale > 0 ? posOf(m.assetId).scale : 1), 0) / count;
+      const sz = Math.max(4, Math.min(cellW, cellH, 32 * avgScale));
       const totalW = cols * sz + (cols - 1) * gap, totalH = rows * sz + (rows - 1) * gap;
       const startX = grp.x + pad + (availW - totalW) / 2, startY = grp.y + pad + (availH - totalH) / 2;
       for (let i = 0; i < count; i++) {
@@ -554,10 +557,11 @@
     }
     function memberNode(asset, it) {
       const sel = selAssets.has(asset.assetId) ? ' ap-selected' : '';
+      const imgSz = it.size * 0.75, imgOff = it.size * 0.125;   // 낱개 자산(assetNode)과 동일한 비율로 그려 크기 일치
       return `<g class="ap-asset-icon${sel}" data-asset-id="${asset.assetId}" data-x="${F(it.x + it.size / 2)}" data-y="${F(it.y + it.size / 2)}" data-scale="${F(it.size / 32)}" transform="translate(${F(it.x)},${F(it.y)})" style="cursor:grab;">`
         + `<title>${esc(asset.name)}</title>`
-        + `<rect width="${F(it.size)}" height="${F(it.size)}" rx="3" fill="white" stroke="#ccc" stroke-width="1" opacity="0.9"/>`
-        + `<image href="${iconHref(asset.icon)}" width="${F(it.size - 2)}" height="${F(it.size - 2)}" x="1" y="1"/></g>`;
+        + `<rect width="${F(it.size)}" height="${F(it.size)}" rx="4" fill="white" stroke="#ccc" stroke-width="1" opacity="0.9"/>`
+        + `<image href="${iconHref(asset.icon)}" width="${F(imgSz)}" height="${F(imgSz)}" x="${F(imgOff)}" y="${F(imgOff)}"/></g>`;
     }
     function groupNode(grp) {
       const ids = memberIdsOf(grp.id);
@@ -579,7 +583,7 @@
         + `<pattern id="ap-grid-lg" width="${gl}" height="${gl}" patternUnits="userSpaceOnUse"><rect width="${gl}" height="${gl}" fill="url(#ap-grid-sm)"/><path d="M ${gl} 0 L 0 0 0 ${gl}" fill="none" stroke="#ccc" stroke-width="0.5" opacity="0.3"/></pattern>`;
       groups.forEach(g => defs += `<clipPath id="ap-grp-clip-${g.id}"><rect x="${F(g.x)}" y="${F(g.y)}" width="${F(g.width)}" height="${F(g.height)}" rx="6"/></clipPath>`);
       let body = `<rect width="1000" height="600" fill="${bg}"/>`;
-      if (snapEnabled) body += `<rect width="1000" height="600" fill="url(#ap-grid-lg)"/>`;
+      if (gridSnap) body += `<rect width="1000" height="600" fill="url(#ap-grid-lg)"/>`;
       if (config.imagePath) { const ir = calcImageRect(config); body += `<image href="${iconHref(config.imagePath)}" x="${F(ir.x)}" y="${F(ir.y)}" width="${F(ir.w)}" height="${F(ir.h)}" preserveAspectRatio="none" opacity="0.5"/>`; }
       groups.forEach(g => body += groupNode(g));
       for (const a of allAssets) {
@@ -737,7 +741,8 @@
     }
 
     function updateToolbar() {
-      $('ap-snap').classList.toggle('is-active', snapEnabled);
+      $('ap-snap').classList.toggle('is-active', neighborSnap);
+      $('ap-gridsnap').classList.toggle('is-active', gridSnap);
       $('ap-tool-pan').classList.toggle('is-active', activeTool === 'pan');
       $('ap-undo').disabled = undo.length === 0;
       $('ap-redo').disabled = redo.length === 0;
@@ -858,10 +863,38 @@
       if (selAssets.size < 2) return;
       pushUndo();
       const ids = [...selAssets];
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const id of ids) { const p = getPosition(id); const sz = 32 * p.scale; minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x + sz); maxY = Math.max(maxY, p.y + sz + 14); }
-      const pad = 14, tempId = nextTempGroupId--;
-      groups.push({ id: tempId, name: '그룹', x: Math.round((minX - pad) * 100) / 100, y: Math.round((minY - pad - 14) * 100) / 100, width: Math.round((maxX - minX + pad * 2) * 100) / 100, height: Math.round((maxY - minY + pad * 2 + 14) * 100) / 100, color: null, floor: 1 });
+      const count = ids.length, tempId = nextTempGroupId--;
+
+      // 선택 자산이 기존 그룹에 속해 있으면 거기서 빼고(중복 멤버 방지), 비워진 그룹은 자동 삭제
+      const idSet = new Set(ids);
+      for (const [gid, mems] of [...groupMembers]) {
+        const kept = mems.filter(m => !idSet.has(m));
+        if (kept.length === mems.length) continue;
+        if (kept.length === 0) { groups = groups.filter(g => g.id !== gid); groupMembers.delete(gid); expanded.delete(gid); }
+        else groupMembers.set(gid, kept);
+      }
+
+      // 그룹 크기 = 멤버 개수 × 개별 크기(scale)에 맞춰 산정 → 그룹 안에서도 지정한 크기로 보이도록.
+      // (layoutGroupAssets 의 pad=2 / gap=2 와 동일하게 맞추면 셀 크기가 정확히 32*scale 이 된다)
+      const scales = ids.map(id => { const s = getPosition(id).scale; return s > 0 ? s : globalScale; });
+      const tScale = scales.reduce((a, b) => a + b, 0) / scales.length;
+      const cell = 32 * (tScale > 0 ? tScale : 1), gap = 2, edge = 2;
+      const cols = Math.max(1, Math.ceil(Math.sqrt(count))), rows = Math.ceil(count / cols);
+      const bw = Math.round((cell * cols + gap * (cols - 1) + edge * 2) * 100) / 100;
+      const bh = Math.round((cell * rows + gap * (rows - 1) + edge * 2) * 100) / 100;
+
+      // 현재 보이는 화면(viewBox) 중앙에 배치 → 사용자 화면에 보이도록 (없으면 선택 자산 중심 근처)
+      let gx, gy;
+      const vb = inited && window.assetPlacementEditor.getViewBox ? window.assetPlacementEditor.getViewBox('ap-editor-container') : null;
+      if (vb) {
+        gx = Math.round((vb.x + (vb.w - bw) / 2) * 100) / 100;
+        gy = Math.round((vb.y + (vb.h - bh) / 2) * 100) / 100;
+      } else {
+        let cx = 0, cy = 0; for (const id of ids) { const p = getPosition(id); cx += p.x; cy += p.y; } cx /= count; cy /= count;
+        gx = Math.round((cx - bw / 2) * 100) / 100; gy = Math.round((cy - bh / 2) * 100) / 100;
+      }
+
+      groups.push({ id: tempId, name: '그룹', x: gx, y: gy, width: bw, height: bh, color: null, floor: 1 });
       groupMembers.set(tempId, ids);
       rebuildIndexes(); selAssets.clear(); markChanged(); refresh();
       toast('그룹이 생성되었습니다.');
@@ -1018,7 +1051,7 @@
       const gsv = $('ap-scale-val'); if (gsv) gsv.textContent = globalScale.toFixed(2) + '×';
       renderSvg(); renderPanel(); updateSelActions(); updateToolbar();
       window.assetPlacementEditor.init('ap-editor-container', shim);
-      window.assetPlacementEditor.setSnapConfig('ap-editor-container', snapEnabled, snapGridSize);
+      window.assetPlacementEditor.setSnapConfig('ap-editor-container', neighborSnap, snapGridSize, gridSnap);
       window.assetPlacementEditor.setTool('ap-editor-container', activeTool);
       inited = true;
       updateToolbar();
@@ -1028,8 +1061,9 @@
 
     function bind() {
       $('ap-tool-pan').addEventListener('click', () => { activeTool = activeTool === 'pan' ? 'select' : 'pan'; window.assetPlacementEditor.setTool('ap-editor-container', activeTool); updateToolbar(); });
-      $('ap-snap').addEventListener('click', () => { snapEnabled = !snapEnabled; window.assetPlacementEditor.setSnapConfig('ap-editor-container', snapEnabled, snapGridSize); renderSvg(); updateToolbar(); });
-      $('ap-grid').addEventListener('change', e => { snapGridSize = clamp(parseInt(e.target.value, 10) || 20, 5, 100); e.target.value = snapGridSize; window.assetPlacementEditor.setSnapConfig('ap-editor-container', snapEnabled, snapGridSize); renderSvg(); });
+      $('ap-snap').addEventListener('click', () => { neighborSnap = !neighborSnap; window.assetPlacementEditor.setSnapConfig('ap-editor-container', neighborSnap, snapGridSize, gridSnap); updateToolbar(); });
+      $('ap-gridsnap').addEventListener('click', () => { gridSnap = !gridSnap; window.assetPlacementEditor.setSnapConfig('ap-editor-container', neighborSnap, snapGridSize, gridSnap); renderSvg(); updateToolbar(); });
+      $('ap-grid').addEventListener('change', e => { snapGridSize = clamp(parseInt(e.target.value, 10) || 20, 5, 100); e.target.value = snapGridSize; window.assetPlacementEditor.setSnapConfig('ap-editor-container', neighborSnap, snapGridSize, gridSnap); renderSvg(); });
       $('ap-zoom-in').addEventListener('click', () => { window.assetPlacementEditor.zoomIn('ap-editor-container'); updateToolbar(); });
       $('ap-zoom-out').addEventListener('click', () => { window.assetPlacementEditor.zoomOut('ap-editor-container'); updateToolbar(); });
       $('ap-zoom-reset').addEventListener('click', () => { window.assetPlacementEditor.resetZoom('ap-editor-container'); updateToolbar(); });
