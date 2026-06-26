@@ -28,6 +28,7 @@ public class DexaReadService
     private const string CacheKeyAssets = "dexa_view_assets";
     private const string CacheKeyAgents = "dexa_agents";
     private const string CacheKeyLatestActions = "dexa_latest_actions";
+    private const string CacheKeyAllActions = "dexa_all_actions";
     private const string CacheKeyAssetStatuses = "dexa_asset_statuses";
 
     /// <summary>
@@ -63,7 +64,26 @@ public class DexaReadService
         _cache.Remove(CacheKeyAssets);
         _cache.Remove(CacheKeyAgents);
         _cache.Remove(CacheKeyLatestActions);
+        _cache.Remove(CacheKeyAllActions);
         // action 캐시(GetRecentActionsAsync)는 key에 limit 포함 → 패턴 삭제 불가이므로 짧은 TTL로 대체
+    }
+
+    // ── 연결 상태 ──
+
+    /// <summary>DEXA DB 연결 가능 여부 — 셸 헤더 상태 표시용. 가벼운 SELECT 1.</summary>
+    public async Task<bool> IsConnectedAsync()
+    {
+        try
+        {
+            using var conn = _dexaDb.Create();
+            await conn.QueryFirstOrDefaultAsync<int>("SELECT 1");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DEXA DB 연결 확인 실패");
+            return false;
+        }
     }
 
     // ── 자산 ──
@@ -370,8 +390,15 @@ public class DexaReadService
         }
     }
 
+    /// <summary>
+    /// 전체 백업 액션 조회 (15초 캐시). 연속 실패 횟수 집계용 — 전체 테이블 스캔이라 비용이 크므로
+    /// 캐시로 중복 조회를 방지한다(자산 상태 합성에서 자산당 연속 실패 카운트에 사용).
+    /// </summary>
     public async Task<List<DexaAction>> GetAllActionsAsync()
     {
+        if (_cache.TryGetValue(CacheKeyAllActions, out List<DexaAction>? cached))
+            return cached!;
+
         try
         {
             using var conn = _dexaDb.Create();
@@ -382,7 +409,9 @@ public class DexaReadService
                 INNER JOIN [action.schedule] acs ON acs.actionId = ab.id
                 ORDER BY ab.started DESC
                 """);
-            return result.ToList();
+            var list = result.ToList();
+            _cache.Set(CacheKeyAllActions, list, ActionCacheTtl);
+            return list;
         }
         catch (Exception ex)
         {

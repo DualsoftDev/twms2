@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Twms2.Server.Data;
 using Twms2.Server.Helpers;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Services;
@@ -17,13 +18,21 @@ namespace Twms2.Server.Controllers;
 public class NavController : ControllerBase
 {
     private readonly AssetStatusService _status;
+    private readonly DexaReadService _dexa;
+    private readonly DexaDbConnection _dexaDb;
 
-    public NavController(AssetStatusService status) => _status = status;
+    public NavController(AssetStatusService status, DexaReadService dexa, DexaDbConnection dexaDb)
+    {
+        _status = status;
+        _dexa = dexa;
+        _dexaDb = dexaDb;
+    }
 
     [HttpGet]
     public async Task<IActionResult> Get()
     {
         var statuses = await _status.GetAssetStatusesAsync();
+        var dexaOnline = await _dexa.IsConnectedAsync();
 
         // 관리 메뉴 노출 여부 — 인증 쿠키의 Admin 역할로 판정
         var auth = await HttpContext.AuthenticateAsync(AuthController.Scheme);
@@ -41,8 +50,43 @@ public class NavController : ControllerBase
         {
             logoUrl = ScanLogoUrl(),
             isAdmin,
+            dexaOnline,
             kpi = new { total, backedUp = changed, unchanged, failed },
             tree = BuildTree(statuses),
+        });
+    }
+
+    /// <summary>
+    /// DEXA 서버/에이전트 상태 상세 — 셸 헤더 상태 배지 클릭 시 표시.
+    /// DB 연결 가능 여부 + 프로바이더/대상 + 등록된 에이전트 목록(온라인 여부 포함).
+    /// </summary>
+    [HttpGet("dexa-status")]
+    public async Task<IActionResult> DexaStatus()
+    {
+        var online = await _dexa.IsConnectedAsync();
+        // 연결된(온라인) 에이전트만 표시
+        var agents = online ? (await _dexa.GetAgentsAsync()).Where(a => a.Online).ToList() : [];
+
+        var provider = _dexaDb.Provider == DexaDbProvider.SqlServer ? "MSSQL" : "SQLite";
+        // 연결 대상: MSSQL은 DB 스키마명, SQLite는 파일 경로
+        var target = _dexaDb.Provider == DexaDbProvider.SqlServer ? _dexaDb.Schema : _dexaDb.DbFilePath;
+
+        return Ok(new
+        {
+            online,
+            provider,
+            target,
+            agentCount = agents.Count,
+            agents = agents
+                .OrderBy(a => a.Name)
+                .Select(a => new
+                {
+                    name = a.Name,
+                    ip = a.Ip,
+                    swVersion = a.SwVersion,
+                    connected = a.Connected,
+                })
+                .ToList(),
         });
     }
 

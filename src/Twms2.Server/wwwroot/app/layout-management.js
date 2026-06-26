@@ -3,7 +3,7 @@
  * 레이아웃 목록(테이블) + 생성/복제/이름변경/순서변경/삭제를 정적 페이지로 이식.
  * GET /api/admin/layout (목록 + 도면 썸네일).
  * 쓰기: POST(생성/복제) · PUT(이름/순서) · DELETE(삭제).
- * 편집기(/admin/layout/{id})는 Blazor 페이지 유지 — 단순 링크로 진입.
+ * 편집기(/admin/layout/{id}/edit)는 정적 페이지(layout-editor) — 단순 링크로 진입.
  * 30초 폴링 + 탭 복귀 시 갱신.
  * ==========================================================================*/
 (function () {
@@ -60,7 +60,7 @@
         <td>${fmtDateTime(l.updatedAt)}</td>
         <td>
           <div class="lm-actions">
-            <a class="lm-iconbtn lm-iconbtn-edit" href="/admin/layout/${l.id}"><span class="material-symbols-outlined">edit</span>편집</a>
+            <a class="lm-iconbtn lm-iconbtn-edit" href="/admin/layout/${l.id}/edit"><span class="material-symbols-outlined">edit</span>편집</a>
             <button class="lm-iconbtn" data-act="duplicate" data-id="${l.id}"><span class="material-symbols-outlined">content_copy</span>복제</button>
             <button class="lm-iconbtn" data-act="rename" data-id="${l.id}"><span class="material-symbols-outlined">drive_file_rename_outline</span>이름변경</button>
             <a class="lm-iconbtn" href="/admin/layout/${l.id}?tab=dexa"><span class="material-symbols-outlined">file_upload</span>이전 TWMS 가져오기</a>

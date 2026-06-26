@@ -1,11 +1,17 @@
 /*
- * TWMS2.0 정적 페이지 — 공통 Tailwind(Play CDN) 설정.
- * 색상 토큰은 전부 CSS 변수(var(--c-*))로 매핑 → theme.css 의 :root / html.dark 가
- * 값을 공급하므로 .dark 토글만으로 라이트/다크가 즉시 전환된다(뉴모피즘 그림자 포함).
- * ⚠ Play CDN 은 개발/검증용. 운영 배포 전 `tailwindcss` 컴파일(self-host)로 교체할 것.
+ * TWMS2.0 — Tailwind 빌드타임 컴파일 설정 (self-host).
+ * 이전 wwwroot/app/tailwind-config.js (Play CDN 런타임 설정) 을 1:1 이식.
+ * 색상은 전부 CSS 변수(var(--c-*)) → theme.css(:root / html.dark) 가 값 공급.
+ * 컴파일: `npm run build:css` → wwwroot/app/twms.css
  */
-tailwind.config = {
+module.exports = {
   darkMode: 'class',
+  // 정적 페이지 HTML + JS 안의 유틸 클래스를 스캔 (JS 의 문자열 리터럴 포함)
+  content: [
+    './wwwroot/app/**/*.html',
+    './wwwroot/app/**/*.js',
+    './wwwroot/js/**/*.js',
+  ],
   theme: {
     extend: {
       colors: {
@@ -42,7 +48,6 @@ tailwind.config = {
         'outline': 'var(--c-outline)',
         'outline-variant': 'var(--c-outline-variant)',
         'inverse-on-surface': 'var(--c-inverse-on-surface)',
-        // 백업 상태 색 (LayoutHelpers.GetHealthColor 와 동일)
         'health-backedup': 'var(--health-backedup)',
         'health-unchanged': 'var(--health-unchanged)',
         'health-failed': 'var(--health-failed)',
@@ -65,4 +70,8 @@ tailwind.config = {
       },
     },
   },
+  plugins: [
+    require('@tailwindcss/forms'),
+    require('@tailwindcss/container-queries'),
+  ],
 }

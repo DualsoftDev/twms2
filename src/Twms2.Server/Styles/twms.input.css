@@ -1,0 +1,6 @@
+/* TWMS2.0 Tailwind 진입 CSS — `npm run build:css` 가 wwwroot/app/twms.css 로 컴파일.
+ * Play CDN(cdn.tailwindcss.com?plugins=forms,container-queries) 대체.
+ * 뉴모피즘 컴포넌트/색 토큰은 theme.css 가 별도 공급(여기엔 Tailwind 레이어만). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

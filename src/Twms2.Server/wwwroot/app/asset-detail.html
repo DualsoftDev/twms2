@@ -7,12 +7,9 @@
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
   <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
-  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/lib/fonts/fonts.css" />
+  <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
+  <link rel="stylesheet" href="/app/twms.css" />
   <link rel="stylesheet" href="/app/theme.css" />
   <style>
     /* ── 자산 상세 페이지 전용 ── */
@@ -88,6 +85,39 @@
     .ad-empty { padding: 16px; color: var(--c-on-surface-variant); font-size: 13px; }
     .ad-loading { padding: 40px; text-align: center; color: var(--c-on-surface-variant); }
 
+    /* ── 경유 자산 다이얼로그 (뉴모피즘) ── */
+    .ad-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: none; align-items: center; justify-content: center; z-index: 200; padding: 24px;
+    }
+    .ad-modal-backdrop.show { display: flex; }
+    .ad-modal {
+      background: var(--c-surface); border-radius: 24px; padding: 24px;
+      width: min(560px, 100%); max-height: 88vh; display: flex; flex-direction: column;
+      box-shadow: 8px 8px 18px var(--nm-dark), -8px -8px 18px var(--nm-light);
+    }
+    .ad-modal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .ad-modal-title { font-weight: 800; font-size: 1.05rem; color: var(--c-on-surface); margin: 0; display: flex; align-items: center; gap: 8px; flex: 1; }
+    .ad-modal-title .material-symbols-outlined { font-size: 22px; color: var(--c-primary); }
+    .ad-modal-sub { font-size: 13px; color: var(--c-on-surface-variant); margin: 0 0 14px; }
+    .ad-via-list { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 2px; }
+    .ad-via-row {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px;
+      background: var(--c-surface-container-low);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .ad-via-icon {
+      width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .ad-via-icon img { width: 26px; height: 26px; object-fit: contain; }
+    .ad-via-icon .material-symbols-outlined { font-size: 22px; color: var(--c-primary); }
+    .ad-via-info { flex: 1; min-width: 0; }
+    .ad-via-name { font-weight: 700; font-size: 14px; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ad-via-meta { font-size: 12px; color: var(--c-on-surface-variant); margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ad-via-meta .ad-via-ip { font-family: var(--font-mono, monospace); }
+
     @media (max-width: 860px) { .ad-grid2 { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -104,6 +134,18 @@
 
     <div class="nm-card" id="ad-root">
       <div class="ad-loading"><span class="material-symbols-outlined" style="font-size:40px;opacity:0.4;">hourglass_top</span><div>불러오는 중...</div></div>
+    </div>
+  </div>
+
+  <!-- ─── 다이얼로그: 이 자산을 경유하는 자산 ─── -->
+  <div class="ad-modal-backdrop" id="ad-via-modal">
+    <div class="ad-modal">
+      <div class="ad-modal-head">
+        <h3 class="ad-modal-title"><span class="material-symbols-outlined">hub</span>이 자산을 경유하는 자산</h3>
+        <button class="ad-iconbtn" data-close title="닫기"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <p class="ad-modal-sub" id="ad-via-sub"></p>
+      <div class="ad-via-list" id="ad-via-list"></div>
     </div>
   </div>
 

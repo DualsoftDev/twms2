@@ -42,21 +42,26 @@ public class DashboardService
     /// 대시보드 핵심 데이터를 한 번에 조회 (백업 요약 + 최근 활동).
     /// assets/actions를 1회만 조회하여 중복 DB 접근 방지.
     /// </summary>
-    public async Task<DashboardCoreResult> GetDashboardCoreAsync(int activityLimit = 20)
+    public async Task<DashboardCoreResult> GetDashboardCoreAsync(int activityLimit = 20, bool todayActivities = false)
     {
         try
         {
             var assetsTask = _dexaRead.GetViewAssetsAsync();
-            // 백업 요약: 7일치 전체 조회 (LIMIT 없음)
+            // 백업 요약/스케줄/오늘 활동: 7일치 전체 조회 (LIMIT 없음)
             var weekActionsTask = _dexaRead.GetActionsInRangeAsync(DateTime.Now.AddDays(-7), DateTime.Now.AddDays(1));
-            // 최근 활동: 최신 200건이면 충분 (UI에 20건만 표시)
-            var recentActionsTask = _dexaRead.GetRecentActionsAsync(200);
+            // 최근 활동(최신 N건): 오늘 기준 전체 표시 모드에서는 weekActions 로 충분하므로 생략
+            var recentActionsTask = todayActivities
+                ? Task.FromResult(new List<DexaAction>())
+                : _dexaRead.GetRecentActionsAsync(200);
             await Task.WhenAll(assetsTask, weekActionsTask, recentActionsTask);
 
             var assets = assetsTask.Result;
 
             var backup = BuildBackupSummary(assets, weekActionsTask.Result);
-            var activities = BuildRecentActivities(assets, recentActionsTask.Result, activityLimit);
+            // 오늘 기준이면 당일 전체(최신순), 아니면 기존 최신 N건
+            var activities = todayActivities
+                ? BuildTodayActivities(assets, weekActionsTask.Result)
+                : BuildRecentActivities(assets, recentActionsTask.Result, activityLimit);
             var schedule = BuildTodaySchedule(assets, weekActionsTask.Result);
             var drive = GetDexaDbDriveStat();
 
@@ -182,6 +187,31 @@ public class DashboardService
                 };
             })
             .OrderBy(s => s.Started)
+            .ToList();
+    }
+
+    /// <summary>오늘(당일) 발생한 모든 작업 활동 — 최신순. (대시보드 "최근 작업" 전체 표시용)</summary>
+    private static List<RecentActivity> BuildTodayActivities(List<ViewAsset> assets, List<DexaAction> weekActions)
+    {
+        var today = DateTime.Today;
+        var assetMap = assets.ToDictionary(a => a.AssetId, a => a.DisplayName);
+
+        return weekActions
+            .Where(a => a.Started.HasValue && a.Started.Value.Date == today)
+            .OrderByDescending(a => a.Started)
+            .Select(a =>
+            {
+                assetMap.TryGetValue(a.AssetId, out var name);
+                return new RecentActivity
+                {
+                    Source = "dexa",
+                    AssetId = a.AssetId,
+                    AssetName = name ?? $"Asset #{a.AssetId}",
+                    Action = a.IsIncomplete ? "작업 미완료" : a.IsInProgress ? "작업 진행중" : "작업",
+                    Success = a.IsIncomplete ? false : a.IsInProgress ? null : a.IsSuccess,
+                    Timestamp = a.Started ?? DateTime.MinValue,
+                };
+            })
             .ToList();
     }
 

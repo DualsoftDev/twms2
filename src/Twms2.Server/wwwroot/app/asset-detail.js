@@ -26,7 +26,22 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const $ = (id) => document.getElementById(id);
 
+  // 타입명 → 아이콘 파일 (asset-explorer.typeIcon 과 동일 규칙)
+  function typeIcon(a) {
+    const t = (a.typeName || '').toLowerCase();
+    if (t.includes('robot')) return 'robot.png';
+    if (t.includes('plc') && a.isRobotPlc) return 'robot.png';
+    if (t.includes('plc')) return 'plc.png';
+    if (t.includes('servo')) return 'servo.png';
+    if (t.includes('drive')) return 'drive.png';
+    if (t.includes('hmi') || t.includes('xp')) return 'hmi.png';
+    if (t.includes('ftp')) return 'ftp.png';
+    return '';
+  }
+
   let ASSET_ID = null;
+  // 이 자산의 IP 를 경유 IP(via)로 사용하는 다른 자산 목록 (이 자산을 게이트웨이로 연결).
+  let VIA_ASSETS = [];
 
   function readId() {
     // /assets/123 또는 /qr/123 → 123
@@ -66,7 +81,24 @@
       }
       if (!res.ok) return;
       const d = await res.json();
+      await loadViaAssets(d);
       render(d);
+    } catch (e) { /* 무시 */ }
+  }
+
+  // 이 자산의 IP 를 경유 IP 로 갖는 다른 자산을 통합 목록(/api/assets)에서 추려낸다.
+  // (해당 자산들은 이 자산을 게이트웨이로 거쳐 연결됨) — IP 가 없으면 비교 불가.
+  async function loadViaAssets(d) {
+    VIA_ASSETS = [];
+    const myIp = d.ip == null ? '' : String(d.ip).trim();
+    if (!myIp) return;
+    try {
+      const res = await fetch('/api/assets', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return;
+      const data = await res.json();
+      VIA_ASSETS = (data.assets || []).filter(a =>
+        a.assetId !== d.assetId &&
+        a.ipVia != null && String(a.ipVia).trim() === myIp);
     } catch (e) { /* 무시 */ }
   }
 
@@ -212,6 +244,11 @@
       ? `<a class="ad-btn" href="/api/download/backup/${ASSET_ID}/${d.latestVersion}" target="_blank"><span class="material-symbols-outlined">download</span>다운로드</a>`
       : `<button class="ad-btn" disabled style="opacity:0.45;cursor:not-allowed;"><span class="material-symbols-outlined">download</span>다운로드</button>`;
 
+    // 이 자산을 경유 게이트웨이로 사용하는 자산이 있으면 다이얼로그 진입 버튼 노출.
+    const viaBtn = VIA_ASSETS.length > 0
+      ? `<button class="ad-btn" id="ad-via-btn" style="color:var(--c-primary);"><span class="material-symbols-outlined">hub</span>경유 자산 ${VIA_ASSETS.length}</button>`
+      : '';
+
     // 관련 링크 (백업 이력 — 이름 검색으로 통합조회 진입; AssetDetail.GoToBackupHistory 이식)
     const nameQ = encodeURIComponent(d.name || '');
     const today = (() => { const t = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`; })();
@@ -231,6 +268,7 @@
 
       <div class="ad-actions">
         ${badges.join('')}
+        ${viaBtn}
         ${dlBtn}
         <a class="ad-btn" href="${histUrl}"><span class="material-symbols-outlined">history</span>백업 정보</a>
       </div>
@@ -267,11 +305,55 @@
         <a class="ad-btn" href="/assets"><span class="material-symbols-outlined">grid_view</span>전체 자산 목록</a>
       </div>
     `;
+
+    // render() 는 폴링마다 ad-root 를 재생성하므로 버튼 핸들러를 매번 다시 연결.
+    const viaBtnEl = $('ad-via-btn');
+    if (viaBtnEl) viaBtnEl.addEventListener('click', () => openViaDialog(d));
   }
+
+  // "경유 자산" 다이얼로그: 이 자산을 게이트웨이로 거쳐 연결되는 자산 목록 + 바로가기.
+  function openViaDialog(d) {
+    const sub = $('ad-via-sub');
+    if (sub) sub.innerHTML = `<strong>${esc(d.name)}</strong> (${esc(d.ip || '-')}) 을(를) 경유 IP 로 사용하는 자산 ${VIA_ASSETS.length}개입니다.`;
+    $('ad-via-list').innerHTML = VIA_ASSETS.map(a => {
+      const icon = typeIcon(a);
+      const iconHtml = icon
+        ? `<img src="/images/icons/${icon}" alt="" />`
+        : `<span class="material-symbols-outlined">devices</span>`;
+      const meta = [
+        a.typeName ? `<span>${esc(a.typeName)}</span>` : '',
+        a.ip ? `<span class="ad-via-ip">${esc(a.ip)}</span>` : '',
+        a.baseNumber != null ? `<span>Base ${esc(a.baseNumber)}</span>` : '',
+        a.slotNumber != null ? `<span>Slot ${esc(a.slotNumber)}</span>` : '',
+        a.lineName ? `<span>${esc(a.lineName)}</span>` : '',
+      ].filter(Boolean).join('');
+      return `
+      <div class="ad-via-row">
+        <div class="ad-via-icon">${iconHtml}</div>
+        <div class="ad-via-info">
+          <div class="ad-via-name">${esc(a.name) || ('자산 #' + a.assetId)}</div>
+          <div class="ad-via-meta">${meta}</div>
+        </div>
+        <a class="ad-btn" href="/assets/${a.assetId}"><span class="material-symbols-outlined">arrow_forward</span>바로 가기</a>
+      </div>`;
+    }).join('');
+    $('ad-via-modal').classList.add('show');
+  }
+  function closeViaModal() { $('ad-via-modal').classList.remove('show'); }
 
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: '' });
     ASSET_ID = readId();
+
+    // 경유 자산 다이얼로그 닫기: 배경 클릭 / 닫기 버튼 / ESC
+    const viaModal = $('ad-via-modal');
+    if (viaModal) {
+      viaModal.addEventListener('click', (e) => {
+        if (e.target === viaModal || e.target.closest('[data-close]')) closeViaModal();
+      });
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeViaModal(); });
+
     await load();
     setInterval(load, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });

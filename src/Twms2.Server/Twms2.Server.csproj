@@ -8,6 +8,15 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <!-- 프런트 자산 빌드 툴체인(node_modules 등)은 .NET 빌드/배포에서 제외.
+       결과물(wwwroot/app/twms.css, wwwroot/lib/fonts/)만 wwwroot 로 배포된다. -->
+  <ItemGroup>
+    <Compile Remove="node_modules/**" />
+    <Content Remove="node_modules/**" />
+    <None Remove="node_modules/**" />
+    <EmbeddedResource Remove="node_modules/**" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Hocon" Version="2.0.4" />

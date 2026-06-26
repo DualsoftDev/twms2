@@ -6,18 +6,35 @@
   'use strict';
 
   const HEALTH = {
-    backedup:   { color: 'var(--health-backedup)',   label: '백업 갱신', chip: 'chip-success',    tile: 'heatmap-tile-success' },
-    unchanged:  { color: 'var(--health-unchanged)',  label: '변경 없음', chip: 'chip-info',       tile: 'heatmap-tile-info' },
-    failed:     { color: 'var(--health-failed)',     label: '작업 실패', chip: 'chip-error',      tile: 'heatmap-tile-error' },
-    inprogress: { color: 'var(--health-inprogress)', label: '작업중',    chip: 'chip-warning',    tile: 'heatmap-tile-inprogress' },
-    unknown:    { color: 'var(--health-unknown)',    label: '내역 없음', chip: 'chip-default',    tile: 'heatmap-tile-warning' },
+    backedup:   { color: 'var(--health-backedup)',   label: '백업 갱신', chip: 'chip-success' },
+    unchanged:  { color: 'var(--health-unchanged)',  label: '변경 없음', chip: 'chip-info' },
+    failed:     { color: 'var(--health-failed)',     label: '작업 실패', chip: 'chip-error' },
+    inprogress: { color: 'var(--health-inprogress)', label: '작업중',    chip: 'chip-warning' },
+    unknown:    { color: 'var(--health-unknown)',    label: '내역 없음', chip: 'chip-default' },
   };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const $ = (id) => document.getElementById(id);
+  let bpRenderer = null; // 전체 자산 분포도(도면) 렌더러 — 최초 1회 마운트
+  let lastServerDay = null; // 서버가 마지막으로 내려준 오늘 날짜(yyyy-MM-dd) — 자정 변경 감지용
+  const localDay = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+  const lastStats = { type: [], line: [] }; // 토글 시 재조회 없이 다시 그리기 위한 캐시
+  const chartMode = (kind) => (localStorage.getItem('twms-dash-chart-' + kind) === 'donut') ? 'donut' : 'bar';
+  const segDef = [
+    ['backedUp', 'backedup'], ['unchanged', 'unchanged'], ['failed', 'failed'],
+    ['inProgress', 'inprogress'], ['unknown', 'unknown'],
+  ];
+
+  // 주의 필요 자산 / 최근 작업: 다음·이전 버튼으로 페이지 단위 조회. 폴링 중에도 현재 페이지를 유지한다.
+  const ATTN_KEY = 'twms-dash-attn-threshold'; // 연속 실패 기준(사용자 설정)
+  const ATTN_PAGE_SIZE = 8;   // 주의 필요 자산: 페이지당 행 수
+  const ACT_PAGE_SIZE = 7;    // 최근 작업: 페이지당 항목 수
+  let attnList = [], attnPage = 0; // 주의 필요 자산 캐시 + 현재 페이지
+  let actList = [], actPage = 0;   // 최근 작업 캐시 + 현재 페이지
+  const attnThreshold = () => { const v = parseInt(localStorage.getItem(ATTN_KEY), 10); return (Number.isFinite(v) && v >= 1) ? Math.min(v, 100) : 3; };
 
   async function load() {
     try {
-      const res = await fetch('/api/dashboard', { headers: { 'Accept': 'application/json' } });
+      const res = await fetch('/api/dashboard?failThreshold=' + attnThreshold(), { headers: { 'Accept': 'application/json' } });
       if (!res.ok) return;
       render(await res.json());
     } catch (e) { /* 무시 */ }
@@ -25,14 +42,36 @@
 
   function render(d) {
     renderKpi(d.kpi || {});
-    renderHeatmap(d.heatmap || []);
-    renderSegList('type-stats', d.typeStats || [], 'type');
-    renderSegList('line-stats', d.lineStats || [], 'line');
-    renderAttention(d.attention || []);
+    lastStats.type = d.typeStats || [];
+    lastStats.line = d.lineStats || [];
+    renderStats('type');
+    renderStats('line');
+    renderAttention(d.attention || [], d.attentionThreshold);
     renderActivities(d.activities || []);
     renderTimeline(d.schedule || [], d.today);
     renderDrive(d.drive);
-    if (d.today) $('today-label').textContent = d.today;
+    if (d.today) {
+      lastServerDay = d.today;
+      $('today-label').textContent = d.today;
+      const td = $('kpi-total-date');
+      if (td) td.textContent = d.today;
+    }
+
+    // 전체 자산 분포도(도면) — 최초 1회 마운트. 라인별/개별은 헤더 토글로 사용자가 직접 전환(선택 기억).
+    if (!bpRenderer && window.LayoutRenderer) {
+      bpRenderer = LayoutRenderer.mount({
+        viewport: 'dash-bp-viewport',
+        count: 'dash-bp-count',
+        viewmode: 'dash-bp-viewmode',
+        tabs: 'dash-bp-tabs',
+        splitBtn: 'dash-bp-split',
+        fullscreenBtn: 'dash-bp-fs',
+        storeKey: 'twms-dash-bp-viewmode',
+        splitStoreKey: 'twms-dash-bp-split',
+        defaultMode: 0,
+        poll: 30000,
+      });
+    }
   }
 
   function renderKpi(k) {
@@ -45,60 +84,108 @@
     $('kpi-failed-pct').textContent = (k.failedPct ?? 0) + '%';
   }
 
-  function renderHeatmap(tiles) {
-    const host = $('heatmap');
-    if (!tiles.length) { host.innerHTML = '<p class="text-on-surface-variant" style="padding:16px;">등록된 자산이 없습니다.</p>'; return; }
-    host.innerHTML = tiles.map(t => {
-      const h = HEALTH[t.health] || HEALTH.unknown;
-      const net = t.offline ? '오프라인' : '온라인';
-      const title = `[${t.name}]\n백업: ${h.label}\n네트워크: ${net}`;
-      return `<a href="/assets/${t.assetId}" class="heatmap-tile ${h.tile}${t.offline ? ' heatmap-tile-offline' : ''}" title="${esc(title)}"></a>`;
-    }).join('');
-  }
-
-  function renderSegList(hostId, stats, kind) {
-    const host = $(hostId);
+  // 타입/라인별 현황을 막대 또는 도넛으로 그린다. 모드는 localStorage 에 사용자별 저장.
+  function renderStats(kind) {
+    const host = $(kind + '-stats');
+    const stats = lastStats[kind] || [];
+    const mode = chartMode(kind);
+    // 토글 버튼 active 상태 동기화
+    document.querySelectorAll(`.chart-toggle[data-chart="${kind}"] .chart-toggle-btn`).forEach(b => {
+      b.classList.toggle('is-active', b.dataset.mode === mode);
+    });
+    host.className = mode === 'donut' ? 'donut-grid' : 'seg-list';
     if (!stats.length) { host.innerHTML = '<p class="text-on-surface-variant" style="font-size:13px;">데이터가 없습니다.</p>'; return; }
-    const segDef = [
-      ['backedUp', 'backedup'], ['unchanged', 'unchanged'], ['failed', 'failed'],
-      ['inProgress', 'inprogress'], ['unknown', 'unknown'],
-    ];
-    host.innerHTML = stats.map(s => {
-      const total = (s.backedUp || 0) + (s.unchanged || 0) + (s.failed || 0) + (s.inProgress || 0) + (s.unknown || 0);
-      const segs = segDef.map(([key, hk]) => {
-        const val = s[key] || 0; const pct = total > 0 ? 100 * val / total : 0;
-        if (pct <= 0) return '';
-        const link = `/history?tab=1&${kind === 'line' ? 'line' : 'type'}=${encodeURIComponent(s.name)}&health=${hk}`;
-        return `<a href="${link}" class="seg-fill" style="width:${pct.toFixed(1)}%;background:${HEALTH[hk].color};" title="${esc(s.name)} ${HEALTH[hk].label} ${val}">${pct >= 15 ? Math.round(pct) + '%' : ''}</a>`;
-      }).join('');
-      const link = `/history?tab=1&${kind === 'line' ? 'line' : 'type'}=${encodeURIComponent(s.name)}`;
-      return `<div class="seg-item"><a href="${link}" class="seg-item-header">
-        <span class="seg-name">${esc(s.name)}</span><span class="seg-count">${total}</span></a>
-        <div class="seg-track">${segs}</div></div>`;
-    }).join('');
+    host.innerHTML = stats.map(s => mode === 'donut' ? donutItem(s, kind) : barItem(s, kind)).join('');
   }
 
-  function renderAttention(list) {
+  const statTotal = (s) => (s.backedUp || 0) + (s.unchanged || 0) + (s.failed || 0) + (s.inProgress || 0) + (s.unknown || 0);
+  const statLink = (s, kind) => `/history?tab=0&${kind === 'line' ? 'line' : 'type'}=${encodeURIComponent(s.name)}`;
+
+  function barItem(s, kind) {
+    const total = statTotal(s);
+    const segs = segDef.map(([key, hk]) => {
+      const val = s[key] || 0; const pct = total > 0 ? 100 * val / total : 0;
+      if (pct <= 0) return '';
+      return `<a href="${statLink(s, kind)}&health=${hk}" class="seg-fill" style="width:${pct.toFixed(1)}%;background:${HEALTH[hk].color};" title="${esc(s.name)} ${HEALTH[hk].label} ${val}">${pct >= 15 ? Math.round(pct) + '%' : ''}</a>`;
+    }).join('');
+    return `<div class="seg-item"><a href="${statLink(s, kind)}" class="seg-item-header">
+      <span class="seg-name">${esc(s.name)}</span><span class="seg-count">${total}</span></a>
+      <div class="seg-track">${segs}</div></div>`;
+  }
+
+  function donutItem(s, kind) {
+    const total = statTotal(s);
+    const r = 26, c = 32, sw = 11, circ = 2 * Math.PI * r;
+    let offset = 0;
+    const arcs = segDef.map(([key, hk]) => {
+      const val = s[key] || 0; if (val <= 0 || total <= 0) return '';
+      const len = (val / total) * circ;
+      const el = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${HEALTH[hk].color}" stroke-width="${sw}"
+        stroke-dasharray="${len.toFixed(2)} ${(circ - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
+        transform="rotate(-90 ${c} ${c})"><title>${esc(s.name)} ${HEALTH[hk].label} ${val}</title></circle>`;
+      offset += len;
+      return el;
+    }).join('');
+    const ring = arcs || `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--c-surface-container-high)" stroke-width="${sw}"/>`;
+    return `<a href="${statLink(s, kind)}" class="donut-item" title="${esc(s.name)} ${total}">
+      <div class="donut-wrap"><svg viewBox="0 0 64 64" width="64" height="64">${ring}</svg>
+        <span class="donut-center">${total}</span></div>
+      <span class="donut-label">${esc(s.name)}</span></a>`;
+  }
+
+  // 주의 필요 자산: 서버가 임계값 이상 전체를 내려주고, 여기서 다음/이전으로 페이지 단위 표시.
+  function renderAttention(list, threshold) {
+    attnList = list || [];
+    if (threshold) {
+      const sub = $('attn-subtitle');
+      if (sub) sub.textContent = `연속 ${threshold}회 이상 실패`;
+    }
+    paintAttention();
+  }
+
+  function paintAttention() {
     const host = $('attention');
+    const list = attnList;
     if (!list.length) {
-      host.innerHTML = `<div class="chip chip-success" style="display:inline-flex;gap:6px;"><span class="material-symbols-outlined" style="font-size:16px;">check_circle</span>모든 자산이 정상입니다.</div>`;
+      host.innerHTML = `<div class="chip chip-success" style="display:inline-flex;gap:6px;"><span class="material-symbols-outlined" style="font-size:16px;">check_circle</span>해당 기준의 주의 필요 자산이 없습니다.</div>`;
+      renderPager('attn-pager', 0, 1, 0, null);
       return;
     }
+    const pages = Math.max(1, Math.ceil(list.length / ATTN_PAGE_SIZE));
+    if (attnPage >= pages) attnPage = pages - 1;
+    if (attnPage < 0) attnPage = 0;
+    const items = list.slice(attnPage * ATTN_PAGE_SIZE, (attnPage + 1) * ATTN_PAGE_SIZE);
     host.innerHTML = `<table class="nm-table"><thead><tr>
       <th>자산명</th><th>타입</th><th>백업 상태</th><th>연속 실패</th></tr></thead><tbody>
-      ${list.map(a => {
+      ${items.map(a => {
         const h = HEALTH[a.health] || HEALTH.unknown;
         return `<tr><td><a href="/assets/${a.assetId}">${esc(a.name)}</a></td>
           <td>${esc(a.typeName || '-')}</td>
           <td><span class="chip ${h.chip}">${esc(a.healthLabel || h.label)}</span></td>
           <td><span class="chip chip-error">${a.consecutiveFailureCount}회</span></td></tr>`;
       }).join('')}</tbody></table>`;
+    renderPager('attn-pager', attnPage, pages, list.length, (p) => { attnPage = p; paintAttention(); });
   }
 
+  // 최근 작업: 오늘 하루 전체를 다음/이전으로 페이지 단위 표시.
   function renderActivities(list) {
+    actList = list || [];
+    paintActivities();
+  }
+
+  function paintActivities() {
     const host = $('activities');
-    if (!list.length) { host.innerHTML = '<p class="text-on-surface-variant" style="font-size:13px;">활동 이력이 없습니다.</p>'; return; }
-    host.innerHTML = list.slice(0, 6).map(a => {
+    const list = actList;
+    if (!list.length) {
+      host.innerHTML = '<p class="text-on-surface-variant" style="font-size:13px;">오늘 작업 이력이 없습니다.</p>';
+      renderPager('act-pager', 0, 1, 0, null);
+      return;
+    }
+    const pages = Math.max(1, Math.ceil(list.length / ACT_PAGE_SIZE));
+    if (actPage >= pages) actPage = pages - 1;
+    if (actPage < 0) actPage = 0;
+    const items = list.slice(actPage * ACT_PAGE_SIZE, (actPage + 1) * ACT_PAGE_SIZE);
+    host.innerHTML = items.map(a => {
       const cls = a.success === true ? 'activity-icon-success' : a.success === false ? 'activity-icon-error' : 'activity-icon-inprogress';
       const ico = a.success === true ? 'check' : a.success === false ? 'close' : 'hourglass_top';
       const href = a.assetId != null ? `/assets/${a.assetId}` : '#';
@@ -107,6 +194,22 @@
         <div><div class="activity-title">${esc(a.assetName || '-')} ${esc(a.action || '')}</div>
         <div class="activity-time">${esc(fmtTime(a.timestamp))}</div></div></a>`;
     }).join('');
+    renderPager('act-pager', actPage, pages, list.length, (p) => { actPage = p; paintActivities(); });
+  }
+
+  // 다음/이전 페이저 (history 페이지와 동일 동작). total===0 이면 비운다.
+  function renderPager(hostId, page, pages, total, go) {
+    const host = $(hostId);
+    if (!host) return;
+    if (total === 0) { host.innerHTML = ''; return; }
+    host.innerHTML = `
+      <button class="hist-iconbtn" ${page <= 0 ? 'disabled' : ''} data-act="prev"><span class="material-symbols-outlined">chevron_left</span></button>
+      <span>${page + 1} / ${pages} <span style="opacity:0.6;">(${total}건)</span></span>
+      <button class="hist-iconbtn" ${page >= pages - 1 ? 'disabled' : ''} data-act="next"><span class="material-symbols-outlined">chevron_right</span></button>`;
+    const prev = host.querySelector('[data-act="prev"]');
+    const next = host.querySelector('[data-act="next"]');
+    if (prev) prev.addEventListener('click', () => { if (page > 0) go(page - 1); });
+    if (next) next.addEventListener('click', () => { if (page < pages - 1) go(page + 1); });
   }
 
   function renderTimeline(schedule, today) {
@@ -177,10 +280,125 @@
   function fmtTime(s) { if (!s) return ''; const d = new Date(s); if (isNaN(d)) return s; const p = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
 
+  // 차트 토글: 사용자가 막대/도넛 선택 → localStorage 저장 후 캐시로 즉시 재렌더(재조회 X)
+  function bindChartToggles() {
+    document.querySelectorAll('.chart-toggle').forEach(group => {
+      const kind = group.dataset.chart;
+      const cur = chartMode(kind);
+      group.querySelectorAll('.chart-toggle-btn').forEach(b => b.classList.toggle('is-active', b.dataset.mode === cur));
+      group.addEventListener('click', (e) => {
+        const btn = e.target.closest('.chart-toggle-btn');
+        if (!btn) return;
+        localStorage.setItem('twms-dash-chart-' + kind, btn.dataset.mode);
+        renderStats(kind);
+      });
+    });
+  }
+
+  // 전체 자산 분포도 높이 조절: 우측 하단 앵커를 드래그해 높이를 조절하고 localStorage 에 기억한다.
+  // (높이는 CSS 변수 --dash-bp-h 로 적용 → 전체화면 100% 규칙이 그대로 우선한다)
+  function bindBpResize() {
+    const vp = $('dash-bp-viewport');
+    const handle = $('dash-bp-resize');
+    if (!vp || !handle) return;
+    const KEY = 'twms-dash-bp-height';
+    const MIN = 220, MAX = 1600;
+    const clamp = (v) => Math.max(MIN, Math.min(MAX, v));
+
+    // 저장값 복원
+    const saved = parseInt(localStorage.getItem(KEY), 10);
+    if (Number.isFinite(saved)) vp.style.setProperty('--dash-bp-h', clamp(saved) + 'px');
+
+    let startY = 0, startH = 0, dragging = false;
+    const onMove = (e) => {
+      if (!dragging) return;
+      vp.style.setProperty('--dash-bp-h', clamp(startH + (e.clientY - startY)) + 'px');
+    };
+    const onUp = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('is-dragging');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const h = clamp(startH + (e.clientY - startY));
+      try { localStorage.setItem(KEY, String(h)); } catch (_) { /* 무시 */ }
+    };
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      dragging = true;
+      startY = e.clientY;
+      startH = vp.getBoundingClientRect().height; // 현재 렌더 높이(기본 clamp 또는 저장값)에서 시작
+      handle.classList.add('is-dragging');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ns-resize';
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+    // 더블클릭 → 기본 높이로 복원
+    handle.addEventListener('dblclick', () => {
+      vp.style.removeProperty('--dash-bp-h');
+      try { localStorage.removeItem(KEY); } catch (_) { /* 무시 */ }
+    });
+  }
+
+  // 우측 상단 메뉴: 연속 실패 기준을 사용자가 설정 → localStorage 저장 후 새 기준으로 재조회.
+  function bindAttnMenu() {
+    const btn = $('attn-menu-btn');
+    const menu = $('attn-menu');
+    const input = $('attn-threshold-input');
+    if (!btn || !menu || !input) return;
+    input.value = attnThreshold();
+    const apply = (raw) => {
+      const n = Math.max(1, Math.min(100, parseInt(raw, 10) || 3));
+      input.value = n;
+      if (n === attnThreshold()) return; // 변화 없음 → 재조회 생략
+      try { localStorage.setItem(ATTN_KEY, String(n)); } catch (_) { /* 무시 */ }
+      attnPage = 0; // 기준이 바뀌면 첫 페이지부터
+      load();       // 새 기준으로 재조회
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden;
+      if (!menu.hidden) { input.value = attnThreshold(); input.focus(); input.select(); }
+    });
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    menu.querySelectorAll('[data-attn-step]').forEach(b =>
+      b.addEventListener('click', () => apply((parseInt(input.value, 10) || attnThreshold()) + parseInt(b.dataset.attnStep, 10))));
+    input.addEventListener('change', () => apply(input.value));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { apply(input.value); menu.hidden = true; } });
+    document.addEventListener('click', () => { menu.hidden = true; });
+  }
+
+  // 전체 자산 분포도 편집 버튼: 관리자에게만 노출 → 현재 표시 중인 레이아웃 편집기로 이동.
+  function bindBpEdit() {
+    const btn = $('dash-bp-edit');
+    if (!btn) return;
+    const reveal = () => { btn.hidden = !(window.Shell && Shell.isAdmin); };
+    reveal();
+    document.addEventListener('shell:auth', reveal);
+    btn.addEventListener('click', async () => {
+      let id = bpRenderer && bpRenderer.getLayoutId && bpRenderer.getLayoutId();
+      if (!id) {
+        try { const r = await fetch('/api/layout', { headers: { 'Accept': 'application/json' } }); if (r.ok) id = (await r.json()).selectedLayoutId; } catch (_) { /* 무시 */ }
+      }
+      location.href = id ? `/admin/layout/${id}/edit` : '/admin/layout';
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: 'overview' });
+    bindChartToggles();
+    bindBpResize();
+    bindBpEdit();
+    bindAttnMenu();
     await load();
     setInterval(load, 30000);
+    // 자정이 지나 날짜가 바뀌면 카드 날짜를 즉시 갱신하고 데이터를 새로 받는다.
+    setInterval(() => {
+      if (lastServerDay && localDay() !== lastServerDay) load();
+    }, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
   });
 })();

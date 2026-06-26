@@ -7,48 +7,112 @@
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
   <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@500&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
-  <!-- ⚠ Tailwind Play CDN (개발/검증용). 운영 전 self-host 컴파일로 교체. -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script src="/app/tailwind-config.js"></script>
+  <link rel="stylesheet" href="/lib/fonts/fonts.css" />
+  <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
+  <link rel="stylesheet" href="/app/twms.css" />
   <link rel="stylesheet" href="/app/theme.css" />
+  <style>
+    /* 대시보드 도면 위젯: 전폭 카드 안에서 높이 제한 + 중앙 정렬. 전체화면은 꽉 채움.
+       높이는 우측 하단 앵커를 드래그해 조절한다(--dash-bp-h, localStorage 저장). */
+    .dash-bp-stage { text-align: center; line-height: 0; }
+    .dash-bp-wrap { position: relative; display: inline-block; max-width: 100%; text-align: left; }
+    #dash-bp-viewport { width: auto; height: var(--dash-bp-h, clamp(280px, 42vh, 420px)); max-width: 100%; }
+    #dash-bp-viewport:fullscreen { width: 100%; height: 100% !important; max-width: none; }
+    /* 높이 조절 앵커 (우측 하단) — 드래그로 위아래 조절, 더블클릭으로 기본값 복원 */
+    .dash-bp-resize { position: absolute; right: 10px; bottom: 10px; z-index: 5;
+      display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+      border-radius: 9px; cursor: ns-resize; touch-action: none; user-select: none;
+      color: var(--c-on-surface-variant); background: var(--c-surface);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: color .15s ease, box-shadow .15s ease; }
+    .dash-bp-resize:hover { color: var(--c-primary); }
+    .dash-bp-resize.is-dragging { color: var(--c-primary);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .dash-bp-resize .material-symbols-outlined { font-size: 20px; }
+
+    /* 분할(도면 여러 개) 보기: 뷰포트를 전폭 그리드로, 각 도면을 셀(미니 화면)로 표시 */
+    .dash-bp-wrap.lv-split-host { display: block; }
+    #dash-bp-viewport.lv-split { width: 100%; display: grid; gap: 12px; overflow: auto;
+      background: transparent; box-shadow: none; border-radius: 0;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+    .lv-cell { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      border-radius: 16px; overflow: hidden; background: var(--c-surface);
+      box-shadow: inset 3px 3px 7px var(--nm-dark), inset -3px -3px 7px var(--nm-light); }
+    .lv-cell-title { flex: 0 0 auto; padding: 7px 38px 7px 12px; font-size: 12px; font-weight: 700;
+      color: var(--c-on-surface-variant); border-bottom: 1px solid var(--c-outline-variant);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lv-cell-body { position: relative; flex: 1 1 auto; min-height: 0; }
+    /* 셀 우측 상단: 이 도면만 보기(단일 전환) 버튼 — 전체화면에서도 유지 */
+    .lv-cell-only { position: absolute; top: 6px; right: 6px; z-index: 4;
+      display: flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+      border-radius: 8px; cursor: pointer; border: none; opacity: 0.85;
+      color: var(--c-on-surface-variant); background: var(--c-surface);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: color .15s ease, opacity .15s ease; }
+    .lv-cell-only:hover { color: var(--c-primary); opacity: 1; }
+    .lv-cell-only .material-symbols-outlined { font-size: 17px; }
+    /* 전체화면(분할): 상단 정보(도면명·자산수) 숨김 — 도면만 꽉 차게 */
+    #dash-bp-viewport:fullscreen .lv-cell-title { display: none; }
+    /* 분할 토글 버튼 활성 상태 */
+    .dsp-iconbtn.active { color: var(--c-primary); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+
+    /* 다음/이전 페이저 (history 페이지와 동일 패턴) */
+    .hist-iconbtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: all 0.15s ease; text-decoration: none; }
+    .hist-iconbtn:hover:not(:disabled) { color: var(--c-primary); }
+    .hist-iconbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .hist-iconbtn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .hist-iconbtn .material-symbols-outlined { font-size: 18px; }
+    .hist-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--c-on-surface-variant); }
+
+    /* 주의 필요 자산 — 연속 실패 기준 설정 팝오버 */
+    .attn-menu-wrap { position: relative; }
+    .attn-menu { position: absolute; right: 0; top: 46px; z-index: 30; width: 220px; padding: 16px;
+      border-radius: 16px; background: var(--c-surface);
+      box-shadow: 6px 6px 14px var(--nm-dark), -6px -6px 14px var(--nm-light);
+      display: flex; flex-direction: column; gap: 12px; }
+    .attn-menu[hidden] { display: none; }
+    .attn-menu-label { font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); }
+    .attn-menu-row { display: flex; align-items: center; gap: 8px; }
+    .attn-menu-input { width: 56px; text-align: center; font-size: 16px; font-weight: 700;
+      padding: 7px 4px; border-radius: 9px; border: none; color: var(--c-on-surface); background: var(--c-surface);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .attn-menu-input::-webkit-outer-spin-button, .attn-menu-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .attn-menu-input[type=number] { -moz-appearance: textfield; }
+    .attn-menu-unit { font-size: 13px; color: var(--c-on-surface-variant); }
+  </style>
 </head>
 <body class="font-body-md">
   <!-- 페이지 본문: shell.js 가 이 .dsp-page 를 사이드바+헤더와 함께 main 안으로 이동시킨다 -->
   <div class="dsp-page">
-    <div class="flex justify-between items-end mb-element-gap">
-      <div>
-        <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">대시보드</h2>
-        <p class="text-on-surface-variant" style="margin:4px 0 0;">자산 백업 · 네트워크 실시간 모니터링</p>
-      </div>
-      <div id="dash-clock" class="nm-flat-sm" style="padding:8px 16px;border-radius:12px;display:flex;align-items:center;gap:8px;">
-        <span class="w-2 h-2 rounded-full status-led" style="background:var(--health-backedup);"></span>
-        <span class="font-label-mono text-on-surface" style="font-size:12px;">SYSTEMS ONLINE</span>
-      </div>
-    </div>
-
     <!-- KPI 행 -->
     <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(4,1fr);">
-      <a href="/history?tab=1" style="text-decoration:none;"><div class="kpi-card">
+      <a href="/history?tab=0" style="text-decoration:none;display:flex;"><div class="kpi-card">
         <div class="kpi-icon kpi-icon-primary"><span class="material-symbols-outlined">dns</span></div>
-        <div class="kpi-body"><span class="kpi-label">전체</span>
+        <div class="kpi-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span class="kpi-label">전체</span>
+            <span class="font-label-mono" id="kpi-total-date" style="font-size:14px;font-weight:700;color:var(--c-primary);"></span>
+          </div>
           <div class="kpi-value-row"><span class="kpi-value" id="kpi-total">–</span><span class="kpi-unit">EA</span></div></div>
       </div></a>
-      <a href="/history?tab=1&health=backedup" style="text-decoration:none;"><div class="kpi-card">
+      <a href="/history?tab=0&health=backedup" style="text-decoration:none;display:flex;"><div class="kpi-card">
         <div class="kpi-icon kpi-icon-success"><span class="material-symbols-outlined">cloud_upload</span></div>
         <div class="kpi-body"><span class="kpi-label">백업 갱신</span>
           <div class="kpi-value-row"><span class="kpi-value" id="kpi-backed">–</span></div>
           <span class="kpi-pct kpi-pct-success" id="kpi-backed-pct"></span></div>
       </div></a>
-      <a href="/history?tab=1&health=unchanged" style="text-decoration:none;"><div class="kpi-card">
+      <a href="/history?tab=0&health=unchanged" style="text-decoration:none;display:flex;"><div class="kpi-card">
         <div class="kpi-icon kpi-icon-info"><span class="material-symbols-outlined">remove_circle_outline</span></div>
         <div class="kpi-body"><span class="kpi-label">변경 없음</span>
           <div class="kpi-value-row"><span class="kpi-value" id="kpi-unchanged">–</span></div>
           <span class="kpi-pct kpi-pct-info" id="kpi-unchanged-pct"></span></div>
       </div></a>
-      <a href="/history?tab=1&health=failed" style="text-decoration:none;"><div class="kpi-card">
+      <a href="/history?tab=0&health=failed" style="text-decoration:none;display:flex;"><div class="kpi-card">
         <div class="kpi-icon kpi-icon-error"><span class="material-symbols-outlined fill">warning</span></div>
         <div class="kpi-body"><span class="kpi-label">주의 필요</span>
           <div class="kpi-value-row"><span class="kpi-value" id="kpi-failed" style="color:var(--health-failed);">–</span></div>
@@ -56,47 +120,40 @@
       </div></a>
     </div>
 
-    <!-- 분포도 + 타입별 -->
-    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(12,1fr);">
-      <div class="nm-card" style="grid-column:span 9;">
-        <div class="panel-header">
-          <span class="panel-title">전체 자산 분포도</span>
-          <div class="legend-area">
-            <div class="legend-group"><span class="legend-label">[백업]</span>
-              <span class="legend-item"><span class="legend-dot" style="background:var(--health-backedup);"></span>갱신</span>
-              <span class="legend-item"><span class="legend-dot" style="background:var(--health-failed);"></span>실패</span>
-              <span class="legend-item"><span class="legend-dot" style="background:var(--health-unchanged);"></span>변경없음</span>
-              <span class="legend-item"><span class="legend-dot inprogress"></span>작업중</span></div>
-            <div class="legend-group"><span class="legend-label">[네트워크]</span>
-              <span class="legend-item"><span class="legend-dot offline"></span>오프라인</span></div>
+    <!-- 전체 자산 분포도 (도면) — 헤더 토글로 라인별/개별 직접 전환(선택 기억) -->
+    <div class="nm-card mb-element-gap">
+      <div class="panel-header">
+        <span class="panel-title">전체 자산 분포도</span>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-backedup);"></span>갱신</span>
+          <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-unchanged);"></span>유지</span>
+          <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-failed);"></span>실패</span>
+          <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-inprogress);"></span>작업중</span>
+          <span class="lv-legend-item"><span class="lv-legend-dot" style="background:var(--health-unknown);"></span>내역없음</span>
+          <span class="lv-legend-hint" id="dash-bp-count"></span>
+          <div class="lv-seg" id="dash-bp-viewmode">
+            <button type="button" class="lv-seg-btn active" data-view="0"><span class="material-symbols-outlined">map</span>라인별</button>
+            <button type="button" class="lv-seg-btn" data-view="1"><span class="material-symbols-outlined">grid_view</span>개별</button>
+          </div>
+          <button id="dash-bp-split" class="dsp-iconbtn" title="분할 보기 — 도면 여러 개를 나란히" style="display:none;"><span class="material-symbols-outlined">splitscreen</span></button>
+          <button id="dash-bp-edit" class="dsp-iconbtn" title="레이아웃 편집 (도면·배경색·자산 배치)" hidden><span class="material-symbols-outlined">edit</span></button>
+          <button id="dash-bp-fs" class="dsp-iconbtn" title="전체화면"><span class="material-symbols-outlined">fullscreen</span></button>
+        </div>
+      </div>
+      <div class="lv-tabs" id="dash-bp-tabs" style="display:none;"></div>
+      <div class="dash-bp-stage">
+        <div class="dash-bp-wrap">
+          <div class="lv-viewport" id="dash-bp-viewport">
+            <div class="lv-loading">불러오는 중…</div>
+          </div>
+          <div class="dash-bp-resize" id="dash-bp-resize" title="드래그하여 높이 조절 (더블클릭: 기본값)">
+            <span class="material-symbols-outlined">height</span>
           </div>
         </div>
-        <div id="heatmap" class="heatmap-grid"></div>
-      </div>
-      <div class="nm-card" style="grid-column:span 3;">
-        <div class="panel-header"><span class="panel-title">타입별 현황</span></div>
-        <div id="type-stats" class="seg-list"></div>
       </div>
     </div>
 
-    <!-- 주의자산 + 최근작업 + 라인별 -->
-    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(12,1fr);">
-      <div class="nm-card" style="grid-column:span 6;">
-        <div class="panel-header"><span class="panel-title">주의 필요 자산
-          <span style="font-size:12px;font-weight:500;color:var(--c-on-surface-variant);margin-left:6px;">연속 3회 이상 실패</span></span></div>
-        <div id="attention"></div>
-      </div>
-      <div class="nm-card" style="grid-column:span 3;">
-        <div class="panel-header"><span class="panel-title">최근 작업</span></div>
-        <div id="activities" class="activity-list"></div>
-      </div>
-      <div class="nm-card" style="grid-column:span 3;">
-        <div class="panel-header"><span class="panel-title">라인별 현황</span></div>
-        <div id="line-stats" class="seg-list"></div>
-      </div>
-    </div>
-
-    <!-- 타임라인 -->
+    <!-- 타임라인 (작업 현황) -->
     <div class="nm-card mb-element-gap">
       <div class="panel-header">
         <span class="panel-title">작업 현황</span>
@@ -110,6 +167,60 @@
       <div id="timeline"></div>
     </div>
 
+    <!-- 타입별 + 라인별 현황 -->
+    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(12,1fr);">
+      <div class="nm-card" style="grid-column:span 6;">
+        <div class="panel-header">
+          <span class="panel-title">자산별 현황</span>
+          <div class="chart-toggle" data-chart="type">
+            <button type="button" class="chart-toggle-btn" data-mode="bar" title="막대그래프"><span class="material-symbols-outlined">bar_chart</span></button>
+            <button type="button" class="chart-toggle-btn" data-mode="donut" title="도넛그래프"><span class="material-symbols-outlined">donut_large</span></button>
+          </div>
+        </div>
+        <div id="type-stats" class="seg-list"></div>
+      </div>
+      <div class="nm-card" style="grid-column:span 6;">
+        <div class="panel-header">
+          <span class="panel-title">라인별 현황</span>
+          <div class="chart-toggle" data-chart="line">
+            <button type="button" class="chart-toggle-btn" data-mode="bar" title="막대그래프"><span class="material-symbols-outlined">bar_chart</span></button>
+            <button type="button" class="chart-toggle-btn" data-mode="donut" title="도넛그래프"><span class="material-symbols-outlined">donut_large</span></button>
+          </div>
+        </div>
+        <div id="line-stats" class="seg-list"></div>
+      </div>
+    </div>
+
+    <!-- 주의자산 + 최근작업 -->
+    <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(12,1fr);">
+      <div class="nm-card" style="grid-column:span 8;display:flex;flex-direction:column;">
+        <div class="panel-header">
+          <span class="panel-title">주의 필요 자산
+            <span id="attn-subtitle" style="font-size:12px;font-weight:500;color:var(--c-on-surface-variant);margin-left:6px;">연속 3회 이상 실패</span></span>
+          <div class="attn-menu-wrap">
+            <button id="attn-menu-btn" class="dsp-iconbtn" title="연속 실패 기준 설정"><span class="material-symbols-outlined">tune</span></button>
+            <div id="attn-menu" class="attn-menu" hidden>
+              <span class="attn-menu-label">연속 실패 기준</span>
+              <div class="attn-menu-row">
+                <button type="button" class="hist-iconbtn" data-attn-step="-1" title="감소"><span class="material-symbols-outlined">remove</span></button>
+                <input type="number" id="attn-threshold-input" class="attn-menu-input" min="1" max="100" />
+                <button type="button" class="hist-iconbtn" data-attn-step="1" title="증가"><span class="material-symbols-outlined">add</span></button>
+                <span class="attn-menu-unit">회 이상</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="attention" style="flex:1;"></div>
+        <div class="hist-pager" id="attn-pager"></div>
+      </div>
+      <div class="nm-card" style="grid-column:span 4;display:flex;flex-direction:column;">
+        <div class="panel-header"><span class="panel-title">최근 작업
+          <span style="font-size:12px;font-weight:500;color:var(--c-on-surface-variant);margin-left:6px;">오늘 하루</span></span></div>
+        <div id="activities" class="activity-list" style="flex:1;"></div>
+        <div class="hist-pager" id="act-pager"></div>
+      </div>
+    </div>
+
     <!-- 드라이브 용량 -->
     <div class="nm-card" style="margin-bottom:24px;">
       <div class="panel-header"><span class="panel-title">DEXA DB 드라이브 용량</span></div>
@@ -118,6 +229,7 @@
   </div>
 
   <script src="/app/shell.js"></script>
+  <script src="/app/layout-render.js"></script>
   <script src="/app/dashboard.js"></script>
 </body>
 </html>

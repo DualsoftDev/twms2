@@ -166,6 +166,26 @@ public class HistoryController : ControllerBase
         return Ok(new { pings = rows });
     }
 
+    /// <summary>
+    /// 백업 이력 탭 "로그" 버튼: 특정 액션의 상세 로그(actionLog) 조회.
+    /// BackupLog.razor 의 DexaRead.GetActionLogsAsync 를 그대로 래핑. all=true 시 전체.
+    /// </summary>
+    [HttpGet("logs/{actionId:int}")]
+    public async Task<IActionResult> GetLogs(int actionId, [FromQuery] bool all = false)
+    {
+        var (logs, total) = await _dexaRead.GetActionLogsAsync(actionId, loadAll: all);
+        return Ok(new
+        {
+            total,
+            logs = logs.Select(l => new
+            {
+                level = l.Level,
+                message = l.Message,
+                dateTime = l.DateTime,
+            }),
+        });
+    }
+
     // ── Razor 로직 이식 (라벨/판정) ──
 
     private static bool IsInProgress(DexaAction a) => a.IsInProgress && !a.IsIncomplete;
