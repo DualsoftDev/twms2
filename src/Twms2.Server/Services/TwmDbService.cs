@@ -54,6 +54,20 @@ public class TwmDbService
         return map;
     }
 
+    /// <summary>미리보기용: TwmsAsset 에 이미 존재하는 DexaId 집합 (신규/덮어쓰기 구분).</summary>
+    public async Task<HashSet<int>> GetExistingAssetDexaIdsAsync()
+    {
+        using var conn = _db.Create();
+        return (await conn.QueryAsync<int>("SELECT DexaId FROM TwmsAsset")).ToHashSet();
+    }
+
+    /// <summary>미리보기용: TwmsAssetConn 에 이미 존재하는 DexaId 집합 (신규/덮어쓰기 구분).</summary>
+    public async Task<HashSet<int>> GetExistingConnDexaIdsAsync()
+    {
+        using var conn = _db.Create();
+        return (await conn.QueryAsync<int>("SELECT DexaId FROM TwmsAssetConn")).ToHashSet();
+    }
+
     public async Task UpsertTwmsAssetAsync(TwmsAsset asset)
     {
         InvalidateAugCache();

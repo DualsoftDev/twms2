@@ -27,8 +27,12 @@
     pollTimer: null,
 
     async init(opts) {
+      // 멱등 — settings 에 직접 이식된 관리 모듈들이 각자 Shell.init 을 호출해도
+      // 셸은 한 번만 구성한다(2번째+ 호출은 무시). 모듈은 init 이후 bind()/load() 만 진행.
+      if (this._inited) return;
+      this._inited = true;
       this.activeKey = (opts && opts.active) || 'overview';
-      // 임베드(iframe) 모드: 다른 페이지(예: /settings 의 관리 탭) 안에 끼워진 경우
+      // 임베드(iframe) 모드: 다른 페이지 안에 iframe 으로 끼워진 경우(현재 미사용 — 직접 이식으로 전환)
       // 사이드바/헤더/폴링/인증표시를 생략하고 페이지 본문(.dsp-page)만 노출한다.
       if (window.self !== window.top) { this.embedded = true; this._initEmbedded(); return; }
       this._applyNavCollapsed(); // 저장된 접힘 상태를 골격 생성 전 선적용 (로드 시 애니메이션 깜빡임 방지)
@@ -169,7 +173,7 @@
       // 네비 (admin 반영)
       this.isAdmin = !!data.isAdmin;
       this._renderNav(this.isAdmin);
-      document.dispatchEvent(new CustomEvent('shell:auth', { detail: { isAdmin: this.isAdmin } }));
+      document.dispatchEvent(new CustomEvent('shell:auth', { detail: { isAdmin: this.isAdmin, authenticated: !!this.isAuthenticated } }));
       // DEXA 연결 상태
       const led = document.getElementById('dsp-sys-led');
       const label = document.getElementById('dsp-sys-label');
@@ -290,6 +294,7 @@
       const ret = encodeURIComponent(location.pathname + location.search);
       let me = { authenticated: false };
       try { me = await fetch('/api/auth/me', { headers: { Accept: 'application/json' } }).then(r => r.json()); } catch (e) {}
+      this.isAuthenticated = !!(me && me.authenticated);
 
       if (me && me.authenticated) {
         // 헤더: 아이콘 + 아이디를 하나의 칩으로 묶어 표시 (설정 기어 제거)

@@ -1,10 +1,13 @@
 /* ============================================================================
  * DB 관리(DatabaseManagement) — DatabaseManagement.razor 를 정적 페이지로 이식.
  * GET  /api/admin/database          : 통계 + 마이그레이션 이력 + 레이아웃 목록 조회 (30초 폴링).
- * POST /api/admin/database/import    : DEXA.sqlite3 업로드 → 가져오기. 토큰 + 라인 프리뷰 반환.
+ * POST /api/admin/database/import    : DEXA.sqlite3 업로드 → 분석(미리보기)만. 커밋 없음. 토큰+미리보기 반환.
+ * POST /api/admin/database/apply-aug : 토큰으로 aug/연결/라인/그룹 실제 이전(전체 교체 커밋).
  * POST /api/admin/database/positions : 토큰 + 라인↔레이아웃 매핑으로 배치 가져오기.
- * POST /api/admin/database/cancel    : 배치 단계 취소(임시파일 정리).
+ * POST /api/admin/database/cancel    : 닫기/취소(임시파일 정리).
  * 관리자 전용(컨트롤러에서 Roles="Admin" 보호). 모든 가져오기는 파괴적 작업.
+ *
+ * 흐름: [가져오기] 분석 → "무엇이 업데이트되는지" 미리보기 → [aug 데이터 이전하기 · 적용] 커밋 → [배치 가져오기].
  * ==========================================================================*/
 (function () {
   'use strict';
@@ -16,10 +19,15 @@
   let _pendingFile = null;  // 선택된 DEXA.sqlite3
   let _importing = false;
 
+  // aug 이전(적용) 단계 상태
+  let _token = null;        // 1단계 import 가 반환한 임시파일 토큰
+  let _preview = null;      // {totalRead, augInsert, augUpdate, connInsert, connUpdate, connSkipped, line*, group*}
+  let _augApplying = false;
+  let _augApplied = false;
+
   // 배치 단계 상태
-  let _token = null;            // 1단계 import 가 반환한 임시파일 토큰
-  let _linePreviews = [];       // [{id, name, selfW, selfH}]
-  let _mappings = {};           // lineId -> layoutId(number) | null
+  let _linePreviews = [];   // [{id, name, selfW, selfH}]
+  let _mappings = {};       // lineId -> layoutId(number) | null
   let _posImporting = false;
 
   // ──────────────── 조회 ────────────────
@@ -55,12 +63,12 @@
         <td>${esc(fmtTime(m.appliedAt))}</td></tr>`).join('')}</tbody></table>`;
   }
 
-  // ──────────────── 1단계: 가져오기 ────────────────
+  // ──────────────── 1단계: 가져오기(분석, 커밋 없음) ────────────────
   function onFilePicked(e) {
     const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
     _pendingFile = f;
     $('import-file-name').textContent = f ? f.name : '선택된 파일 없음';
-    // 새 파일 선택 시 이전 배치 단계 정리
+    // 새 파일 선택 시 이전 분석/배치 단계 정리 (aug 카드 포함)
     if (_token) cancelBatch(true);
     $('import-result-host').innerHTML = '';
     syncImportBtn();
@@ -75,7 +83,7 @@
     if (_pendingFile.size > 500 * 1024 * 1024) { toast('파일 크기가 500MB를 초과합니다.'); return; }
 
     _importing = true;
-    $('import-run-label').textContent = '가져오는 중...';
+    $('import-run-label').textContent = '분석 중...';
     syncImportBtn();
     $('import-result-host').innerHTML = '';
 
@@ -92,19 +100,18 @@
         renderImportError('파일 읽기 오류: ' + (data.fatalError || '알 수 없는 오류'));
         toast('가져오기 실패: ' + (data.fatalError || ''));
       } else {
-        renderImportResult(data.result || {});
-        toast(`완료 — 확장정보 ${data.result?.augImported ?? 0}건, 연결정보 ${data.result?.connImported ?? 0}건 저장`);
-        if (data.stats) renderStats(data.stats);
-        if (data.layouts) _layouts = data.layouts;
-
-        // 배치 매핑 단계 진입
+        // 분석 결과 → aug 이전 단계 진입 (아직 커밋 안 됨)
         _token = data.token || null;
+        _preview = data.preview || {};
         _linePreviews = data.linePreviews || [];
+        _layouts = data.layouts || _layouts;
         _mappings = {};
-        if (_token && _linePreviews.length > 0) openBatch();
-        else closeBatchCard();
+        _augApplied = false;
 
-        // 파일 입력 초기화 (Blazor 와 동일하게 선택 해제)
+        openAfterImport();
+        toast(`분석 완료 — 자산 ${(_preview.totalRead ?? 0).toLocaleString()}건. '적용'을 눌러 반영하세요.`);
+
+        // 파일 입력 초기화 (다음 선택을 위해)
         _pendingFile = null;
         $('import-file-input').value = '';
         $('import-file-name').textContent = '선택된 파일 없음';
@@ -124,25 +131,110 @@
       <div class="db-alert db-alert-error"><span class="material-symbols-outlined">error</span>${esc(msg)}</div>`;
   }
 
-  function renderImportResult(r) {
-    const skipErr = (r.connSkipped ?? 0) + (r.errorCount ?? 0);
+  // ──────────────── 2단계: aug 데이터 이전하기(적용) ────────────────
+  function openAfterImport() {
+    // aug 이전 카드
+    $('aug-card').style.display = '';
+    $('aug-result-host').innerHTML = '';
+    $('aug-apply-label').textContent = '적용';
+    renderAugPreview(_preview);
+    syncAugBtn();
+
+    // 배치 카드 (라인 정보가 있을 때만)
+    if (_token && _linePreviews.length > 0) openBatch();
+    else closeBatchCard();
+  }
+
+  function renderAugPreview(p) {
+    p = p || {};
     const cells = [
-      { v: r.totalRead ?? 0, l: '전체 자산', color: 'var(--c-on-surface)' },
-      { v: r.augImported ?? 0, l: '확장정보 저장', color: 'var(--health-backedup)' },
-      { v: r.connImported ?? 0, l: '연결정보 저장', color: 'var(--health-unchanged)' },
-      { v: r.lineImported ?? 0, l: '라인 저장', color: 'var(--c-primary)' },
-      { v: r.groupImported ?? 0, l: '그룹 저장', color: 'var(--c-secondary)' },
-      { v: skipErr, l: '건너뜀/오류', color: skipErr > 0 ? 'var(--health-failed)' : 'var(--c-on-surface-variant)' },
+      { v: p.totalRead ?? 0,   l: '읽은 자산',       color: 'var(--c-on-surface)' },
+      { v: p.augInsert ?? 0,   l: '확장정보 신규',    color: 'var(--health-backedup)' },
+      { v: p.augUpdate ?? 0,   l: '확장정보 덮어씀',  color: 'var(--health-failed)' },
+      { v: p.connInsert ?? 0,  l: '연결정보 신규',    color: 'var(--health-unchanged)' },
+      { v: p.connUpdate ?? 0,  l: '연결정보 덮어씀',  color: 'var(--health-failed)' },
+      { v: p.connSkipped ?? 0, l: '연결 건너뜀',      color: 'var(--c-on-surface-variant)' },
     ];
-    $('import-result-host').innerHTML = `<div class="db-divider"></div>
+    // 라인/그룹은 파일에 행이 있을 때만 전체 교체된다(파일이 0개면 기존 유지).
+    const lineReplaced  = (p.lineFile ?? 0) > 0;
+    const groupReplaced = (p.groupFile ?? 0) > 0;
+    const lineAfter  = lineReplaced  ? (p.lineFile ?? 0)  : (p.lineCurrent ?? 0);
+    const groupAfter = groupReplaced ? (p.groupFile ?? 0) : (p.groupCurrent ?? 0);
+    const keep = '<span style="color:var(--c-on-surface-variant);font-size:12px;">(유지)</span>';
+    const swap = '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;color:var(--health-failed);">swap_horiz</span>';
+    const warn = (p.augUpdate ?? 0) > 0 || (p.connUpdate ?? 0) > 0
+      || (lineReplaced && (p.lineCurrent ?? 0) > 0)
+      || (groupReplaced && (p.groupCurrent ?? 0) > 0);
+
+    $('aug-preview-host').innerHTML = `
       <div class="dsp-grid" style="grid-template-columns:repeat(6,1fr);">
         ${cells.map(c => `<div class="db-mini">
           <span class="db-mini-value" style="color:${c.color};">${(c.v).toLocaleString()}</span>
           <span class="db-mini-label">${c.l}</span></div>`).join('')}
-      </div>`;
+      </div>
+      <div class="db-divider"></div>
+      <table class="nm-table"><thead><tr>
+        <th>전체 교체 대상</th><th style="width:120px;">현재</th><th style="width:140px;">교체 후</th></tr></thead><tbody>
+        <tr><td>라인 (TwmsLayoutLine)</td><td>${(p.lineCurrent ?? 0).toLocaleString()}</td>
+            <td>${lineAfter.toLocaleString()} ${lineReplaced ? swap : keep}</td></tr>
+        <tr><td>그룹 (TwmsLayoutGroup)</td><td>${(p.groupCurrent ?? 0).toLocaleString()}</td>
+            <td>${groupAfter.toLocaleString()} ${groupReplaced ? swap : keep}</td></tr>
+      </tbody></table>
+      ${warn ? `<div class="db-alert db-alert-error" style="margin-top:14px;">
+        <span class="material-symbols-outlined">warning</span>
+        기존 데이터가 덮어쓰기/전체 교체됩니다. 적용 후에는 그 사이 수동 편집분이 보존되지 않습니다.</div>` : ''}`;
   }
 
-  // ──────────────── 2단계: 배치 매핑 ────────────────
+  function syncAugBtn() {
+    $('aug-apply-btn').disabled = _augApplying || _augApplied || !_token;
+  }
+
+  async function runApplyAug() {
+    if (_augApplying || _augApplied || !_token) return;
+    _augApplying = true;
+    $('aug-apply-label').textContent = '적용 중...';
+    syncAugBtn();
+    $('aug-result-host').innerHTML = '';
+
+    try {
+      const res = await fetch('/api/admin/database/apply-aug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ token: _token }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        renderAugResult(false, data.error || '적용 요청이 거부되었습니다.');
+        toast(data.error || '적용 실패');
+      } else if (data.ok === false) {
+        renderAugResult(false, '오류: ' + (data.fatalError || '알 수 없는 오류'));
+        toast('적용 오류: ' + (data.fatalError || ''));
+      } else {
+        const r = data.result || {};
+        renderAugResult(true,
+          `확장정보 ${r.augImported ?? 0}건, 연결정보 ${r.connImported ?? 0}건, 라인 ${r.lineImported ?? 0}건, 그룹 ${r.groupImported ?? 0}건 적용 완료`);
+        toast(`적용 완료 — 확장정보 ${r.augImported ?? 0}건, 연결정보 ${r.connImported ?? 0}건`);
+        if (data.stats) renderStats(data.stats);
+        _augApplied = true;
+      }
+    } catch (e) {
+      renderAugResult(false, '적용 중 오류가 발생했습니다.');
+      toast('적용 중 오류가 발생했습니다.');
+    } finally {
+      _augApplying = false;
+      $('aug-apply-label').textContent = _augApplied ? '적용됨' : '적용';
+      syncAugBtn();
+    }
+  }
+
+  function renderAugResult(success, msg) {
+    $('aug-result-host').innerHTML = `<div class="db-divider"></div>
+      <div class="db-alert ${success ? 'db-alert-success' : 'db-alert-error'}">
+        <span class="material-symbols-outlined">${success ? 'check_circle' : 'error'}</span>${esc(msg)}</div>`;
+  }
+
+  // ──────────────── 3단계: 배치 매핑 ────────────────
   function openBatch() {
     $('batch-card').style.display = '';
     $('batch-result-host').innerHTML = '';
@@ -236,9 +328,7 @@
         if ((r.skipped ?? 0) > 0) msg += ` (건너뜀 ${r.skipped}건)`;
         renderBatchResult(true, msg);
         toast(`배치 완료 — 자산 ${r.assetPositionsImported ?? 0}건, 그룹 ${r.groupsImported ?? 0}건`);
-        // 서버가 임시파일을 정리했으므로 토큰 만료
-        _token = null;
-        syncBatchBtn();
+        // 임시파일은 서버가 유지(닫기 시 정리) — 토큰 유지하여 재배치/추가 적용 가능
         await load();
       }
     } catch (e) {
@@ -257,11 +347,16 @@
         <span class="material-symbols-outlined">${success ? 'check_circle' : 'error'}</span>${esc(msg)}</div>`;
   }
 
+  // 분석/배치 단계 전체 닫기 + 임시파일 정리
   async function cancelBatch(silent) {
     const token = _token;
     _token = null;
+    _preview = null;
+    _augApplied = false;
     _linePreviews = [];
     _mappings = {};
+    $('aug-card').style.display = 'none';
+    $('aug-result-host').innerHTML = '';
     closeBatchCard();
     if (token) {
       try {
@@ -272,7 +367,7 @@
         });
       } catch (e) { /* 무시 */ }
     }
-    if (!silent) toast('배치 가져오기를 닫았습니다.');
+    if (!silent) toast('가져오기 단계를 닫았습니다.');
   }
 
   // ──────────────── 헬퍼 ────────────────
@@ -290,13 +385,20 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
 
+  // 요소가 없어도(캐시된 구버전 HTML 등) 전체 스크립트가 중단되지 않도록 방어적 바인딩
+  function on(id, evt, fn) {
+    const el = $(id);
+    if (el) el.addEventListener(evt, fn);
+  }
+
   function bind() {
-    $('import-pick-btn').addEventListener('click', () => $('import-file-input').click());
-    $('import-file-input').addEventListener('change', onFilePicked);
-    $('import-run-btn').addEventListener('click', runImport);
-    $('bulk-apply-btn').addEventListener('click', applyBulk);
-    $('batch-run-btn').addEventListener('click', runPositionImport);
-    $('batch-close-btn').addEventListener('click', () => cancelBatch(false));
+    on('import-pick-btn', 'click', () => { const i = $('import-file-input'); if (i) i.click(); });
+    on('import-file-input', 'change', onFilePicked);
+    on('import-run-btn', 'click', runImport);
+    on('aug-apply-btn', 'click', runApplyAug);
+    on('aug-close-btn', 'click', () => cancelBatch(false));
+    on('bulk-apply-btn', 'click', applyBulk);
+    on('batch-run-btn', 'click', runPositionImport);
   }
 
   document.addEventListener('DOMContentLoaded', async () => {

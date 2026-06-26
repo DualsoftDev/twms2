@@ -21,6 +21,64 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
+  /* ── 행 액션 오버플로 메뉴 (⋯ 더보기) ──
+   * 같은 버튼을 다시 누르면 닫히고, 다른 버튼을 누르면 그쪽으로 이동.
+   * items: [{icon,label,danger?,disabled?,onClick} | {sep:true}] */
+  const RowMenu = (() => {
+    let el = null;
+    function ensure() {
+      if (el) return el;
+      el = document.createElement('div');
+      el.className = 'lm-menu';
+      el.hidden = true;
+      document.body.appendChild(el);
+      return el;
+    }
+    function hide() { if (el && !el.hidden) { el.hidden = true; el.innerHTML = ''; el._anchor = null; } }
+    function show(anchor, items) {
+      const m = ensure();
+      if (!m.hidden && m._anchor === anchor) { hide(); return; }   // 같은 버튼 토글 닫기
+      m.innerHTML = '';
+      items.forEach(it => {
+        if (it.sep) { const s = document.createElement('div'); s.className = 'lm-menu-sep'; m.appendChild(s); return; }
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'lm-menu-item' + (it.danger ? ' danger' : '');
+        b.disabled = !!it.disabled;
+        b.innerHTML = `<span class="material-symbols-outlined">${it.icon}</span><span>${esc(it.label)}</span>`;
+        if (!it.disabled) b.addEventListener('click', () => { hide(); try { it.onClick(); } catch (err) { console.error(err); } });
+        m.appendChild(b);
+      });
+      m._anchor = anchor;
+      m.hidden = false;
+      const r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+      let top = r.bottom + 6;
+      if (top + mh > window.innerHeight - 8) top = r.top - mh - 6;   // 아래 공간 없으면 위로
+      m.style.left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8)) + 'px';
+      m.style.top = Math.max(8, top) + 'px';
+    }
+    document.addEventListener('pointerdown', e => { if (el && !el.hidden && !el.contains(e.target) && !e.target.closest('[data-menu]')) hide(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+    window.addEventListener('resize', hide);
+    document.addEventListener('scroll', hide, true);
+    return { show, hide };
+  })();
+
+  function openRowMenu(anchor, id) {
+    const l = findLayout(id); if (!l) return;
+    const items = [
+      { icon: 'content_copy', label: '복제', onClick: () => duplicateLayout(id) },
+      { icon: 'drive_file_rename_outline', label: '이름변경', onClick: () => renameLayout(id) },
+      { icon: 'download', label: '내보내기', onClick: () => exportLayout(id) },
+      { icon: 'upload', label: '가져오기', onClick: () => importLayout(id) },
+    ];
+    if (l.imagePath) items.push({ icon: 'image', label: '이미지 다운로드', onClick: () => downloadImage(id) });
+    items.push({ icon: 'file_upload', label: '이전 TWMS 가져오기', onClick: () => { location.href = `/admin/layout/${id}?tab=dexa`; } });
+    items.push({ sep: true });
+    items.push({ icon: 'delete', label: '삭제', danger: true, disabled: LAYOUTS.length <= 1, onClick: () => deleteLayout(id) });
+    RowMenu.show(anchor, items);
+  }
+
   /* ── 데이터 로드 ── */
   async function load() {
     try {
@@ -34,12 +92,13 @@
 
   /* ── 테이블 렌더 (MudTable RowTemplate 이식) ── */
   function render() {
+    RowMenu.hide();
     const head = `<thead><tr>
       <th style="width:50px;">#</th>
       <th>이름</th>
       <th style="width:90px;">도면</th>
       <th style="width:150px;">수정일</th>
-      <th style="width:360px;">액션</th>
+      <th style="width:120px;">액션</th>
     </tr></thead>`;
 
     if (LAYOUTS.length === 0) {
@@ -48,7 +107,6 @@
       return;
     }
 
-    const canDelete = LAYOUTS.length > 1;
     const body = LAYOUTS.map((l, i) => {
       const thumb = l.imagePath
         ? `<a href="${esc(l.imagePath)}" target="_blank"><img class="lm-thumb" src="${esc(l.imagePath)}" alt="도면" /></a>`
@@ -61,13 +119,7 @@
         <td>
           <div class="lm-actions">
             <a class="lm-iconbtn lm-iconbtn-edit" href="/admin/layout/${l.id}/edit"><span class="material-symbols-outlined">edit</span>편집</a>
-            <button class="lm-iconbtn" data-act="duplicate" data-id="${l.id}"><span class="material-symbols-outlined">content_copy</span>복제</button>
-            <button class="lm-iconbtn" data-act="rename" data-id="${l.id}"><span class="material-symbols-outlined">drive_file_rename_outline</span>이름변경</button>
-            <button class="lm-iconbtn" data-act="export" data-id="${l.id}"><span class="material-symbols-outlined">download</span>내보내기</button>
-            <button class="lm-iconbtn" data-act="import" data-id="${l.id}"><span class="material-symbols-outlined">upload</span>가져오기</button>
-            ${l.imagePath ? `<button class="lm-iconbtn" data-act="image" data-id="${l.id}"><span class="material-symbols-outlined">image</span>이미지</button>` : ''}
-            <a class="lm-iconbtn" href="/admin/layout/${l.id}?tab=dexa"><span class="material-symbols-outlined">file_upload</span>이전 TWMS 가져오기</a>
-            <button class="lm-iconbtn lm-iconbtn-danger" data-act="delete" data-id="${l.id}" ${canDelete ? '' : 'disabled'}><span class="material-symbols-outlined">delete</span>삭제</button>
+            <button class="lm-iconbtn lm-kebab" data-menu="${l.id}" title="더보기"><span class="material-symbols-outlined">more_horiz</span></button>
           </div>
         </td>
       </tr>`;
@@ -75,17 +127,9 @@
 
     $('lm-table').innerHTML = head + `<tbody>${body}</tbody>`;
 
-    $('lm-table').querySelectorAll('button[data-act]').forEach(btn => {
-      const id = parseInt(btn.getAttribute('data-id'), 10);
-      const act = btn.getAttribute('data-act');
-      btn.addEventListener('click', () => {
-        if (act === 'duplicate') duplicateLayout(id);
-        else if (act === 'rename') renameLayout(id);
-        else if (act === 'export') exportLayout(id);
-        else if (act === 'import') importLayout(id);
-        else if (act === 'image') downloadImage(id);
-        else if (act === 'delete') deleteLayout(id);
-      });
+    $('lm-table').querySelectorAll('button[data-menu]').forEach(btn => {
+      const id = parseInt(btn.getAttribute('data-menu'), 10);
+      btn.addEventListener('click', (e) => { e.stopPropagation(); openRowMenu(btn, id); });
     });
   }
 
