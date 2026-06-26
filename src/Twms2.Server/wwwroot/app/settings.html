@@ -138,6 +138,18 @@
     .lm-iconbtn .material-symbols-outlined { font-size: 16px; }
     .lm-iconbtn-edit { color: var(--c-primary); }
     .lm-iconbtn-danger:hover { color: var(--health-failed); }
+    /* 행 액션 오버플로 메뉴 (... 더보기) — layout-management.html 과 동일 */
+    .lm-kebab { padding: 6px 8px; }
+    .lm-kebab .material-symbols-outlined { font-size: 18px; }
+    .lm-menu { position: fixed; z-index: 9500; min-width: 188px; padding: 6px; border-radius: 12px; background: var(--c-surface); box-shadow: 6px 6px 16px var(--nm-dark), -6px -6px 16px var(--nm-light); display: flex; flex-direction: column; gap: 2px; }
+    .lm-menu[hidden] { display: none; }
+    .lm-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: none; border-radius: 8px; background: transparent; color: var(--c-on-surface); font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; text-align: left; white-space: nowrap; transition: background 0.12s ease, color 0.12s ease; }
+    .lm-menu-item:hover:not(:disabled) { background: color-mix(in srgb, var(--c-primary) 12%, transparent); color: var(--c-primary); }
+    .lm-menu-item.danger { color: var(--health-failed); }
+    .lm-menu-item.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--health-failed) 14%, transparent); }
+    .lm-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
+    .lm-menu-item .material-symbols-outlined { font-size: 18px; }
+    .lm-menu-sep { height: 1px; margin: 4px 6px; background: var(--c-outline); opacity: 0.4; }
     .lm-table-wrap { border-radius: 16px; padding: 6px 12px; overflow-x: auto; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); background: var(--c-surface-container-low); }
     .lm-table-wrap .nm-table td { white-space: nowrap; vertical-align: middle; }
     .lm-table-wrap .nm-table th { white-space: nowrap; }

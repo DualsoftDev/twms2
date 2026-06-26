@@ -24,7 +24,7 @@ window.assetPlacementEditor = (() => {
             viewBox: { x: 0, y: 0, w: ORIG_W, h: ORIG_H },
             zoom: 1,
             tool: 'select',        // 'select' | 'pan'
-            snap: { enabled: true, gridSize: 20, neighborThreshold: 8 },
+            snap: { enabled: true, neighbor: true, grid: false, gridSize: 20, neighborThreshold: 8 },
             // Transient state
             _handlers: [],
             _observer: null,
@@ -341,7 +341,7 @@ window.assetPlacementEditor = (() => {
                     const sz = getIconSize(assetEl);
                     const allMovingIds = new Set(isBulk ? bulk.assets.keys() : [assetId]);
                     if (isBulk) { for (const [,gs] of bulk.groups) { for (const aid of gs.members.keys()) allMovingIds.add(aid); } }
-                    const snapped = applySnap(inst, rawX, rawY, sz, allMovingIds);
+                    const snapped = applySnap(inst, rawX, rawY, sz, sz, allMovingIds);
                     renderGuideLines(inst, snapped.guides);
                     snapDx = snapped.x - rawX;
                     snapDy = snapped.y - rawY;
@@ -371,7 +371,7 @@ window.assetPlacementEditor = (() => {
                 } else {
                     // Single asset move
                     const sz = getIconSize(assetEl);
-                    const snapped = applySnap(inst, startPos.x + d.dx, startPos.y + d.dy, sz, new Set([assetId]));
+                    const snapped = applySnap(inst, startPos.x + d.dx, startPos.y + d.dy, sz, sz, new Set([assetId]));
                     renderGuideLines(inst, snapped.guides);
                     assetEl.dataset.x = snapped.x; assetEl.dataset.y = snapped.y;
                     applyAssetTranslate(assetEl);
@@ -452,11 +452,20 @@ window.assetPlacementEditor = (() => {
                 moved = true;
 
                 let snapDx = 0, snapDy = 0;
-                if (inst.snap.enabled) {
-                    const nx = snapToGrid(startGrp.x + d.dx, inst.snap.gridSize);
-                    const ny = snapToGrid(startGrp.y + d.dy, inst.snap.gridSize);
-                    snapDx = nx - (startGrp.x + d.dx);
-                    snapDy = ny - (startGrp.y + d.dy);
+                const rawLeft = startGrp.x + d.dx, rawTop = startGrp.y + d.dy;
+                if (inst.snap.grid) {
+                    snapDx = snapToGrid(rawLeft, inst.snap.gridSize) - rawLeft;
+                    snapDy = snapToGrid(rawTop, inst.snap.gridSize) - rawTop;
+                } else if (inst.snap.neighbor) {
+                    // 주변 자산/그룹 스냅 — 이동 중인 그룹과 그 멤버는 대상에서 제외
+                    const gw = parseFloat(groupEl.dataset.w) || 0, gh = parseFloat(groupEl.dataset.h) || 0;
+                    const exclude = new Set();
+                    for (const [, gs] of bulk.groups) for (const aid of gs.members.keys()) exclude.add(aid);
+                    for (const [aid] of bulk.assets) exclude.add(aid);
+                    const snapped = applySnap(inst, rawLeft + gw / 2, rawTop + gh / 2, gw, gh, exclude, groupId);
+                    renderGuideLines(inst, snapped.guides);
+                    snapDx = (snapped.x - gw / 2) - rawLeft;
+                    snapDy = (snapped.y - gh / 2) - rawTop;
                 }
 
                 // Move all selected assets
@@ -481,6 +490,7 @@ window.assetPlacementEditor = (() => {
                 }
             },
             onUp() {
+                clearGuideLines(inst);
                 if (!moved) {
                     if (!isSelected) notifySelection(inst, [], [groupId]);
                     return;
@@ -521,7 +531,7 @@ window.assetPlacementEditor = (() => {
                     const d = clientDelta(inst, ev.clientX - startClient.x, ev.clientY - startClient.y);
                     let nw = Math.max(4, startSize.w + d.dx);
                     let nh = Math.max(4, startSize.h + d.dy);
-                    if (inst.snap.enabled) {
+                    if (inst.snap.grid) {
                         nw = snapToGrid(nw, inst.snap.gridSize);
                         nh = snapToGrid(nh, inst.snap.gridSize);
                     }
@@ -855,23 +865,33 @@ window.assetPlacementEditor = (() => {
 
     function snapToGrid(v, gs) { return Math.round(v / gs) * gs; }
 
-    function applySnap(inst, x, y, sz, excludeIds) {
-        if (!inst.snap.enabled) return { x, y, guides: [] };
+    // cx,cy = 이동 박스 중심, w,h = 박스 크기(자산은 정사각, 그룹은 직사각).
+    // excludeIds = 스냅 대상에서 뺄 자산 id Set, excludeGroupId = 뺄 그룹 id(이동 중인 그룹 자신).
+    // 이동 중인 자산/그룹이 속한(=멤버가 겹치는) 그룹은 스냅 대상에서 제외 → 자기 자신/자기 그룹에 잡히는 버그 방지.
+    function applySnap(inst, cx, cy, w, h, excludeIds, excludeGroupId) {
+        if (!inst.snap.enabled) return { x: cx, y: cy, guides: [] };
         const gs = inst.snap.gridSize, thr = inst.snap.neighborThreshold;
-        let sx = snapToGrid(x, gs), sy = snapToGrid(y, gs);
+        let sx = inst.snap.grid ? snapToGrid(cx, gs) : cx, sy = inst.snap.grid ? snapToGrid(cy, gs) : cy;
         const guides = [];
+        if (!inst.snap.neighbor) return { x: r2(sx), y: r2(sy), guides };
 
-        // Neighbor snap
+        const inExclude = (aid) => !!(excludeIds && excludeIds.has && excludeIds.has(aid));
+
+        // Neighbor snap (주변 자산/그룹)
         const neighbors = [];
         inst.svg.querySelectorAll('.ap-asset-icon').forEach(g => {
             const aid = parseInt(g.dataset.assetId);
-            if (excludeIds instanceof Set ? excludeIds.has(aid) : excludeIds.has?.(aid)) return;
+            if (inExclude(aid)) return;
             const nx = parseFloat(g.dataset.x) || 0, ny = parseFloat(g.dataset.y) || 0;
             const nsz = getIconSize(g);
             // 중심 좌표를 바운딩박스로 변환
             neighbors.push({ x: nx - nsz / 2, y: ny - nsz / 2, w: nsz, h: nsz });
         });
         inst.svg.querySelectorAll('.ap-group-container').forEach(g => {
+            const gid = parseInt(g.dataset.groupId);
+            if (excludeGroupId != null && gid === excludeGroupId) return;     // 이동 중인 그룹 자신
+            const members = (g.dataset.members || '').split(',').map(Number);
+            if (members.some(m => inExclude(m))) return;                       // 이동 중인 자산이 속한 그룹
             neighbors.push({
                 x: parseFloat(g.dataset.x) || 0, y: parseFloat(g.dataset.y) || 0,
                 w: parseFloat(g.dataset.w) || 0, h: parseFloat(g.dataset.h) || 0
@@ -880,21 +900,20 @@ window.assetPlacementEditor = (() => {
 
         let bestDx = thr + 1, bestDy = thr + 1;
         let snapX = null, snapY = null, guideX = null, guideY = null;
-        // x,y = 중심 좌표, 바운딩박스는 중심에서 sz/2 떨어짐
-        const half = sz / 2;
-        const myEdges = { left: x - half, right: x + half, cx: x, top: y - half, bottom: y + half, cy: y };
+        const halfW = w / 2, halfH = h / 2;
+        const myEdges = { left: cx - halfW, right: cx + halfW, cx: cx, top: cy - halfH, bottom: cy + halfH, cy: cy };
 
         for (const n of neighbors) {
             for (const ne of [n.x, n.x + n.w, n.x + n.w / 2]) {
                 for (const me of [myEdges.left, myEdges.right, myEdges.cx]) {
                     const diff = Math.abs(me - ne);
-                    if (diff < bestDx) { bestDx = diff; snapX = x + (ne - me); guideX = ne; }
+                    if (diff < bestDx) { bestDx = diff; snapX = cx + (ne - me); guideX = ne; }
                 }
             }
             for (const ne of [n.y, n.y + n.h, n.y + n.h / 2]) {
                 for (const me of [myEdges.top, myEdges.bottom, myEdges.cy]) {
                     const diff = Math.abs(me - ne);
-                    if (diff < bestDy) { bestDy = diff; snapY = y + (ne - me); guideY = ne; }
+                    if (diff < bestDy) { bestDy = diff; snapY = cy + (ne - me); guideY = ne; }
                 }
             }
         }
@@ -1188,10 +1207,13 @@ window.assetPlacementEditor = (() => {
         }
     }
 
-    function setSnapConfig(containerId, enabled, gridSize) {
+    // neighbor: 주변 자산/그룹 스냅, grid: 격자 스냅 (둘 중 하나라도 켜지면 enabled)
+    function setSnapConfig(containerId, neighbor, gridSize, grid) {
         const inst = _inst[containerId];
         if (inst) {
-            inst.snap.enabled = !!enabled;
+            inst.snap.neighbor = !!neighbor;
+            inst.snap.grid = !!grid;
+            inst.snap.enabled = inst.snap.neighbor || inst.snap.grid;
             if (gridSize > 0) inst.snap.gridSize = gridSize;
         }
     }
@@ -1247,6 +1269,13 @@ window.assetPlacementEditor = (() => {
         return inst ? Math.round(inst.zoom * 100) : 100;
     }
 
+    // 현재 보이는 영역(viewBox). 그룹을 화면 중앙에 만들 때 사용.
+    function getViewBox(containerId) {
+        const inst = _inst[containerId];
+        if (!inst) return null;
+        return { x: inst.viewBox.x, y: inst.viewBox.y, w: inst.viewBox.w, h: inst.viewBox.h };
+    }
+
     function scrollToAsset(containerId, assetId) {
         const inst = _inst[containerId];
         if (!inst) return;
@@ -1300,7 +1329,7 @@ window.assetPlacementEditor = (() => {
     return {
         init, dispose,
         setTool, setSnapConfig,
-        zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel,
+        zoomIn, zoomOut, resetZoom, fitAll, getZoomLevel, getViewBox,
         scrollToAsset, scrollToGroup,
         scrollListGroupIntoView,
         scrollListAssetIntoView,
