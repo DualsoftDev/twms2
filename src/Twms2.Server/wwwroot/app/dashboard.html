@@ -13,22 +13,21 @@
   <link rel="stylesheet" href="/app/theme.css" />
   <style>
     /* 대시보드 도면 위젯: 전폭 카드 안에서 높이 제한 + 중앙 정렬. 전체화면은 꽉 채움.
-       높이는 우측 하단 앵커를 드래그해 조절한다(--dash-bp-h, localStorage 저장). */
+       높이는 카드 하단 그립을 드래그해 조절한다(--dash-bp-h, localStorage 저장). */
     .dash-bp-stage { text-align: center; line-height: 0; }
     .dash-bp-wrap { position: relative; display: inline-block; max-width: 100%; text-align: left; }
     #dash-bp-viewport { width: auto; height: var(--dash-bp-h, clamp(280px, 42vh, 420px)); max-width: 100%; }
     #dash-bp-viewport:fullscreen { width: 100%; height: 100% !important; max-width: none; }
-    /* 높이 조절 앵커 (우측 하단) — 드래그로 위아래 조절, 더블클릭으로 기본값 복원 */
-    .dash-bp-resize { position: absolute; right: 10px; bottom: 10px; z-index: 5;
-      display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
-      border-radius: 9px; cursor: ns-resize; touch-action: none; user-select: none;
-      color: var(--c-on-surface-variant); background: var(--c-surface);
-      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
-      transition: color .15s ease, box-shadow .15s ease; }
-    .dash-bp-resize:hover { color: var(--c-primary); }
-    .dash-bp-resize.is-dragging { color: var(--c-primary);
-      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
-    .dash-bp-resize .material-symbols-outlined { font-size: 20px; }
+    /* 높이 조절 그립 — 도면(뷰포트) 바깥, 카드 하단 가로 스트립. 드래그로 높이 조절, 더블클릭으로 기본값 복원.
+       (줌 컨트롤은 뷰포트 우하단 오버레이라 이 그립과 겹치지 않는다) */
+    .dash-bp-resize { display: flex; align-items: center; justify-content: center;
+      height: 22px; margin-top: 8px; border-radius: 11px;
+      cursor: ns-resize; touch-action: none; user-select: none;
+      color: var(--c-on-surface-variant);
+      transition: color .15s ease, background .15s ease; }
+    .dash-bp-resize:hover { color: var(--c-primary); background: var(--c-surface-container-low); }
+    .dash-bp-resize.is-dragging { color: var(--c-primary); background: var(--c-surface-container-low); }
+    .dash-bp-resize .material-symbols-outlined { font-size: 22px; }
 
     /* 분할(도면 여러 개) 보기: 뷰포트를 전폭 그리드로, 각 도면을 셀(미니 화면)로 표시 */
     .dash-bp-wrap.lv-split-host { display: block; }
@@ -142,7 +141,6 @@
           </div>
           <button id="dash-bp-split" class="dsp-iconbtn" title="분할 보기 — 도면 여러 개를 나란히" style="display:none;"><span class="material-symbols-outlined">splitscreen</span></button>
           <button id="dash-bp-edit" class="dsp-iconbtn" title="레이아웃 편집 (도면·배경색·자산 배치)" style="display:none;"><span class="material-symbols-outlined">edit</span></button>
-          <button id="dash-bp-fs" class="dsp-iconbtn" title="전체화면"><span class="material-symbols-outlined">fullscreen</span></button>
         </div>
       </div>
       <div class="lv-tabs" id="dash-bp-tabs" style="display:none;"></div>
@@ -151,10 +149,11 @@
           <div class="lv-viewport" id="dash-bp-viewport">
             <div class="lv-loading">불러오는 중…</div>
           </div>
-          <div class="dash-bp-resize" id="dash-bp-resize" title="드래그하여 높이 조절 (더블클릭: 기본값)">
-            <span class="material-symbols-outlined">height</span>
-          </div>
         </div>
+      </div>
+      <!-- 높이 조절 그립: 도면 바깥(카드 하단). 줌 컨트롤(뷰포트 우하단)과 겹치지 않게 분리 -->
+      <div class="dash-bp-resize" id="dash-bp-resize" title="드래그하여 높이 조절 (더블클릭: 기본값)">
+        <span class="material-symbols-outlined">drag_handle</span>
       </div>
     </div>
 
@@ -234,6 +233,7 @@
   </div>
 
   <script src="/app/shell.js"></script>
+  <script src="/js/blueprint-zoom.js"></script>
   <script src="/app/layout-render.js"></script>
   <script src="/app/dashboard.js"></script>
 </body>

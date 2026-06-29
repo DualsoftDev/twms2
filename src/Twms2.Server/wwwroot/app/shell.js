@@ -11,7 +11,6 @@
   const NAV_ITEMS = [
     { key: 'overview', label: '대시보드', icon: 'dashboard', href: '/', match: ['/', '/overview'] },
     { key: 'statistics', label: '통계', icon: 'monitoring', href: '/statistics', match: ['/statistics'] },
-    { key: 'layout', label: '레이아웃', icon: 'space_dashboard', href: '/layout', match: ['/layout'] },
     { key: 'history', label: '자산 통합조회', icon: 'inventory_2', href: '/history', match: ['/history'] },
   ];
 

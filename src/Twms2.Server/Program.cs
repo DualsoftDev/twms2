@@ -434,7 +434,6 @@ var staticRoutes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCa
     ["/schedules"] = "schedules.html",
     ["/assets"] = "asset-explorer.html",
     ["/assets/table"] = "asset-table.html",
-    ["/layout"] = "layout-view.html",
     ["/admin/config"] = "admin-config.html",
     ["/admin/users"] = "admin-users.html",
     ["/admin/database"] = "admin-database.html",
