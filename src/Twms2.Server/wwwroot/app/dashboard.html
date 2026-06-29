@@ -29,11 +29,11 @@
     .dash-bp-resize.is-dragging { color: var(--c-primary); background: var(--c-surface-container-low); }
     .dash-bp-resize .material-symbols-outlined { font-size: 22px; }
 
-    /* 분할(도면 여러 개) 보기: 뷰포트를 전폭 그리드로, 각 도면을 셀(미니 화면)로 표시 */
+    /* 분할(도면 여러 개) 보기: 뷰포트를 전폭 그리드로, 각 도면을 셀(미니 화면)로 표시.
+       CCTV식 모자이크 — 행/열 템플릿은 도면 수에 맞춰 layout-render.js 가 동적으로 지정한다. */
     .dash-bp-wrap.lv-split-host { display: block; }
-    #dash-bp-viewport.lv-split { width: 100%; display: grid; gap: 12px; overflow: auto;
-      background: transparent; box-shadow: none; border-radius: 0;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+    #dash-bp-viewport.lv-split { width: 100%; display: grid; gap: 12px; overflow: hidden;
+      background: transparent; box-shadow: none; border-radius: 0; }
     .lv-cell { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0;
       border-radius: 16px; overflow: hidden; background: var(--c-surface);
       box-shadow: inset 3px 3px 7px var(--nm-dark), inset -3px -3px 7px var(--nm-light); }

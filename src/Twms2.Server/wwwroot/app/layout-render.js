@@ -926,6 +926,7 @@
       viewport.classList.toggle('lv-split', on);
       const host = viewport.parentElement;
       if (host) host.classList.toggle('lv-split-host', on);
+      if (!on) { viewport.style.gridTemplateColumns = ''; viewport.style.gridTemplateRows = ''; }
     }
 
     function render() {
@@ -969,11 +970,23 @@
       if (countEl) countEl.textContent = `${shown}개 표시 · 자산/라인 클릭 시 상세 보기`;
     }
 
-    // 분할 뷰: 모든 레이아웃을 그리드 셀(미니 화면)로 나란히 렌더.
+    // 분할 뷰: 모든 레이아웃을 그리드 셀(미니 화면)로 렌더.
+    // CCTV식 모자이크 — 가로로만 늘리지 않고 도면 수에 맞춰 가로·세로를 번갈아 분할한다.
+    // rows=round(√n), cols=ceil(n/rows) 로 가로(landscape)에 살짝 치우친 정사각형에 가까운 격자를 만들고,
+    // 마지막(덜 찬) 행의 셀들이 남은 칸을 균등 분배해 빈칸 없이 채운다.
     function renderSplit() {
       viewport.innerHTML = '';
       tipEl = null;
       let total = 0;
+      const n = inst.splitData.length;
+      const rows = Math.max(1, Math.round(Math.sqrt(n)));
+      const cols = Math.ceil(n / rows);
+      viewport.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+      viewport.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+      const lastRowStart = cols * (rows - 1);     // 마지막 행 첫 셀 인덱스
+      const lastRowCount = n - lastRowStart;       // 마지막 행 셀 수
+      const spanBase = Math.floor(cols / lastRowCount);
+      const spanExtra = cols % lastRowCount;
       inst.splitData.forEach((data, i) => {
         const layout = inst.allLayouts.find(l => l.id === data.selectedLayoutId) || {};
         const cell = document.createElement('div');
@@ -1003,6 +1016,11 @@
         cell.appendChild(title);
         cell.appendChild(only);
         cell.appendChild(body);
+        // 마지막 행이 덜 찼으면 그 행 셀들을 늘려 남은 칸을 채운다(빈칸 방지).
+        if (i >= lastRowStart && lastRowCount < cols) {
+          const j = i - lastRowStart;
+          cell.style.gridColumn = `span ${spanBase + (j < spanExtra ? 1 : 0)}`;
+        }
         viewport.appendChild(cell);
       });
       if (countEl) countEl.textContent = `${inst.splitData.length}개 도면 · 자산 ${total}개`;
