@@ -1,5 +1,7 @@
 @page "/admin/layout/{Id:int}"
-@attribute [Authorize(Roles = "Admin")]
+@* 엔드포인트 인가는 기본 스킴(DexaAuth=더미)이 아닌 쿠키 스킴(twms_auth)으로 평가해야 함.
+   스킴 미지정 시 기본 DexaAuth(NoResult) → 로그인 상태여도 401. (LayoutEditController 와 동일 패턴) *@
+@attribute [Authorize(AuthenticationSchemes = Twms2.Server.Controllers.AuthController.Scheme, Roles = "Admin")]
 @using MudBlazor.Utilities
 @using static Twms2.Server.Helpers.LayoutHelpers
 @inject LayoutDbService LayoutDb
