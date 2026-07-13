@@ -6,7 +6,7 @@
   <title>레이아웃 편집 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -65,7 +65,7 @@
       box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
     .le-tb-num::-webkit-outer-spin-button, .le-tb-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     .le-tb-label { font-size: 12px; color: var(--c-on-surface-variant); font-weight: 600; }
-    .le-tb-zoom { min-width: 46px; text-align: center; font-size: 13px; color: var(--c-on-surface-variant); font-family: 'JetBrains Mono', monospace; }
+    .le-tb-zoom { min-width: 46px; text-align: center; font-size: 13px; color: var(--c-on-surface-variant); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .le-changed { font-size: 12px; font-weight: 700; color: var(--health-inprogress); padding: 4px 10px; border-radius: 8px;
       background: color-mix(in srgb, var(--health-inprogress) 16%, transparent); }
     .le-sel-label { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -83,7 +83,7 @@
       box-shadow: inset 2px 2px 6px var(--nm-dark), inset -2px -2px 6px var(--nm-light); }
     .le-field-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
     .le-color-swatch { width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--c-outline); flex-shrink: 0; cursor: pointer; }
-    .le-color-hex { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--c-on-surface-variant); }
+    .le-color-hex { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--c-on-surface-variant); }
     .le-color-input { width: 0; height: 0; opacity: 0; position: absolute; pointer-events: none; }
     .le-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; font-size: 12px; font-weight: 700;
       background: color-mix(in srgb, var(--c-primary) 14%, transparent); color: var(--c-primary); }
@@ -104,10 +104,13 @@
     .le-mini:hover { color: var(--c-primary); }
     .le-mini.danger:hover { color: var(--health-failed); }
     .le-mini .material-symbols-outlined { font-size: 15px; }
-    .le-floor-input { width: 52px; text-align: center; font-size: 12px; padding: 3px; border-radius: 6px; border: none;
-      color: var(--c-on-surface); background: var(--c-surface);
+    .le-floor-wrap { display: inline-flex; align-items: center; gap: 1px; padding: 3px 8px; border-radius: 6px; flex-shrink: 0;
+      background: var(--c-surface);
       box-shadow: inset 1px 1px 3px var(--nm-dark), inset -1px -1px 3px var(--nm-light); }
+    .le-floor-input { width: 26px; text-align: center; font-size: 12px; padding: 0; border: none;
+      color: var(--c-on-surface); background: transparent; }
     .le-floor-input::-webkit-outer-spin-button, .le-floor-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .le-floor-suffix { font-size: 11px; font-weight: 700; color: var(--c-on-surface-variant); pointer-events: none; }
     .asset-type-icon-sm { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
     .ap-empty { padding: 14px; text-align: center; font-size: 12px; color: var(--c-on-surface-variant); }
     .le-pillbtn { display:inline-flex; align-items:center; gap:5px; padding:6px 11px; border-radius:9px; cursor:pointer; border:none;
@@ -164,7 +167,7 @@
     .bp-rect-border { fill: none; stroke: var(--mud-palette-primary); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; transition: stroke-width 0.15s ease; }
     .bp-edit-rect:hover .bp-rect-border { stroke-width: 3; stroke-dasharray: none; }
     .bp-edit-rect.dragging .bp-rect-border { stroke-width: 4; stroke-dasharray: none; }
-    .bp-rect-label { font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 16px; font-weight: 700;
+    .bp-rect-label { font-family: var(--font-family); font-size: 16px; font-weight: 700;
       fill: #ffffff; stroke: rgba(0,0,0,0.7); stroke-width: 3px; paint-order: stroke fill; pointer-events: all; user-select: none; cursor: grab; }
     .bp-resize-handle { fill: var(--mud-palette-primary); fill-opacity: 0.5; cursor: nwse-resize; rx: 3; transition: fill-opacity 0.15s ease; }
     .bp-resize-handle:hover { fill-opacity: 0.9; }
@@ -346,7 +349,8 @@
     <!-- ════════ 탭 2: 라인 영역 ════════ -->
     <section id="tab-lines" class="le-tab" hidden>
       <div class="le-toolbar">
-        <button class="le-iconbtn" id="bp-snap" title="스냅(격자에 정렬)"><span class="material-symbols-outlined">grid_4x4</span></button>
+        <button class="le-iconbtn" id="bp-snap" title="주변 라인 영역에 스냅(정렬)"><span class="material-symbols-outlined">align_horizontal_center</span></button>
+        <button class="le-iconbtn" id="bp-gridsnap" title="격자에 스냅"><span class="material-symbols-outlined">grid_4x4</span></button>
         <span class="le-tb-label">Grid</span>
         <input type="number" class="le-tb-num" id="bp-grid" min="5" max="100" step="5" value="20" />
         <span class="le-tb-sep"></span>

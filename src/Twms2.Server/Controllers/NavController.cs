@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Twms2.Dexa;
 using Twms2.Server.Data;
 using Twms2.Server.Helpers;
 using Twms2.Server.Models.Dashboard;
@@ -21,20 +22,23 @@ public class NavController : ControllerBase
     private readonly DexaReadService _dexa;
     private readonly DexaDbConnection _dexaDb;
     private readonly AppSettingsEditor _settings;
+    private readonly IDexaClient _dexaClient;
 
-    public NavController(AssetStatusService status, DexaReadService dexa, DexaDbConnection dexaDb, AppSettingsEditor settings)
+    public NavController(AssetStatusService status, DexaReadService dexa, DexaDbConnection dexaDb, AppSettingsEditor settings, IDexaClient dexaClient)
     {
         _status = status;
         _dexa = dexa;
         _dexaDb = dexaDb;
         _settings = settings;
+        _dexaClient = dexaClient;
     }
 
     [HttpGet]
     public async Task<IActionResult> Get()
     {
         var statuses = await _status.GetAssetStatusesAsync();
-        var dexaOnline = await _dexa.IsConnectedAsync();
+        // 배지 = DEXA 서버 프로세스와의 실시간 Akka 연결 + DB 읽기 가능. (DB만 보면 서버가 죽어도 SQLite 파일이 읽혀 '정상'으로 나옴)
+        var dexaOnline = _dexaClient.IsConnected && await _dexa.IsConnectedAsync();
 
         // 관리 메뉴 노출 여부 — 인증 쿠키의 Admin 역할로 판정
         var auth = await HttpContext.AuthenticateAsync(AuthController.Scheme);
@@ -65,14 +69,16 @@ public class NavController : ControllerBase
 
     /// <summary>
     /// DEXA 서버/에이전트 상태 상세 — 셸 헤더 상태 배지 클릭 시 표시.
-    /// DB 연결 가능 여부 + 프로바이더/대상 + 등록된 에이전트 목록(온라인 여부 포함).
+    /// online = DEXA 서버 프로세스와의 실시간 Akka 연결(살아있는지), dbOnline = DEXA DB 읽기 가능 여부.
+    /// 서버가 죽으면 agent 테이블의 online 값이 stale하므로 에이전트 목록은 서버 연결 시에만 표시.
     /// </summary>
     [HttpGet("dexa-status")]
     public async Task<IActionResult> DexaStatus()
     {
-        var online = await _dexa.IsConnectedAsync();
+        var online = _dexaClient.IsConnected;
+        var dbOnline = await _dexa.IsConnectedAsync();
         // 연결된(온라인) 에이전트만 표시
-        var agents = online ? (await _dexa.GetAgentsAsync()).Where(a => a.Online).ToList() : [];
+        var agents = online && dbOnline ? (await _dexa.GetAgentsAsync()).Where(a => a.Online).ToList() : [];
 
         var provider = _dexaDb.Provider == DexaDbProvider.SqlServer ? "MSSQL" : "SQLite";
         // 연결 대상: MSSQL은 DB 스키마명, SQLite는 파일 경로
@@ -81,6 +87,7 @@ public class NavController : ControllerBase
         return Ok(new
         {
             online,
+            dbOnline,
             provider,
             target,
             agentCount = agents.Count,

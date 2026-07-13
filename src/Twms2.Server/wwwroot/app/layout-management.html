@@ -6,7 +6,7 @@
   <title>레이아웃 관리 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -110,7 +110,7 @@
       background: var(--c-surface); color: var(--c-on-surface); font-weight: 600; font-size: 14px;
       box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light);
     }
-    .lm-reorder-item .lm-reorder-idx { font-family: 'JetBrains Mono', monospace; color: var(--c-on-surface-variant); font-size: 12px; min-width: 20px; }
+    .lm-reorder-item .lm-reorder-idx { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--c-on-surface-variant); font-size: 12px; min-width: 20px; }
     .lm-reorder-item .lm-reorder-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .lm-reorder-move { display: inline-flex; gap: 4px; }
     .lm-reorder-move button {

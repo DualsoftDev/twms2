@@ -6,7 +6,7 @@
   <title>설정 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -136,7 +136,7 @@
     .ac-sched-preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--c-surface-container-low); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
     .ac-sched-preview .material-symbols-outlined { font-size: 20px; color: var(--c-primary); flex-shrink: 0; }
     .ac-sched-preview b { color: var(--c-on-surface); }
-    .ac-sched-preview code { display: block; font-size: 11px; color: var(--c-outline); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+    .ac-sched-preview code { display: block; font-size: 11px; color: var(--c-outline); margin-top: 2px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .ac-sched-preview.err .material-symbols-outlined, .ac-sched-preview.err b { color: var(--health-failed); }
 
     /* ── 이식: 레이아웃 관리(layout-management) 전용 ── */
@@ -182,7 +182,7 @@
     .lm-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
     .lm-reorder-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
     .lm-reorder-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--c-surface); color: var(--c-on-surface); font-weight: 600; font-size: 14px; box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light); }
-    .lm-reorder-item .lm-reorder-idx { font-family: 'JetBrains Mono', monospace; color: var(--c-on-surface-variant); font-size: 12px; min-width: 20px; }
+    .lm-reorder-item .lm-reorder-idx { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--c-on-surface-variant); font-size: 12px; min-width: 20px; }
     .lm-reorder-item .lm-reorder-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .lm-reorder-move { display: inline-flex; gap: 4px; }
     .lm-reorder-move button { width: 28px; height: 28px; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 2px 2px 4px var(--nm-dark), -2px -2px 4px var(--nm-light); }
@@ -287,7 +287,7 @@
     .cell-na { display: block; text-align: center; opacity: 0.3; user-select: none; }
     td.cell-na-bg { background: rgba(0, 0, 0, 0.05); }
     .dark td.cell-na-bg { background: rgba(255, 255, 255, 0.04); }
-    .nm-table td.col-id, .nm-table th.col-id { width: 44px; color: var(--c-on-surface-variant); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .nm-table td.col-id, .nm-table th.col-id { width: 44px; color: var(--c-on-surface-variant); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; }
     .nm-table td.col-sel, .nm-table th.col-sel { width: 34px; text-align: center; cursor: default; }
     .nm-table td.col-type, .nm-table th.col-type { width: 84px; }
     .type-cell { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }

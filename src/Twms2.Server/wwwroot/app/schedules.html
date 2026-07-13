@@ -6,7 +6,7 @@
   <title>스케줄 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -85,7 +85,7 @@
     }
 
     .sch-cron-preview {
-      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px;
       color: var(--c-on-surface); margin-top: 8px;
       padding: 8px 12px; border-radius: 10px;
       box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);

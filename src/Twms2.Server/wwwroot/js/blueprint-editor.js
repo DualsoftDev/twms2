@@ -24,8 +24,14 @@ window.blueprintEditor = (() => {
         const svg = container.querySelector('svg');
         if (!svg) return;
 
-        const inst = { container, svg, dotNetRef, handlers: [], snap: { enabled: true, gridSize: 20 }, dragging: false };
+        const inst = {
+            container, svg, dotNetRef, handlers: [],
+            snap: { neighbor: true, grid: false, gridSize: 20, threshold: 8 },
+            dragging: false, _guides: [],
+        };
         _inst[containerId] = inst;
+
+        bindKeyboard(inst);
 
         const groups = svg.querySelectorAll('.bp-edit-rect');
         groups.forEach(g => {
@@ -120,18 +126,36 @@ window.blueprintEditor = (() => {
             const dy = ((e.clientY - startPt.clientY) / startPt.svgH) * startPt.vbH;
 
             let x, y, w, h;
-            const snap = v => inst.snap.enabled ? Math.round(v / inst.snap.gridSize) * inst.snap.gridSize : v;
+            const grid = v => Math.round(v / inst.snap.gridSize) * inst.snap.gridSize;
 
             if (mode === 'resize') {
-                w = Math.max(30, snap(startRect.w + dx));
-                h = Math.max(20, snap(startRect.h + dy));
                 x = startRect.x;
                 y = startRect.y;
+                let rw = startRect.w + dx, rh = startRect.h + dy;
+                if (inst.snap.grid) {
+                    rw = grid(rw); rh = grid(rh);
+                    clearGuides(inst);
+                } else if (inst.snap.neighbor) {
+                    const s = snapResize(inst, lineId, x, y, rw, rh);
+                    rw = s.w; rh = s.h;
+                    renderGuides(inst, s.guides);
+                }
+                w = Math.max(30, rw);
+                h = Math.max(20, rh);
             } else {
-                x = snap(startRect.x + dx);
-                y = snap(startRect.y + dy);
                 w = startRect.w;
                 h = startRect.h;
+                let rx = startRect.x + dx, ry = startRect.y + dy;
+                if (inst.snap.grid) {
+                    rx = grid(rx); ry = grid(ry);
+                    clearGuides(inst);
+                } else if (inst.snap.neighbor) {
+                    const s = snapMove(inst, lineId, rx, ry, w, h);
+                    rx = s.x; ry = s.y;
+                    renderGuides(inst, s.guides);
+                }
+                x = rx;
+                y = ry;
             }
 
             updateGroupPosition(group, x, y, w, h);
@@ -141,6 +165,7 @@ window.blueprintEditor = (() => {
             document.removeEventListener('pointermove', onMove);
             document.removeEventListener('pointerup', onUp);
             group.classList.remove('dragging');
+            clearGuides(inst);
             // 약간의 지연 후 dragging 해제 — pointerup 직후 삭제 버튼 오발동 방지
             setTimeout(() => { inst.dragging = false; }, 100);
 
@@ -229,6 +254,108 @@ window.blueprintEditor = (() => {
         }
     }
 
+    // ── 주변 영역 스냅 (asset-placement-editor 와 동일 UX: 임계값 내 정렬 + 가이드라인) ──
+
+    /** lineId 제외 나머지 라인 영역들의 현재 좌표 */
+    function otherRects(inst, lineId) {
+        const result = [];
+        inst.svg.querySelectorAll('.bp-edit-rect').forEach(g => {
+            const lid = parseInt(g.dataset.lineId);
+            const fill = g.querySelector('.bp-rect-fill');
+            if (isNaN(lid) || lid === lineId || !fill) return;
+            result.push({
+                x: parseFloat(fill.getAttribute('x')),
+                y: parseFloat(fill.getAttribute('y')),
+                w: parseFloat(fill.getAttribute('width')),
+                h: parseFloat(fill.getAttribute('height')),
+            });
+        });
+        return result;
+    }
+
+    /** 이동 스냅: 좌/중/우, 상/중/하 모서리를 이웃 모서리에 정렬 */
+    function snapMove(inst, lineId, x, y, w, h) {
+        const thr = inst.snap.threshold;
+        const guides = [];
+        let bestDx = thr + 1, bestDy = thr + 1, snapX = null, snapY = null, guideX = null, guideY = null;
+        for (const n of otherRects(inst, lineId)) {
+            const nxs = [n.x, n.x + n.w / 2, n.x + n.w];
+            const nys = [n.y, n.y + n.h / 2, n.y + n.h];
+            for (const me of [x, x + w / 2, x + w]) {
+                for (const ne of nxs) {
+                    const diff = Math.abs(me - ne);
+                    if (diff < bestDx) { bestDx = diff; snapX = x + (ne - me); guideX = ne; }
+                }
+            }
+            for (const me of [y, y + h / 2, y + h]) {
+                for (const ne of nys) {
+                    const diff = Math.abs(me - ne);
+                    if (diff < bestDy) { bestDy = diff; snapY = y + (ne - me); guideY = ne; }
+                }
+            }
+        }
+        if (bestDx <= thr && snapX !== null) { x = snapX; guides.push({ x1: guideX, y1: 0, x2: guideX, y2: 600 }); }
+        if (bestDy <= thr && snapY !== null) { y = snapY; guides.push({ x1: 0, y1: guideY, x2: 1000, y2: guideY }); }
+        return { x, y, guides };
+    }
+
+    /** 리사이즈 스냅: 우/하 모서리를 이웃 모서리에 정렬 */
+    function snapResize(inst, lineId, x, y, w, h) {
+        const thr = inst.snap.threshold;
+        const guides = [];
+        let bestDw = thr + 1, bestDh = thr + 1, snapW = null, snapH = null, guideX = null, guideY = null;
+        for (const n of otherRects(inst, lineId)) {
+            for (const ne of [n.x, n.x + n.w]) {
+                const diff = Math.abs((x + w) - ne);
+                if (diff < bestDw && ne - x >= 30) { bestDw = diff; snapW = ne - x; guideX = ne; }
+            }
+            for (const ne of [n.y, n.y + n.h]) {
+                const diff = Math.abs((y + h) - ne);
+                if (diff < bestDh && ne - y >= 20) { bestDh = diff; snapH = ne - y; guideY = ne; }
+            }
+        }
+        if (bestDw <= thr && snapW !== null) { w = snapW; guides.push({ x1: guideX, y1: 0, x2: guideX, y2: 600 }); }
+        if (bestDh <= thr && snapH !== null) { h = snapH; guides.push({ x1: 0, y1: guideY, x2: 1000, y2: guideY }); }
+        return { w, h, guides };
+    }
+
+    function renderGuides(inst, guides) {
+        clearGuides(inst);
+        for (const g of guides) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.classList.add('ap-snap-guide');
+            line.setAttribute('x1', g.x1); line.setAttribute('y1', g.y1);
+            line.setAttribute('x2', g.x2); line.setAttribute('y2', g.y2);
+            inst.svg.appendChild(line);
+            inst._guides.push(line);
+        }
+    }
+
+    function clearGuides(inst) {
+        inst._guides.forEach(l => l.remove());
+        inst._guides.length = 0;
+    }
+
+    // ── 키보드 (Ctrl+Z/Y — 호스트 shim/컴포넌트의 OnKeyAction 으로 전달) ──
+    function bindKeyboard(inst) {
+        const handler = (e) => {
+            const tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+            const ctrl = e.ctrlKey || e.metaKey;
+            if (!ctrl || !inst.dotNetRef) return;
+            const key = e.key.toLowerCase();
+            let action = null;
+            if (key === 'z') action = e.shiftKey ? 'redo' : 'undo';
+            else if (key === 'y') action = 'redo';
+            if (!action) return;
+            e.preventDefault();
+            // OnKeyAction 미구현 호스트(레거시 Blazor)는 조용히 무시
+            try { Promise.resolve(inst.dotNetRef.invokeMethodAsync('OnKeyAction', action)).catch(() => { }); } catch { }
+        };
+        document.addEventListener('keydown', handler);
+        inst.handlers.push({ el: document, type: 'keydown', fn: handler });
+    }
+
     function getPositions(containerId) {
         const container = document.getElementById(containerId);
         if (!container) return [];
@@ -256,6 +383,7 @@ window.blueprintEditor = (() => {
         const inst = _inst[containerId];
         if (!inst) return;
 
+        clearGuides(inst);
         inst.handlers.forEach(({ el, type, fn }) => {
             el.removeEventListener(type, fn);
         });
@@ -263,11 +391,13 @@ window.blueprintEditor = (() => {
         delete _inst[containerId];
     }
 
-    function setSnapConfig(containerId, enabled, gridSize) {
+    /** (containerId, neighborSnap, gridSize, gridSnap) — 구 호출부(3인자)는 grid=false 로 동작 */
+    function setSnapConfig(containerId, neighbor, gridSize, grid) {
         const inst = _inst[containerId];
         if (inst) {
-            inst.snap.enabled = !!enabled;
-            inst.snap.gridSize = gridSize > 0 ? gridSize : 20;
+            inst.snap.neighbor = !!neighbor;
+            inst.snap.grid = !!grid;
+            if (gridSize > 0) inst.snap.gridSize = gridSize;
         }
     }
 

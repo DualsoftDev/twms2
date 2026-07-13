@@ -6,7 +6,7 @@
   <title>대시보드 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -169,6 +169,10 @@
         </div>
       </div>
       <div id="timeline"></div>
+      <!-- 높이 조절 그립: 같은 시간대 백업이 몰려 레인이 많아지면 안쪽 스크롤 + 그립으로 높이 조절 (도면과 동일 UX) -->
+      <div class="dash-bp-resize" id="timeline-resize" title="드래그하여 높이 조절 (더블클릭: 기본값)" style="display:none;">
+        <span class="material-symbols-outlined">drag_handle</span>
+      </div>
     </div>
 
     <!-- 타입별 + 라인별 현황 -->

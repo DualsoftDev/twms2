@@ -6,7 +6,7 @@
   <title>사용자 관리 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -33,7 +33,7 @@
     .au-btn:active { box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light); }
     .au-btn .material-symbols-outlined { font-size: 18px; }
     .au-btn[disabled] { opacity: .55; cursor: default; pointer-events: none; }
-    .au-id { font-family: 'JetBrains Mono', monospace; color: var(--c-on-surface-variant); }
+    .au-id { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--c-on-surface-variant); }
     .au-empty { padding: 24px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }
     /* 인디터미네이트 로딩 바 (MudProgressLinear 대체) */
     .au-loadbar { height: 4px; border-radius: 4px; overflow: hidden; margin-bottom: 16px;

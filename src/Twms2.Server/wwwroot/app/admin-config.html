@@ -6,7 +6,7 @@
   <title>DEXA 설정 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -140,7 +140,7 @@
     .ac-sched-preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--c-surface-container-low); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
     .ac-sched-preview .material-symbols-outlined { font-size: 20px; color: var(--c-primary); flex-shrink: 0; }
     .ac-sched-preview b { color: var(--c-on-surface); }
-    .ac-sched-preview code { display: block; font-size: 11px; color: var(--c-outline); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+    .ac-sched-preview code { display: block; font-size: 11px; color: var(--c-outline); margin-top: 2px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .ac-sched-preview.err .material-symbols-outlined, .ac-sched-preview.err b { color: var(--health-failed); }
   </style>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
