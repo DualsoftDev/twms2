@@ -39,6 +39,7 @@
   const CARD_PAD = 3;
   const NAME_FZ = 7.5, NAME_LH = 9.5, IP_FZ = 6, IP_LH = 8, NAME_MAX = 14;
   const OFFLINE_COLOR = '#8b93b0'; // ping 불가(오프라인) 축 — health 색과 분리
+  const LINE_BG_DEFAULT = '#1f2937a6'; // 라인 영역 카드 기본 배경 = 차콜 65% (도면 설정 '라인 영역 색' 미설정 시)
 
   // ── 무상태 유틸 ───────────────────────────────────────────────────────────
   function svgEl(name, attrs) {
@@ -47,6 +48,13 @@
     return el;
   }
   function colorFor(asset) { return HEALTH_COLOR[asset.health] || HEALTH_COLOR.unknown; }
+  // '#rrggbb' | '#rrggbbaa' → { hex6, r, g, b, a(0~1) }. 그 외 형식은 null.
+  function parseHexA(s) {
+    const m = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(String(s || ''));
+    if (!m) return null;
+    const v = parseInt(m[1], 16);
+    return { hex6: '#' + m[1], r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255, a: m[2] ? parseInt(m[2], 16) / 255 : 1 };
+  }
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   }
@@ -114,7 +122,8 @@
 
   // 자산 마커 <g> (사각 배경 + 아이콘 + 툴팁), 클릭 → /assets/{id}
   // 툴팁 텍스트는 data-tip 에 담아 두고, 뷰포트의 커스텀 HTML 툴팁이 hover 시 표시한다.
-  function assetMarker(asset, x, y, size, floor) {
+  // neutral: 라인 뷰용 중립 배경(경보만 채움색) — 개별(배치도) 뷰는 기존 상태색 배경 유지.
+  function assetMarker(asset, x, y, size, floor, neutral) {
     const g = svgEl('g', {
       transform: `translate(${x}, ${y})`,
       class: 'lv-asset-icon',
@@ -125,7 +134,7 @@
     });
     g.appendChild(svgEl('rect', {
       width: size, height: size, rx: Math.max(1, size * 0.12),
-      fill: asset.iconBgColor || '#e0e0e0', stroke: colorFor(asset),
+      fill: neutral ? neutralIconBg(asset.health) : (asset.iconBgColor || '#e0e0e0'), stroke: colorFor(asset),
       'stroke-width': Math.max(0.5, size * 0.05),
     }));
     g.appendChild(svgEl('image', {
@@ -155,11 +164,11 @@
     return { childIds, plcChildren };
   }
 
-  // 건강 색상 hex → 밝은 그룹 아이콘 배경색 (LayoutHelpers.GetIconBgColorFromHex 이식)
-  const ICON_BG_FROM_HEX = {
-    '#65B991': '#d4f0e0', '#6BA0DE': '#d6e8f7', '#E67E7E': '#f5d0d0', '#f59e0b': '#fde8c4',
-  };
-  function iconBgFromHex(hex) { return ICON_BG_FROM_HEX[hex] || '#e0e0e0'; }
+  // 라인 뷰 아이콘 배경 — 면은 중립(무채색), 경보(실패/작업중)만 채움색으로 튀게.
+  // 정상/내역없음의 상태는 테두리색(colorFor)이 전담한다.
+  function neutralIconBg(health) {
+    return health === 'failed' ? '#f5d0d0' : health === 'inprogress' ? '#fde8c4' : '#e6e9f2';
+  }
 
   // 영역/그룹 내 그리드 배치 (LayoutGroupAssets 이식: 비율 기반 cols/rows, 중앙정렬)
   function gridLayout(x, y, w, h, count, pad) {
@@ -232,53 +241,90 @@
       }
     }
 
-    // 2) 영역 종횡비에 맞춰 최적 열 수(cols)를 탐색한다.
-    //    cols 개씩 행으로 끊어(row-major) 배치 → cols=N 이면 한 줄(가로배치), cols=1 이면 한 열(세로배치).
-    //    최종 배율 fit 을 최대화하면 가로로 긴 영역은 자연히 가로배치가, 세로로 긴 영역은 세로배치가 선택되고,
-    //    (제목 제외) 콘텐츠 영역을 최대한 채운다. 그림자 여유(margin) 포함, 작은 내용 과확대 방지(MAX_FIT).
-    //    fit 동률(작은 내용이 상한에 걸릴 때)이면 블록 종횡비가 영역 종횡비에 가까운 쪽을 택해 방향을 확정한다.
+    // 2) 그룹(PLC 카드)과 개별(standalone)을 분리 배치 — 카드 행(들) 위, 개별 아이콘 그리드 아래.
+    //    카드끼리는 영역 종횡비에 맞춰 최적 열 수(cols)를 탐색(행으로 끊어 fit 최대화 + 종횡비 동률 판정),
+    //    개별 아이콘은 카드 블록 폭(카드가 없으면 영역 종횡비)에 맞춘 그리드로 그 아래에 깐다.
     const margin = 2.5, MAX_FIT = 2.0;
     const regionAspect = availW / availH;
-    let best = null;
-    for (let cols = 1; cols <= plans.length; cols++) {
-      const rows = [];
-      for (let i = 0; i < plans.length; i += cols) rows.push(plans.slice(i, i + cols));
-      const rh = rows.map(r => Math.max(...r.map(it => it.natH)));
-      const rw = rows.map(r => r.reduce((s, it) => s + it.natW, 0) + innerGap * (r.length - 1));
-      const pW = Math.max(...rw);
-      const pH = rh.reduce((s, h) => s + h, 0) + rowGap * (rows.length - 1);
-      const fit = Math.min(MAX_FIT, availW / (pW + margin), availH / (pH + margin));
-      const aspectMatch = -Math.abs(Math.log(pW / pH) - Math.log(regionAspect)); // 0 에 가까울수록 영역 종횡비와 일치
-      if (!best || fit > best.fit + 1e-6 ||
-          (Math.abs(fit - best.fit) <= 1e-6 && aspectMatch > best.aspectMatch + 1e-9)) {
-        best = { rows, rh, rw, pW, pH, fit, aspectMatch };
+    const cardPlans = plans.filter(p => p.isPlc);
+    const stdPlans = plans.filter(p => !p.isPlc);
+
+    let best = { rows: [], rh: [], rw: [], pW: 0, pH: 0 };
+    if (cardPlans.length) {
+      let bestScore = null;
+      for (let cols = 1; cols <= cardPlans.length; cols++) {
+        const rows = [];
+        for (let i = 0; i < cardPlans.length; i += cols) rows.push(cardPlans.slice(i, i + cols));
+        const rh = rows.map(r => Math.max(...r.map(it => it.natH)));
+        const rw = rows.map(r => r.reduce((s, it) => s + it.natW, 0) + innerGap * (r.length - 1));
+        const pW = Math.max(...rw);
+        const pH = rh.reduce((s, h) => s + h, 0) + rowGap * (rows.length - 1);
+        const fit = Math.min(MAX_FIT, availW / (pW + margin), availH / (pH + margin));
+        const aspectMatch = -Math.abs(Math.log(pW / pH) - Math.log(regionAspect)); // 0 에 가까울수록 영역 종횡비와 일치
+        if (!bestScore || fit > bestScore.fit + 1e-6 ||
+            (Math.abs(fit - bestScore.fit) <= 1e-6 && aspectMatch > bestScore.aspectMatch + 1e-9)) {
+          bestScore = { rows, rh, rw, pW, pH, fit, aspectMatch };
+        }
       }
+      best = bestScore;
     }
+
+    // 개별 아이콘 그리드 열 수: 카드 블록(위 고정) 아래에 붙였을 때 최종 블록 fit 이
+    // 최대가 되는 열 수를 탐색 — 넓은 영역은 넓게, 좁은 영역은 여러 행으로 자연 선택.
+    const stdRows = [];
+    if (stdPlans.length) {
+      let bestStd = null;
+      for (let c = 1; c <= stdPlans.length; c++) {
+        const rows = Math.ceil(stdPlans.length / c);
+        const w = c * sz + (c - 1) * innerGap;
+        const h = rows * sz + (rows - 1) * innerGap;
+        const bw = Math.max(best.pW, w);
+        const bh = best.pH + (best.pH > 0 ? rowGap + 1.5 : 0) + h;
+        const fit = Math.min(MAX_FIT, availW / (bw + margin), availH / (bh + margin));
+        const aspectMatch = -Math.abs(Math.log(bw / bh) - Math.log(regionAspect));
+        if (!bestStd || fit > bestStd.fit + 1e-6 ||
+            (Math.abs(fit - bestStd.fit) <= 1e-6 && aspectMatch > bestStd.aspectMatch + 1e-9)) {
+          bestStd = { c, fit, aspectMatch };
+        }
+      }
+      for (let i = 0; i < stdPlans.length; i += bestStd.c) stdRows.push(stdPlans.slice(i, i + bestStd.c));
+    }
+    const stdRowW = stdRows.map(r => r.length * sz + (r.length - 1) * innerGap);
+    const stdW = stdRowW.length ? Math.max(...stdRowW) : 0;
+    const stdH = stdRows.length ? stdRows.length * sz + (stdRows.length - 1) * innerGap : 0;
+    const blockW = Math.max(best.pW, stdW);
+    const sectionGap = best.pH > 0 && stdH > 0 ? rowGap + 1.5 : 0; // 카드↔개별 사이 살짝 넓은 간격
+    const blockH = best.pH + sectionGap + stdH;
 
     // 3) packed-local 좌표(원점 0,0)로 배치 — 각 행을 블록 폭 기준 가운데 정렬.
     //    같은 행 카드는 박스 높이를 행 최대 높이(rowH)로 통일 + 상단 정렬 → 위아래/헤더 라인이 가지런해진다.
     let py = 0;
     for (let ri = 0; ri < best.rows.length; ri++) {
       const row = best.rows[ri], rowH = best.rh[ri];
-      let px = (best.pW - best.rw[ri]) / 2;
+      let px = (blockW - best.rw[ri]) / 2;
       for (const it of row) {
-        if (it.isPlc) {
-          const card = it.model; card.x = px; card.y = py; card.renderH = rowH;
-          plcCards.push(card);
-        } else {
-          // standalone 아이콘은 작은 정사각 — 행 안에서 세로 가운데.
-          standalones.push({ x: px, y: py + (rowH - it.natH) / 2, size: sz, asset: it.asset });
-        }
+        const card = it.model; card.x = px; card.y = py; card.renderH = rowH;
+        plcCards.push(card);
         px += it.natW + innerGap;
       }
       py += rowH + rowGap;
     }
+    py += sectionGap ? sectionGap - rowGap : 0; // 카드 마지막 행 뒤 rowGap 은 이미 더해짐
+    for (const row of stdRows) {
+      const rw = row.length * sz + (row.length - 1) * innerGap;
+      let px = (blockW - rw) / 2;
+      for (const it of row) {
+        standalones.push({ x: px, y: py, size: sz, asset: it.asset });
+        px += sz + innerGap;
+      }
+      py += sz + innerGap;
+    }
 
     // 4) 블록 전체를 콘텐츠 영역(availW×availH)에 한 번에 배치(가운데 + 단일 fit).
     //    renderLineView 가 이 transform 을 clip 되는 scaler <g> 에 적용한다.
-    const fit = best.fit;
-    const offsetX = rect.x + padSide + (availW - (best.pW + margin) * fit) / 2;
-    const offsetY = rect.y + headerH + (availH - (best.pH + margin) * fit) / 2;
+    const fit = Math.min(MAX_FIT, availW / (blockW + margin), availH / (blockH + margin));
+    const offsetX = rect.x + padSide + (availW - (blockW + margin) * fit) / 2;
+    const offsetY = rect.y + headerH + (availH - (blockH + margin) * fit) / 2;
     const transform = `translate(${offsetX} ${offsetY}) scale(${fit})`;
 
     return { standalones, plcCards, transform };
@@ -296,7 +342,7 @@
   const HDR_GAP = 4, BAR_H = 4.5, BAR_GAP = 3, SEC_GAP = 4;
   const ROW_H = 9.5, ROW_DOT_R = 2.0, ROW_NAME_FZ = 6.6, ROW_IP_FZ = 6;
   const COUNT_FZ = 6, LEG_FZ = 6, LEG_DOT_R = 1.7;
-  const CARD_BG = '#262643';           // 다크 캔버스(#1a1a2e) 위 카드 본체 — 한 단계 밝게
+  const CARD_BG = '#262643';           // PLC 카드 본체 — 라인 카드(차콜)보다 한 단계 밝은 다크 서피스
   const HEALTH_BAR_ORDER = ['backedup', 'unchanged', 'unknown', 'inprogress', 'failed'];
 
   function iconHref(icon) { return '/' + String(icon || 'images/icons/plc.png').replace(/^\//, ''); }
@@ -447,7 +493,7 @@
       const tx = x + (i % cols) * (tileSz + gap), ty = y + Math.floor(i / cols) * (tileSz + gap);
       const hcc = colorFor(c);
       const t = svgEl('g', { class: 'lv-asset-icon', style: 'cursor:pointer', 'data-asset-id': c.assetId, 'data-tip': titleFor(c, c.floor) });
-      t.appendChild(svgEl('rect', { x: tx, y: ty, width: tileSz, height: tileSz, rx: Math.max(2, tileSz * 0.22), fill: iconBgFromHex(hcc), stroke: hcc, 'stroke-width': 1.1, opacity: 0.95 }));
+      t.appendChild(svgEl('rect', { x: tx, y: ty, width: tileSz, height: tileSz, rx: Math.max(2, tileSz * 0.22), fill: neutralIconBg(c.health), stroke: hcc, 'stroke-width': c.health === 'failed' ? 1.5 : 1.1, opacity: 0.95 }));
       t.appendChild(svgEl('image', { href: iconHref(c.icon), x: tx + 1.2, y: ty + 1.2, width: tileSz - 2.4, height: tileSz - 2.4 }));
       if (c.pingReachable === false) offlineMark(t, tx, ty, tileSz);
       g.appendChild(t);
@@ -482,7 +528,8 @@
   // PLC 카드 <g>: 그림자 → 본체(집계 상태색 테두리) → [경보 띠/틴트] → 헤더(아이콘·이름·IP·카운트)
   //              → 상태바 → 본문(모드별) → 범례. 배치/축소는 transform 으로 일괄 적용.
   // 카드 테두리/틴트 = 그룹(PLC+자식) 집계 상태색(card.aggColor), PLC 아이콘 테두리 = PLC 자신의 상태색.
-  function plcCardGroup(card) {
+  // bg: 라인 실효색에서 파생한 카드 배경(renderLineView 가 전달) — 미전달 시 고정 다크(CARD_BG).
+  function plcCardGroup(card, bg) {
     // H = 행 통일 높이(renderH)가 있으면 그것, 없으면 자연 높이. 내용(헤더/바/본문/범례)은 상단 기준이라 그대로,
     // 박스(그림자·본체·경보 띠/틴트)만 H 까지 늘려 같은 행 카드들이 같은 높이가 된다.
     const plc = card.plc, PAD = CARD_PAD, W = card.cardW, H = card.renderH || card.cardH;
@@ -490,13 +537,14 @@
 
     // 그림자(캔버스/영역/카드 3층 명도계단)
     g.appendChild(svgEl('rect', { x: 1.2, y: 1.8, width: W, height: H, rx: 6, fill: 'rgba(0,0,0,0.42)' }));
-    // 본체 — 경보(실패/작업중) 카드만 테두리 강조 + 면적 신호로 튀게.
+    // 본체 — 면은 중립: 경보(실패/작업중) 카드만 상태색 테두리 + 은은한 틴트/색띠, 정상 카드는 무채 테두리.
     g.appendChild(svgEl('rect', {
       x: 0, y: 0, width: W, height: H, rx: 6,
-      fill: CARD_BG, stroke: card.aggColor, 'stroke-width': card.isAlert ? 1.4 : 1.0, 'stroke-opacity': card.isAlert ? 0.95 : 0.65,
+      fill: bg || CARD_BG, stroke: card.isAlert ? card.aggColor : 'rgba(150,165,205,0.40)',
+      'stroke-width': card.isAlert ? 1.4 : 1.0, 'stroke-opacity': card.isAlert ? 0.95 : 1,
     }));
     if (card.isAlert) {
-      g.appendChild(svgEl('rect', { x: 0, y: 0, width: W, height: H, rx: 6, fill: card.aggColor, 'fill-opacity': 0.09 }));
+      g.appendChild(svgEl('rect', { x: 0, y: 0, width: W, height: H, rx: 6, fill: card.aggColor, 'fill-opacity': 0.06 }));
       g.appendChild(svgEl('rect', { x: 1, y: 4, width: 2, height: H - 8, rx: 1, fill: card.aggColor }));
     }
 
@@ -505,7 +553,7 @@
     const icoX = PAD, icoY = card.headerY + (card.headerH - icoSize) / 2;
     const hc = plc.healthColor || colorFor(plc);
     const ico = svgEl('g', { class: 'lv-asset-icon', 'data-tip': titleFor(plc, plc.floor) });
-    ico.appendChild(svgEl('rect', { x: icoX, y: icoY, width: icoSize, height: icoSize, rx: 4, fill: plc.iconBgColor || '#e0e0e0', stroke: hc, 'stroke-width': 0.9, opacity: 0.97 }));
+    ico.appendChild(svgEl('rect', { x: icoX, y: icoY, width: icoSize, height: icoSize, rx: 4, fill: neutralIconBg(plc.health), stroke: hc, 'stroke-width': 0.9, opacity: 0.97 }));
     ico.appendChild(svgEl('image', { href: iconHref(plc.icon), x: icoX + 2, y: icoY + 2, width: icoSize - 4, height: icoSize - 4 }));
     g.appendChild(ico);
     if (plc.pingReachable === false) offlineMark(g, icoX, icoY, icoSize);
@@ -562,6 +610,7 @@
 
     // 줌/팬 + 컨트롤(blueprint-zoom.js 필요) · 클릭 팝오버 — 둘 다 opt-in(/layout 만 사용, 대시보드 위젯은 미사용)
     const zoomEnabled = !!opts.zoom && !!window.blueprintZoom;
+    const panEnabled = opts.pan !== false; // 드래그 팬 (기본 on; 대시보드 위젯은 pan:false 로 끔)
     const popoverEnabled = !!opts.popover;
     if ((zoomEnabled || popoverEnabled) && !viewport.id) viewport.id = 'lv-vp-' + (++_vpSeq);
 
@@ -615,6 +664,8 @@
     function hideTip() { if (tipEl) tipEl.style.display = 'none'; }
     function attachTooltip(svg) {
       svg.addEventListener('mousemove', (e) => {
+        // 클릭 팝오버가 떠 있는 동안엔 hover 툴팁 억제 — 같은 자리에 겹쳐 글자가 뒤섞여 보임
+        if (popEl && popEl.style.display !== 'none') { hideTip(); return; }
         const icon = e.target.closest && e.target.closest('.lv-asset-icon');
         const tip = icon && icon.getAttribute('data-tip');
         if (!tip) { hideTip(); return; }
@@ -652,6 +703,7 @@
     function openAssetPopover(id, evt) {
       const a = assetById(id);
       if (!a) { location.href = `/assets/${id}`; return; }
+      hideTip(); // hover 툴팁과 같은 좌표에 뜨므로 먼저 치움
       const p = ensurePop();
       p.innerHTML = `<button class="lv-pop-close" title="닫기">&times;</button>`
         + titleFor(a, a.floor)
@@ -661,6 +713,7 @@
     }
 
     function openLinePopover(lineId, evt) {
+      hideTip();
       const line = (inst.data.lines || []).find(l => l.id === lineId);
       const assets = (inst.data.assets || []).filter(a => a.lineId === lineId)
         .slice().sort((x, y) => String(x.name || '').localeCompare(String(y.name || '')));
@@ -740,35 +793,97 @@
       const lineMap = new Map(inst.data.lines.map(l => [l.id, l]));
       const hier = buildPlcHierarchy(inst.data.assets);
 
+      // 라인 카드 서피스 = 사용자 설정(도면 설정 '라인 영역 색', #rrggbb 또는 #rrggbbaa) 또는 기본값.
+      // 면은 중립으로 두고 상태색은 경보(실패/작업중)의 테두리·스트립과 헤더 요약에만 쓴다.
+      const lc = parseHexA(inst.data.config && inst.data.config.lineColor) || parseHexA(LINE_BG_DEFAULT);
+      const lineBg = lc.hex6, lineAlpha = lc.a;
+      // 텍스트 대비는 실효색(반투명이면 캔버스 배경과 혼합한 색)의 밝기로 판정
+      const cv = parseHexA(inst.data.config && inst.data.config.bgColor) || { r: 255, g: 255, b: 255 };
+      const mix = (c1, c2) => c1 * lineAlpha + c2 * (1 - lineAlpha);
+      const effR = mix(lc.r, cv.r), effG = mix(lc.g, cv.g), effB = mix(lc.b, cv.b);
+      const lum = (0.2126 * effR + 0.7152 * effG + 0.0722 * effB) / 255;
+      const lightBg = lum > 0.55;
+
+      // PLC 카드 배경 파생 — 라인 실효색 기준 명도 계단 자동 유지:
+      // 밝은 라인 = 고정 다크 카드(검증된 대비), 깊은 다크 = 살짝 밝게, 중간톤 = 어둡게.
+      // 두 규칙은 lum 0.15~0.25 구간에서 선형 블렌드(투명도 슬라이더 연속 변화 시 점프 방지).
+      let cardBg = CARD_BG;
+      if (!lightBg) {
+        const t = Math.max(0, Math.min(1, (lum - 0.15) / 0.10));
+        const ch = (v) => Math.round((v + (255 - v) * 0.10) * (1 - t) + v * 0.52 * t);
+        cardBg = '#' + [effR, effG, effB].map(v => ch(v).toString(16).padStart(2, '0')).join('');
+      }
+      const ink = lightBg ? '#1d2433' : '#e8edf9';
+      const dim = lightBg ? 'rgba(29,36,51,0.60)' : 'rgba(184,200,230,0.65)';
+      const edge = lightBg ? 'rgba(20,28,45,0.25)' : 'rgba(150,165,205,0.28)';
+
       for (const rect of inst.data.blueprintRects) {
         const line = lineMap.get(rect.lineId);
         if (!line) continue;
         const lineAssets = inst.data.assets.filter(a => a.lineId === rect.lineId);
         const topLevel = lineAssets.filter(a => !hier.childIds.has(a.assetId));
-        const healthColor = aggregateColor(lineAssets);
+        const bd = healthBreakdown(lineAssets);
+        const alertColor = bd.counts.failed > 0 ? HEALTH_COLOR.failed
+          : bd.counts.inprogress > 0 ? HEALTH_COLOR.inprogress : null;
 
         const g = svgEl('g', { 'data-line-id': rect.lineId, style: 'cursor:pointer' });
-        // 영역 배경
+        // 그림자 + 본체(중립 서피스) — 캔버스/영역/카드 3층 명도계단의 가운데 층.
+        // 반투명 카드면 그림자가 면 전체에 비쳐 탁해지므로 생략.
+        if (lineAlpha > 0.9)
+          g.appendChild(svgEl('rect', { x: rect.x + 1, y: rect.y + 1.5, width: rect.width, height: rect.height, rx: 6, fill: 'rgba(0,0,0,0.35)' }));
         g.appendChild(svgEl('rect', {
           x: rect.x, y: rect.y, width: rect.width, height: rect.height, rx: 6, ry: 6,
-          fill: healthColor + '1a', stroke: healthColor, 'stroke-width': 0.7, 'stroke-opacity': 0.6,
+          fill: lineBg, 'fill-opacity': lineAlpha < 1 ? lineAlpha : null,
+          stroke: alertColor || edge, 'stroke-width': alertColor ? 1.1 : 0.7,
+          'stroke-opacity': alertColor ? 0.75 : 1,
         }));
-        // 라인 이름 (상단 가운데)
-        const label = svgEl('text', {
-          x: rect.x + rect.width / 2, y: rect.y + 15, 'text-anchor': 'middle',
-          fill: 'white', 'font-size': 12, 'font-weight': 'bold',
-          stroke: healthColor, 'stroke-width': 0.3, 'paint-order': 'stroke',
-        });
-        label.textContent = line.name;
+        // 상단 경보 스트립 (실패=빨강 / 작업중=주황) — 축소 상태에서도 아픈 라인이 먼저 보이게
+        if (alertColor)
+          g.appendChild(svgEl('rect', { x: rect.x + 8, y: rect.y + 0.6, width: Math.max(10, rect.width - 16), height: 2.2, rx: 1.1, fill: alertColor }));
+
+        // ── 헤더: 라인명·N대(좌) + 상태 세그먼트바·실패칩(우) — 중앙 워터마크 제거.
+        //    이름이 우선: 칩/바는 이름 최소폭을 확보하고도 공간이 남을 때만 그린다("WB…" 방지).
+        const padL = rect.x + 7;
+        const cntStr = lineAssets.length > 0 ? `${lineAssets.length}대` : '';
+        const nameW = (s) => textWidth(s, 10) * 1.12; // 볼드 보정 — textWidth 는 일반 굵기 기준
+        const cntW = cntStr ? textWidth(cntStr, 6.5) + 5 : 0;
+        const minNameW = Math.min(nameW(String(line.name || '')), (rect.width - 14) * 0.55);
+        let rightX = rect.x + rect.width - 7; // 우측 클러스터 커서 (칩 → 바 순서로 왼쪽으로 채움)
+        if (bd.counts.failed > 0) {
+          const ftxt = `실패 ${bd.counts.failed}`;
+          const chipW = textWidth(ftxt, 6.2) + 9, chipH = 10.5, chipY = rect.y + 4.6;
+          if (rightX - chipW - 5 - padL - cntW >= minNameW) {
+            g.appendChild(svgEl('rect', {
+              x: rightX - chipW, y: chipY, width: chipW, height: chipH, rx: chipH / 2,
+              fill: HEALTH_COLOR.failed, 'fill-opacity': 0.2, stroke: HEALTH_COLOR.failed, 'stroke-width': 0.7,
+            }));
+            const ft = svgEl('text', {
+              x: rightX - chipW / 2, y: chipY + chipH / 2 + 6.2 * 0.36, 'text-anchor': 'middle',
+              'font-size': 6.2, 'font-weight': 'bold', fill: lightBg ? '#a33c36' : '#ffd9d6',
+            });
+            ft.textContent = ftxt; g.appendChild(ft);
+            rightX -= chipW + 5;
+          }
+        }
+        if (lineAssets.length >= 2) {
+          const barW = Math.min(52, rect.width * 0.2);
+          if (barW >= 18 && rightX - barW - 6 - padL - cntW >= minNameW) {
+            drawStatusBar(g, rightX - barW, rect.y + 7.6, barW, 4.2, bd);
+            rightX -= barW + 6;
+          }
+        }
+        const availName = rightX - padL - cntW - 3;
+        let name = String(line.name || '');
+        if (nameW(name) > availName) {
+          while (name.length > 1 && nameW(name + '…') > availName) name = name.slice(0, -1);
+          name += '…';
+        }
+        const label = svgEl('text', { x: padL, y: rect.y + 13.2, 'font-size': 10, 'font-weight': 'bold', fill: ink });
+        label.textContent = name;
         g.appendChild(label);
-        // 자산 수 배지
-        if (lineAssets.length > 0) {
-          const estW = [...line.name].reduce((s, c) => s + (c.charCodeAt(0) > 127 ? 12 : 7), 0);
-          const bcx = rect.x + rect.width / 2 + estW / 2 + 8, bcy = rect.y + 11;
-          g.appendChild(svgEl('circle', { cx: bcx, cy: bcy, r: 5.5, fill: healthColor, stroke: 'white', 'stroke-width': 0.4 }));
-          const bt = svgEl('text', { x: bcx, y: bcy + 2.5, 'text-anchor': 'middle', 'font-size': 6, fill: 'white', 'font-weight': 'bold' });
-          bt.textContent = lineAssets.length;
-          g.appendChild(bt);
+        if (cntStr) {
+          const ct = svgEl('text', { x: padL + nameW(name) + 5, y: rect.y + 13.2, 'font-size': 6.5, 'font-weight': 'bold', fill: dim });
+          ct.textContent = cntStr; g.appendChild(ct);
         }
 
         // 영역 내부 자산 아이콘 (clipPath 로 영역 내 제한) — 1단(topLevel) 그리드 배치
@@ -782,8 +897,12 @@
         // scaler(<g transform>) 안에 담는다. clip 은 영역 좌표계의 inner 가 담당(잘림 방지 안전망).
         const { standalones, plcCards, transform } = layoutLineAssets(rect, topLevel, hier.plcChildren);
         const scaler = svgEl('g', { transform });
-        for (const card of plcCards) scaler.appendChild(plcCardGroup(card));
-        for (const st of standalones) scaler.appendChild(assetMarker(st.asset, st.x, st.y, st.size, st.asset.floor));
+        for (const card of plcCards) scaler.appendChild(plcCardGroup(card, cardBg));
+        for (const st of standalones) {
+          const m = assetMarker(st.asset, st.x, st.y, st.size, st.asset.floor, true);
+          if (st.asset.health === 'unknown') m.setAttribute('opacity', '0.55'); // 내역없음 감쇠 — 실상태가 튀게
+          scaler.appendChild(m);
+        }
         inner.appendChild(scaler);
         g.appendChild(inner);
         svg.appendChild(g);
@@ -897,7 +1016,7 @@
     // 도면 1개 → SVG 엘리먼트. 도면 이미지 배경 + 라인별/개별 렌더(현재 viewMode).
     function buildSvg(data) {
       const svg = svgEl('svg', { viewBox: `0 0 ${VB_W} ${VB_H}`, preserveAspectRatio: 'xMidYMid meet' });
-      svg.style.backgroundColor = (data.config && data.config.bgColor) || '#1a1a2e';
+      svg.style.backgroundColor = (data.config && data.config.bgColor) || '#ffffff';
       if (data.config && data.config.imagePath) {
         const ir = calcImageRect(data.config);
         svg.appendChild(svgEl('image', {
@@ -961,7 +1080,7 @@
       attachTooltip(svg);
       attachClicks(svg);
       if (zoomEnabled) {
-        window.blueprintZoom.init(viewport.id, { clampMargin: 0.3 });
+        window.blueprintZoom.init(viewport.id, { clampMargin: 0.3, pan: panEnabled });
         if (savedVb) window.blueprintZoom.setViewBox(viewport.id, savedVb);
         viewport.appendChild(buildControls());
         onFsChange(); // 전체화면 아이콘 동기화

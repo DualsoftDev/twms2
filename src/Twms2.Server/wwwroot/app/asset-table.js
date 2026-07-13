@@ -14,6 +14,19 @@
   const $ = (id) => document.getElementById(id);
   const ICON_BASE = '/images/icons/';
 
+  // 자산명 Windows 파일/폴더명 규칙 검사 — DEXA 가 자산명으로 백업 경로를 만들므로 위반 시 저장 차단.
+  // (서버 AssetTableController.WinNameError 와 동일 규칙; 위반 사유 문자열, 통과 시 null)
+  function winNameError(name) {
+    const raw = String(name == null ? '' : name);
+    const s = raw.trim();
+    if (!s) return '자산명이 비어 있습니다.';
+    if (/[\\/:*?"<>|]/.test(s)) return '\\ / : * ? " < > | 문자는 사용할 수 없습니다.';
+    if (/[\x00-\x1f]/.test(s)) return '제어 문자는 사용할 수 없습니다.';
+    if (/[. ]$/.test(raw)) return '이름은 마침표(.)나 공백으로 끝날 수 없습니다.';
+    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i.test(s)) return `'${s}' 은(는) Windows 예약어라 사용할 수 없습니다.`;
+    return null;
+  }
+
   // 유형 메타 (서버 /api/assets/table 의 types 로 대체되지만 기본값 보유)
   let TYPES = [];
   // 전체 탭 + 각 유형 탭 구성. id=0 → 전체
@@ -273,6 +286,14 @@
             const num = raw === '' ? null : parseInt(raw, 10);
             setEdit(aid, field, Number.isNaN(num) ? null : num);
           });
+        } else if (field === 'name') {
+          // 자산명: Windows 파일명 규칙 실시간 검사 (DEXA 백업 경로에 사용)
+          el.addEventListener('input', () => {
+            const err = winNameError(el.value);
+            el.classList.toggle('invalid', !!err);
+            el.title = err || '';
+            setEdit(aid, field, el.value);
+          });
         } else {
           el.addEventListener('input', () => setEdit(aid, field, el.value));
         }
@@ -358,6 +379,12 @@
   }
 
   async function save() {
+    // 자산명 규칙 위반 행이 있으면 저장 차단 (DEXA 백업 경로 보호)
+    const badRow = modifiedRows().find(r => winNameError(cur(r, 'name')));
+    if (badRow) {
+      showAlert('err', 'error', `자산 #${badRow.assetId} 이름 오류: ${winNameError(cur(badRow, 'name'))}`);
+      return;
+    }
     const rows = buildSavePayload();
     if (rows.length === 0) return;
     S.saving = true; updateSummary();
@@ -367,7 +394,11 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows }),
       });
       setProgress(80);
-      if (!res.ok) { showAlert('err', 'error', '저장 실패 (' + res.status + ')'); return; }
+      if (!res.ok) {
+        let msg = '저장 실패 (' + res.status + ')';
+        try { const ej = await res.json(); if (ej.error) msg = ej.error; } catch (e) { /* */ }
+        showAlert('err', 'error', msg); return;
+      }
       const d = await res.json();
       if (d.fail === 0) showAlert('ok', 'check_circle', `${d.success}건 저장 완료`, true);
       else showAlert('warn', 'warning', `성공 ${d.success}건, 실패 ${d.fail}건`);
@@ -449,6 +480,11 @@
     };
     if (!(body.applyAgent || body.applyName || body.applyIp || body.applyDescription || body.applyViaIp || body.applyBase || body.applySlot)) {
       if (window.Shell) Shell.toast('변경할 항목을 선택하세요.'); return;
+    }
+    // 자산명 일괄 변경: Windows 파일명 규칙 검사 (DEXA 백업 경로에 사용)
+    if (body.applyName) {
+      const nameErr = winNameError(body.name);
+      if (nameErr) { if (window.Shell) Shell.toast('자산명 오류: ' + nameErr); $('b-name').focus(); return; }
     }
 
     const btn = $('batch-apply'); btn.disabled = true;

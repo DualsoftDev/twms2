@@ -135,17 +135,33 @@
    * 탭 1 — 도면 설정 (배경색 / 그리드 / 이미지)
    * ═════════════════════════════════════════════════════════════════════*/
   const Cfg = (() => {
-    let bgColor = '#1a1a2e', gridColor = '#e0e0e0', gridEnabled = true, gridSize = 20;
+    // 라인 영역 카드 기본색 = 차콜 65% (layout-render.js LINE_BG_DEFAULT '#1f2937a6' 과 동일)
+    const LINE_DEFAULT = '#1f2937', LINE_DEFAULT_ALPHA = 65;
+    const aHex = (p) => Math.round(p / 100 * 255).toString(16).padStart(2, '0');
+    let bgColor = '#ffffff', gridColor = '#e0e0e0', gridEnabled = true, gridSize = 20;
+    let lineHex = null, lineAlpha = LINE_DEFAULT_ALPHA; // 라인 영역 색: hex(null=기본) + 불투명도(%) → 저장 시 #rrggbb[aa] 합성
     let selectedFile = null, previewObjUrl = null;
 
+    // 저장용 라인 영역 색 문자열: 기본(null) 유지, 100% 미만이면 #rrggbbaa
+    function composedLineColor() {
+      if (!lineHex) return null;
+      if (lineAlpha >= 100) return lineHex;
+      return lineHex + aHex(lineAlpha);
+    }
+
     function load() {
-      bgColor = config.bgColor || '#1a1a2e';
+      bgColor = config.bgColor || '#ffffff';
       gridColor = config.gridColor || '#e0e0e0';
+      const lm = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(config.lineColor || '');
+      lineHex = lm ? '#' + lm[1] : null; // null=기본값(렌더러가 결정)
+      lineAlpha = lm ? (lm[2] ? Math.round(parseInt(lm[2], 16) / 255 * 100) : 100) : LINE_DEFAULT_ALPHA;
       gridEnabled = config.gridEnabled !== false;
       gridSize = config.gridSize > 0 ? config.gridSize : 20;
       selectedFile = null;
       $('cfg-bg-color').value = bgColor;
       $('cfg-grid-color').value = gridColor;
+      $('cfg-line-color').value = lineHex || LINE_DEFAULT;
+      $('cfg-line-alpha').value = lineAlpha;
       $('cfg-grid-enabled').checked = gridEnabled;
       $('cfg-grid-size').value = gridSize;
       syncControls();
@@ -155,6 +171,9 @@
     function syncControls() {
       $('cfg-bg-swatch').style.background = bgColor;
       $('cfg-bg-hex').textContent = bgColor;
+      $('cfg-line-swatch').style.background = lineHex || LINE_DEFAULT;
+      $('cfg-line-hex').textContent = lineHex ? composedLineColor() : `${LINE_DEFAULT}${aHex(LINE_DEFAULT_ALPHA)} (기본)`;
+      $('cfg-line-alpha-val').textContent = lineAlpha + ' %';
       $('cfg-grid-swatch').style.background = gridColor;
       $('cfg-grid-hex').textContent = gridColor;
       $('cfg-grid-size-val').textContent = gridSize + ' px';
@@ -182,6 +201,10 @@
         + `<path d="M ${gl} 0 L 0 0 0 ${gl}" fill="none" stroke="${gridColor}" stroke-width="0.8" opacity="0.3"/></pattern>`;
       let body = `<rect width="1000" height="600" fill="${bgColor}"/>`;
       if (gridEnabled) body += `<rect width="1000" height="600" fill="url(#cfgp-lg)"/>`;
+      // 라인 영역 색 샘플 (실제 위치와 무관한 미리보기용 카드 2개) — 불투명도 반영
+      const lc = lineHex || LINE_DEFAULT, la = lineAlpha / 100;
+      body += `<rect x="60" y="70" width="360" height="200" rx="10" fill="${lc}" fill-opacity="${la}" stroke="rgba(128,140,170,0.35)" stroke-width="1.5"/>`
+        + `<rect x="460" y="70" width="220" height="200" rx="10" fill="${lc}" fill-opacity="${la}" stroke="rgba(128,140,170,0.35)" stroke-width="1.5"/>`;
       const src = previewSrc();
       if (src) { const ir = calcImageRect(config); body += `<image href="${src}" x="${F(ir.x)}" y="${F(ir.y)}" width="${F(ir.w)}" height="${F(ir.h)}" preserveAspectRatio="none" opacity="0.85"/>`; }
       $('cfg-preview').innerHTML = `<defs>${defs}</defs>${body}`;
@@ -190,10 +213,22 @@
     function bind() {
       $('cfg-bg-color').addEventListener('input', e => { bgColor = e.target.value; syncControls(); renderPreview(); });
       $('cfg-grid-color').addEventListener('input', e => { gridColor = e.target.value; syncControls(); renderPreview(); });
+      $('cfg-line-color').addEventListener('input', e => { lineHex = e.target.value; syncControls(); renderPreview(); });
+      $('cfg-line-alpha').addEventListener('input', e => {
+        lineAlpha = parseInt(e.target.value, 10) || 100;
+        if (!lineHex) { lineHex = LINE_DEFAULT; $('cfg-line-color').value = lineHex; } // 기본색에서 투명도 조정 → 색 구체화
+        syncControls(); renderPreview();
+      });
       $('cfg-grid-enabled').addEventListener('change', e => { gridEnabled = e.target.checked; syncControls(); renderPreview(); });
       $('cfg-grid-size').addEventListener('input', e => { gridSize = parseInt(e.target.value, 10) || 20; syncControls(); renderPreview(); });
       document.querySelectorAll('.le-preset[data-bg]').forEach(b => b.addEventListener('click', () => { bgColor = b.dataset.bg; $('cfg-bg-color').value = bgColor; syncControls(); renderPreview(); }));
       document.querySelectorAll('.le-preset[data-grid]').forEach(b => b.addEventListener('click', () => { gridColor = b.dataset.grid; $('cfg-grid-color').value = gridColor; syncControls(); renderPreview(); }));
+      document.querySelectorAll('.le-preset[data-line]').forEach(b => b.addEventListener('click', () => {
+        lineHex = b.dataset.line || null;
+        if (!lineHex) { lineAlpha = LINE_DEFAULT_ALPHA; $('cfg-line-alpha').value = lineAlpha; } // 기본 프리셋 = 차콜 65%
+        $('cfg-line-color').value = lineHex || LINE_DEFAULT;
+        syncControls(); renderPreview();
+      }));
 
       $('cfg-pick').addEventListener('click', () => $('cfg-file').click());
       $('cfg-file').addEventListener('change', e => {
@@ -223,9 +258,10 @@
     async function save() {
       const btn = $('cfg-save'); btn.disabled = true;
       try {
-        const r = await api(`/api/admin/layout/${LID}/config`, 'PUT', { bgColor, gridColor, gridEnabled, gridSize });
+        const lineColor = composedLineColor();
+        const r = await api(`/api/admin/layout/${LID}/config`, 'PUT', { bgColor, gridColor, lineColor, gridEnabled, gridSize });
         if (!r) return;
-        config.bgColor = bgColor; config.gridColor = gridColor; config.gridEnabled = gridEnabled; config.gridSize = gridSize;
+        config.bgColor = bgColor; config.gridColor = gridColor; config.lineColor = lineColor; config.gridEnabled = gridEnabled; config.gridSize = gridSize;
 
         if (selectedFile) {
           const fd = new FormData(); fd.append('file', selectedFile);
@@ -269,7 +305,7 @@
     function renderSvg() {
       const svg = $('bp-editor-svg');
       const gs = config.gridSize > 0 ? config.gridSize : 20, gl = gs * 5;
-      const gEnabled = config.gridEnabled !== false, gColor = config.gridColor || '#e0e0e0', bg = config.bgColor || '#1a1a2e';
+      const gEnabled = config.gridEnabled !== false, gColor = config.gridColor || '#e0e0e0', bg = config.bgColor || '#ffffff';
       let defs = `<pattern id="bp-grid-small" width="${gs}" height="${gs}" patternUnits="userSpaceOnUse">`
         + `<path d="M ${gs} 0 L 0 0 0 ${gs}" fill="none" stroke="${gColor}" stroke-width="0.5" opacity="0.2"/></pattern>`
         + `<pattern id="bp-grid-large" width="${gl}" height="${gl}" patternUnits="userSpaceOnUse">`
@@ -578,7 +614,7 @@
     }
     function renderSvg() {
       const svg = $('ap-editor-svg');
-      const gs = snapGridSize, gl = gs * 5, bg = config.bgColor || '#1a1a2e';
+      const gs = snapGridSize, gl = gs * 5, bg = config.bgColor || '#ffffff';
       let defs = `<pattern id="ap-grid-sm" width="${gs}" height="${gs}" patternUnits="userSpaceOnUse"><path d="M ${gs} 0 L 0 0 0 ${gs}" fill="none" stroke="#e0e0e0" stroke-width="0.3" opacity="0.3"/></pattern>`
         + `<pattern id="ap-grid-lg" width="${gl}" height="${gl}" patternUnits="userSpaceOnUse"><rect width="${gl}" height="${gl}" fill="url(#ap-grid-sm)"/><path d="M ${gl} 0 L 0 0 0 ${gl}" fill="none" stroke="#ccc" stroke-width="0.5" opacity="0.3"/></pattern>`;
       groups.forEach(g => defs += `<clipPath id="ap-grp-clip-${g.id}"><rect x="${F(g.x)}" y="${F(g.y)}" width="${F(g.width)}" height="${F(g.height)}" rx="6"/></clipPath>`);
@@ -1140,7 +1176,7 @@
     const d = await api(`/api/admin/layout/${LID}/edit-data`, 'GET');
     if (!d) { $('le-loading').textContent = '레이아웃 데이터를 불러올 수 없습니다.'; return; }
 
-    config = d.config || { bgColor: '#1a1a2e', gridColor: '#e0e0e0', gridEnabled: true, gridSize: 20 };
+    config = d.config || { bgColor: '#ffffff', gridColor: '#e0e0e0', gridEnabled: true, gridSize: 20 };
     allAssets = d.assets || [];
     assetMap = new Map(allAssets.map(a => [a.assetId, a]));
     linesList = d.lines || [];

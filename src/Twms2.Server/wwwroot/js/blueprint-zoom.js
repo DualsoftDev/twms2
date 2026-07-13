@@ -28,6 +28,7 @@ window.blueprintZoom = (() => {
             panStart: null,
             vbStart: null,
             clampMargin: (opts && opts.clampMargin) || 0.3,  // 기본 30%, 에디터용으로 확대 가능
+            pan: !(opts && opts.pan === false),              // 드래그 팬 (기본 on; 대시보드 도면 등에서 off)
         };
         instances[containerId] = inst;
 
@@ -42,52 +43,54 @@ window.blueprintZoom = (() => {
         };
         svg.addEventListener('wheel', inst._onWheel, { passive: false });
 
-        // ── pointer pan (드래그 임계값으로 클릭/팬 구분) ──
-        const DRAG_THRESHOLD = 5; // px
-        inst._onPointerDown = (e) => {
-            inst.isPanning = true;
-            inst.hasDragged = false;
-            inst._pointerId = e.pointerId;
-            inst.panStart = { x: e.clientX, y: e.clientY };
-            inst.vbStart = { x: inst.vb.x, y: inst.vb.y };
-            // setPointerCapture를 여기서 하지 않음 → 클릭이 자식 요소에 정상 전달
-        };
-        inst._onPointerMove = (e) => {
-            if (!inst.isPanning) return;
-            const dxScreen = e.clientX - inst.panStart.x;
-            const dyScreen = e.clientY - inst.panStart.y;
-            if (!inst.hasDragged) {
-                if (Math.abs(dxScreen) + Math.abs(dyScreen) < DRAG_THRESHOLD) return;
-                inst.hasDragged = true;
-                svg.style.cursor = 'grabbing';
-                svg.setPointerCapture(inst._pointerId); // 드래그 확정 시에만 캡처
-            }
-            const rect = svg.getBoundingClientRect();
-            const dx = (dxScreen / rect.width) * inst.vb.w;
-            const dy = (dyScreen / rect.height) * inst.vb.h;
-            inst.vb.x = clampX(inst, inst.vbStart.x - dx, inst.vb.w);
-            inst.vb.y = clampY(inst, inst.vbStart.y - dy, inst.vb.h);
-            applyViewBox(inst);
-        };
-        inst._onPointerUp = (e) => {
-            if (!inst.isPanning) return;
-            inst.isPanning = false;
-            svg.style.cursor = inst.zoom > 1.01 ? 'grab' : '';
-            if (inst.hasDragged) svg.releasePointerCapture(e.pointerId);
-        };
-        // 드래그 후 click 이벤트 억제 (캡처 단계)
-        inst._onClick = (e) => {
-            if (inst.hasDragged) {
-                e.stopPropagation();
-                e.preventDefault();
+        // ── pointer pan (드래그 임계값으로 클릭/팬 구분) — pan:false 면 비활성(대시보드 도면 등) ──
+        if (inst.pan) {
+            const DRAG_THRESHOLD = 5; // px
+            inst._onPointerDown = (e) => {
+                inst.isPanning = true;
                 inst.hasDragged = false;
-            }
-        };
-        svg.addEventListener('pointerdown', inst._onPointerDown);
-        svg.addEventListener('pointermove', inst._onPointerMove);
-        svg.addEventListener('pointerup', inst._onPointerUp);
-        svg.addEventListener('pointercancel', inst._onPointerUp);
-        svg.addEventListener('click', inst._onClick, true); // capture phase
+                inst._pointerId = e.pointerId;
+                inst.panStart = { x: e.clientX, y: e.clientY };
+                inst.vbStart = { x: inst.vb.x, y: inst.vb.y };
+                // setPointerCapture를 여기서 하지 않음 → 클릭이 자식 요소에 정상 전달
+            };
+            inst._onPointerMove = (e) => {
+                if (!inst.isPanning) return;
+                const dxScreen = e.clientX - inst.panStart.x;
+                const dyScreen = e.clientY - inst.panStart.y;
+                if (!inst.hasDragged) {
+                    if (Math.abs(dxScreen) + Math.abs(dyScreen) < DRAG_THRESHOLD) return;
+                    inst.hasDragged = true;
+                    svg.style.cursor = 'grabbing';
+                    svg.setPointerCapture(inst._pointerId); // 드래그 확정 시에만 캡처
+                }
+                const rect = svg.getBoundingClientRect();
+                const dx = (dxScreen / rect.width) * inst.vb.w;
+                const dy = (dyScreen / rect.height) * inst.vb.h;
+                inst.vb.x = clampX(inst, inst.vbStart.x - dx, inst.vb.w);
+                inst.vb.y = clampY(inst, inst.vbStart.y - dy, inst.vb.h);
+                applyViewBox(inst);
+            };
+            inst._onPointerUp = (e) => {
+                if (!inst.isPanning) return;
+                inst.isPanning = false;
+                svg.style.cursor = inst.zoom > 1.01 ? 'grab' : '';
+                if (inst.hasDragged) svg.releasePointerCapture(e.pointerId);
+            };
+            // 드래그 후 click 이벤트 억제 (캡처 단계)
+            inst._onClick = (e) => {
+                if (inst.hasDragged) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    inst.hasDragged = false;
+                }
+            };
+            svg.addEventListener('pointerdown', inst._onPointerDown);
+            svg.addEventListener('pointermove', inst._onPointerMove);
+            svg.addEventListener('pointerup', inst._onPointerUp);
+            svg.addEventListener('pointercancel', inst._onPointerUp);
+            svg.addEventListener('click', inst._onClick, true); // capture phase
+        }
     }
 
     function zoomByFactor(inst, factor, clientX, clientY) {
@@ -112,7 +115,7 @@ window.blueprintZoom = (() => {
         inst.zoom = newZoom;
 
         applyViewBox(inst);
-        inst.svg.style.cursor = newZoom > 1.01 ? 'grab' : '';
+        inst.svg.style.cursor = (inst.pan && newZoom > 1.01) ? 'grab' : '';
     }
 
     function clampX(inst, x, w) {
@@ -178,7 +181,7 @@ window.blueprintZoom = (() => {
         inst.vb = { x: vb.x, y: vb.y, w: vb.w, h: vb.h };
         inst.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ORIG_W / vb.w));
         applyViewBox(inst);
-        inst.svg.style.cursor = inst.zoom > 1.01 ? 'grab' : '';
+        inst.svg.style.cursor = (inst.pan && inst.zoom > 1.01) ? 'grab' : '';
     }
 
     function dispose(containerId) {

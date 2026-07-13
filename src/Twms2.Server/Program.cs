@@ -397,10 +397,10 @@ app.Use(async (context, next) =>
         && context.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase);
     var adminPath = path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/schedules", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/settings", StringComparison.OrdinalIgnoreCase);
-    // 로그인만 필요(역할 무관) — 자산 테이블 편집기(원본 [Authorize]).
-    var loginPath = path.Equals("/assets/table", StringComparison.OrdinalIgnoreCase);
-    if (isHtmlNav && (adminPath || loginPath))
+        || path.Equals("/settings", StringComparison.OrdinalIgnoreCase)
+        // 자산 테이블 편집기 — 편집 API 가 Admin 전용으로 승격되며 페이지도 Admin 요구.
+        || path.Equals("/assets/table", StringComparison.OrdinalIgnoreCase);
+    if (isHtmlNav && adminPath)
     {
         var result = await context.AuthenticateAsync(Twms2.Server.Controllers.AuthController.Scheme);
         var authed = result.Succeeded && result.Principal?.Identity?.IsAuthenticated == true;

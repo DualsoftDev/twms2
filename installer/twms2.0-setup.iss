@@ -11,7 +11,7 @@
 
 ; BAT에서 전달받는 파라미터 (기본값 포함)
 #ifndef PublishDir
-  #define PublishDir "..\src\Twms2.Server\bin\Release\net10.0\win-x64\publish"
+  #define PublishDir "..\src\Twms2.Server\bin\Release\net10.0-windows\win-x64\publish"
 #endif
 
 [Setup]

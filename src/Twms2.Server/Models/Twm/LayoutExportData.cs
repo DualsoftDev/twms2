@@ -17,6 +17,7 @@ public class LayoutExportConfig
 {
     public string? BgColor { get; set; }
     public string? GridColor { get; set; }
+    public string? LineColor { get; set; }
     public double? ImageWidth { get; set; }
     public double? ImageHeight { get; set; }
 }

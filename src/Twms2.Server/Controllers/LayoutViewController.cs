@@ -111,6 +111,7 @@ public class LayoutViewController : ControllerBase
                 imageHeight = config.ImageHeight,
                 bgColor     = config.BgColor,
                 gridColor   = config.GridColor,
+                lineColor   = config.LineColor,
             },
             lines = lines.Select(l => new { id = l.Id, name = l.Name }).ToList(),
             blueprintRects = rects.Select(r => new

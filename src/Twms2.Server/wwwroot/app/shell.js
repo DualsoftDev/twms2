@@ -95,7 +95,7 @@
       const header = document.createElement('header');
       header.className = 'dsp-header';
       header.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;">
+        <div id="dsp-hdr-left" style="display:flex;align-items:center;gap:12px;">
         <button id="dsp-nav-toggle" class="dsp-iconbtn" title="메뉴 접기/펼치기"><span class="material-symbols-outlined">menu_open</span></button>
         <div id="dsp-search-box" class="nm-inset" style="position:relative;display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:9999px;width:min(420px,40vw);">
           <span class="material-symbols-outlined" style="color:var(--c-outline);">search</span>
@@ -103,7 +103,7 @@
           <div id="dsp-search-results" class="dsp-search-results" style="display:none;"></div>
         </div>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;">
+        <div id="dsp-hdr-right" style="display:flex;align-items:center;gap:12px;">
           <button id="dsp-sys-status" type="button" class="nm-flat-sm" title="DEXA 서버 · 에이전트 상태 보기" style="padding:8px 16px;border-radius:12px;display:flex;align-items:center;gap:8px;background:var(--c-surface);border:none;cursor:pointer;">
             <span id="dsp-sys-led" class="w-2 h-2 rounded-full status-led" style="background:var(--health-unknown);"></span>
             <span id="dsp-sys-label" class="font-label-mono text-on-surface" style="font-size:12px;">DEXA …</span>
@@ -123,6 +123,14 @@
 
       document.body.insertBefore(aside, document.body.firstChild);
       document.body.appendChild(main);
+
+      // 모바일 드로어 백드롭 — 좁은 화면에서 드로어가 열렸을 때만 CSS 로 노출. 클릭 시 닫힘.
+      if (!document.getElementById('dsp-nav-backdrop')) {
+        const backdrop = document.createElement('div');
+        backdrop.id = 'dsp-nav-backdrop';
+        backdrop.addEventListener('click', () => this._closeNav());
+        document.body.appendChild(backdrop);
+      }
 
       this._renderNav(false);
       this._syncThemeIcon();
@@ -413,7 +421,7 @@
       pop.className = 'nm-flat';
       const r = anchor.getBoundingClientRect();
       pop.style.cssText = `position:fixed;top:${Math.round(r.bottom + 8)}px;right:${Math.round(window.innerWidth - r.right)}px;`
-        + `z-index:200;width:340px;max-height:70vh;overflow:auto;background:var(--c-surface-container);`
+        + `z-index:200;width:min(340px,92vw);max-height:70vh;overflow:auto;background:var(--c-surface-container);`
         + `border-radius:16px;padding:16px;`;
       pop.innerHTML = `<div style="display:flex;align-items:center;gap:8px;color:var(--c-on-surface-variant);font-size:13px;">
         <span class="material-symbols-outlined" style="font-size:18px;">sync</span> 상태 확인 중…</div>`;
@@ -484,25 +492,58 @@
     /* ── 네비 사이드바 접기/펼치기 ── */
     // 저장된 상태를 body 클래스로 선반영. _render() 가 골격을 만들기 전에 호출되어야
     // 사이드바가 처음부터 접힌 상태로 그려져 로드 시 슬라이드 애니메이션이 튀지 않는다.
+    // 좁은 화면(≤1024px) = 드로어 모드. 이 폭 이하에선 사이드바가 본문을 밀지 않고 위에 겹친다.
+    _isNarrow() {
+      try { return window.matchMedia('(max-width: 1024px)').matches; } catch (e) { return false; }
+    },
     _applyNavCollapsed() {
       let collapsed = false;
       try { collapsed = localStorage.getItem('twms-nav-collapsed') === '1'; } catch (e) {}
+      // 드로어 모드에선 저장값과 무관하게 항상 닫힌 상태로 시작(첫 화면이 사이드바로 가려지지 않게).
+      if (this._isNarrow()) collapsed = true;
       document.body.classList.toggle('nav-collapsed', collapsed);
+    },
+    _syncNavToggleIcon() {
+      const btn = document.getElementById('dsp-nav-toggle');
+      if (!btn) return;
+      const collapsed = document.body.classList.contains('nav-collapsed');
+      const ico = btn.querySelector('.material-symbols-outlined');
+      if (ico) ico.textContent = collapsed ? 'menu' : 'menu_open';
+    },
+    // 드로어 닫기(백드롭/링크 클릭). 드로어 모드에선 데스크톱 접힘 설정을 덮어쓰지 않는다.
+    _closeNav() {
+      document.body.classList.add('nav-collapsed');
+      this._syncNavToggleIcon();
     },
     _bindNavToggle() {
       const btn = document.getElementById('dsp-nav-toggle');
       if (!btn) return;
-      const sync = () => {
-        const collapsed = document.body.classList.contains('nav-collapsed');
-        const ico = btn.querySelector('.material-symbols-outlined');
-        if (ico) ico.textContent = collapsed ? 'menu' : 'menu_open';
-      };
-      sync();
+      this._syncNavToggleIcon();
       btn.addEventListener('click', () => {
         const collapsed = document.body.classList.toggle('nav-collapsed');
-        try { localStorage.setItem('twms-nav-collapsed', collapsed ? '1' : '0'); } catch (e) {}
-        sync();
+        // 드로어 모드의 임시 열림/닫힘은 저장하지 않음(데스크톱 접힘 설정 보존).
+        if (!this._isNarrow()) {
+          try { localStorage.setItem('twms-nav-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+        }
+        this._syncNavToggleIcon();
       });
+      // 좁은 화면 진입 시 사이드바 링크를 누르면 페이지 전환되며 드로어는 새 페이지에서 닫힌 채 시작.
+      // 데스크톱↔드로어 폭 전환 시 상태 정리.
+      try {
+        const mq = window.matchMedia('(max-width: 1024px)');
+        const onChange = (e) => {
+          if (e.matches) {
+            document.body.classList.add('nav-collapsed'); // 드로어로 전환 → 닫고 시작
+          } else {
+            let collapsed = false;
+            try { collapsed = localStorage.getItem('twms-nav-collapsed') === '1'; } catch (_) {}
+            document.body.classList.toggle('nav-collapsed', collapsed); // 데스크톱 설정 복원
+          }
+          this._syncNavToggleIcon();
+        };
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+        else if (mq.addListener) mq.addListener(onChange);
+      } catch (e) {}
     },
 
     /* ── 테마 토글 ── */

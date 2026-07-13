@@ -70,7 +70,8 @@
         storeKey: 'twms-dash-bp-viewmode',
         splitStoreKey: 'twms-dash-bp-split',
         defaultMode: 0,
-        zoom: true,       // 줌/팬 + 줌·전체화면 컨트롤 오버레이 (뷰포트 우하단, blueprint-zoom.js)
+        zoom: true,       // 줌(휠/버튼) + 전체화면 컨트롤 오버레이 (blueprint-zoom.js)
+        pan: true,        // 클릭드래그로 도면 이동 (5px 임계값으로 클릭 팝오버와 구분됨)
         popover: true,    // 자산/라인 클릭 시 상세 팝오버
         poll: 30000,
       });
