@@ -19,7 +19,7 @@
 }
 
 html, body {
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family: 'Inter', 'Noto Sans KR', sans-serif !important;
     background-color: var(--mud-palette-background) !important;
     color: var(--mud-palette-text-primary);
     -webkit-font-smoothing: antialiased;
@@ -1893,7 +1893,7 @@ h1:focus {
 }
 
 .blueprint-rect-label {
-    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', 'Noto Sans KR', sans-serif;
     font-size: 12px;
     font-weight: 700;
     pointer-events: none;
@@ -1902,7 +1902,7 @@ h1:focus {
 }
 
 .blueprint-rect-count {
-    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', 'Noto Sans KR', sans-serif;
     font-size: 1.6px;
     font-weight: 400;
     fill: var(--mud-palette-text-secondary);
@@ -2112,7 +2112,7 @@ h1:focus {
 
 /* 라벨 */
 .bp-rect-label {
-    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', 'Noto Sans KR', sans-serif;
     font-size: 2.2px;
     font-weight: 700;
     fill: var(--mud-palette-text-primary);
@@ -2230,7 +2230,7 @@ h1:focus {
 }
 
 .drawing-text-shape {
-    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', 'Noto Sans KR', sans-serif;
     font-weight: 500;
     user-select: none;
     pointer-events: all;
@@ -2397,7 +2397,7 @@ h1:focus {
 }
 
 .ap-icon-label {
-    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', 'Noto Sans KR', sans-serif;
     font-weight: 500;
     pointer-events: none;
     user-select: none;
@@ -2423,7 +2423,7 @@ h1:focus {
 .ap-group-container:hover rect:first-of-type { stroke-opacity: 0.9; fill-opacity: 0.15; }
 
 .ap-group-label {
-    font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', 'Noto Sans KR', sans-serif;
     font-weight: 600;
     pointer-events: none;
     user-select: none;

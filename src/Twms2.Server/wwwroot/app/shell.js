@@ -220,6 +220,21 @@
       // 현재 보고 있는 자산(/assets/{id}) — 트리에서 강조
       const curId = (location.pathname.match(/^\/assets\/(\d+)/) || [])[1] || null;
 
+      // 현재 자산의 조상(라인·PLC)을 최초 1회 자동 펼침 — 이후 사용자가 직접 접으면 그 상태 유지
+      if (curId && this._treeRevealedFor !== curId) {
+        this._treeRevealedFor = curId;
+        lines.forEach(line => {
+          const inPlc = (line.plcNodes || []).some(p =>
+            String(p.plc.assetId) === curId || (p.children || []).some(c => String(c.assetId) === curId));
+          const inStandalone = (line.standalone || []).some(a => String(a.assetId) === curId);
+          if (!inPlc && !inStandalone) return;
+          _treeState['L:' + line.lineName] = true;
+          (line.plcNodes || []).forEach(p => {
+            if ((p.children || []).some(c => String(c.assetId) === curId)) _treeState['P:' + p.plc.assetId] = true;
+          });
+        });
+      }
+
       // 상태 LED 점: 색상 글로우 + 표면 링. 실패/작업중은 펄스, 오프라인은 속 빈 링.
       const dotHtml = (a) => {
         const color = a.statusColor || HEALTH_COLOR[a.health] || 'var(--health-unknown)';
@@ -273,6 +288,12 @@
         </div>`;
       }).join('');
       host.innerHTML = html;
+
+      // 최초 렌더 시 현재 자산 행이 사이드바 스크롤 밖이면 보이게 이동 (30s 폴링 재렌더에선 건드리지 않음)
+      if (curId && !this._treeScrolledFor) {
+        const cur = host.querySelector('.dsp-tree-row.is-active');
+        if (cur) { this._treeScrolledFor = curId; cur.scrollIntoView({ block: 'nearest' }); }
+      }
 
       host.querySelectorAll('[data-toggle]').forEach(el => {
         el.addEventListener('click', (ev) => {
@@ -441,7 +462,9 @@
 
     _sysPopHtml(d) {
       const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      // online = DEXA 서버 프로세스와의 실시간 연결, dbOnline = DEXA DB 읽기 가능 (별개로 표시)
       const online = !!d.online;
+      const dbOnline = !!d.dbOnline;
       const dotC = online ? 'var(--health-backedup)' : 'var(--health-failed)';
       const fmt = (t) => {
         if (!t) return '—';
@@ -460,14 +483,14 @@
           </div>
         </div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px;color:var(--c-on-surface-variant);margin-bottom:14px;">
-          <span>유형</span><span style="color:var(--c-on-surface);text-align:right;">${esc(d.provider)}</span>
+          <span>DB (${esc(d.provider)})</span><span style="color:${dbOnline ? 'var(--c-on-surface)' : 'var(--c-error)'};text-align:right;">${dbOnline ? '연결됨' : '연결 실패'}</span>
         </div>`;
 
       // ── 연결된 에이전트 목록 ──
       const agents = d.agents || [];
       let agentBody;
       if (!online) {
-        agentBody = `<div style="font-size:12px;color:var(--c-on-surface-variant);padding:8px 0;">서버에 연결할 수 없습니다.</div>`;
+        agentBody = `<div style="font-size:12px;color:var(--c-on-surface-variant);padding:8px 0;">DEXA 서버에 연결할 수 없습니다.</div>`;
       } else if (agents.length === 0) {
         agentBody = `<div style="font-size:12px;color:var(--c-on-surface-variant);padding:8px 0;">연결된 에이전트가 없습니다.</div>`;
       } else {

@@ -1,5 +1,5 @@
 // ── 공통 유틸 ──
-const _font = 'Pretendard, -apple-system, BlinkMacSystemFont, sans-serif';
+const _font = "'Inter', 'Noto Sans KR', sans-serif";
 
 function _palette(isDark) {
     return {

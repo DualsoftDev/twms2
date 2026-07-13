@@ -71,8 +71,8 @@
         splitStoreKey: 'twms-dash-bp-split',
         defaultMode: 0,
         zoom: true,       // 줌(휠/버튼) + 전체화면 컨트롤 오버레이 (blueprint-zoom.js)
-        pan: true,        // 클릭드래그로 도면 이동 (5px 임계값으로 클릭 팝오버와 구분됨)
-        popover: true,    // 자산/라인 클릭 시 상세 팝오버
+        pan: true,        // 클릭드래그로 도면 이동 (5px 임계값으로 클릭과 구분됨)
+        popover: true,    // 라인 클릭 시 소속 자산 목록 팝오버 (자산 클릭은 상세 페이지 이동)
         poll: 30000,
       });
     }
@@ -218,7 +218,13 @@
 
   function renderTimeline(schedule, today) {
     const host = $('timeline');
-    if (!schedule.length) { host.innerHTML = '<p class="text-on-surface-variant" style="padding:8px;">오늘 백업 이력이 없습니다.</p>'; return; }
+    const grip = $('timeline-resize');
+    if (!schedule.length) {
+      host.innerHTML = '<p class="text-on-surface-variant" style="padding:8px;">오늘 백업 이력이 없습니다.</p>';
+      if (grip) grip.style.display = 'none';
+      return;
+    }
+    if (grip) grip.style.display = '';
 
     const mins = (s) => { const d = new Date(s); return d.getHours() * 60 + d.getMinutes(); };
     const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -264,9 +270,14 @@
     const barEls = bars.map(b => `<a href="/assets/${b.assetId}" class="timeline-bar ${b.cls}" title="${esc(b.tip)}"
       style="left:${b.left.toFixed(2)}%;width:${b.width.toFixed(2)}%;top:${2 + b.lane * stride}px;height:${barH}px;"></a>`).join('');
 
+    // 레인이 많으면 트랙을 스크롤 상자로 감싼다(상한 --dash-tl-h). 30초 폴링 재렌더 시 스크롤 위치 유지.
+    const prevBox = host.querySelector('.timeline-scrollbox');
+    const prevScroll = prevBox ? prevBox.scrollTop : 0;
     host.innerHTML = `<div class="timeline"><div class="timeline-ruler">${ruler}</div>
-      <div class="timeline-track" style="min-height:${trackH}px;">
-        <div class="timeline-now" style="left:${pct(nowMin).toFixed(2)}%;"></div>${barEls}</div></div>`;
+      <div class="timeline-scrollbox"><div class="timeline-track" style="min-height:${trackH}px;">
+        <div class="timeline-now" style="left:${pct(nowMin).toFixed(2)}%;"></div>${barEls}</div></div></div>`;
+    const box = host.querySelector('.timeline-scrollbox');
+    if (box && prevScroll) box.scrollTop = prevScroll;
   }
 
   function renderDrive(drive) {
@@ -299,24 +310,20 @@
     });
   }
 
-  // 전체 자산 분포도 높이 조절: 우측 하단 앵커를 드래그해 높이를 조절하고 localStorage 에 기억한다.
-  // (높이는 CSS 변수 --dash-bp-h 로 적용 → 전체화면 100% 규칙이 그대로 우선한다)
-  function bindBpResize() {
-    const vp = $('dash-bp-viewport');
-    const handle = $('dash-bp-resize');
-    if (!vp || !handle) return;
-    const KEY = 'twms-dash-bp-height';
-    const MIN = 220, MAX = 1600;
-    const clamp = (v) => Math.max(MIN, Math.min(MAX, v));
+  // 높이 조절 그립 공통: 그립을 세로 드래그하면 varEl 의 CSS 변수를 갱신하고 localStorage 에 기억한다.
+  // 더블클릭 → 기본 높이로 복원. measure() 는 드래그 시작 기준이 되는 현재 렌더 높이를 반환.
+  function bindResizeGrip({ varEl, handle, storeKey, cssVar, min, max, measure }) {
+    if (!varEl || !handle) return;
+    const clamp = (v) => Math.max(min, Math.min(max, v));
 
     // 저장값 복원
-    const saved = parseInt(localStorage.getItem(KEY), 10);
-    if (Number.isFinite(saved)) vp.style.setProperty('--dash-bp-h', clamp(saved) + 'px');
+    const saved = parseInt(localStorage.getItem(storeKey), 10);
+    if (Number.isFinite(saved)) varEl.style.setProperty(cssVar, clamp(saved) + 'px');
 
     let startY = 0, startH = 0, dragging = false;
     const onMove = (e) => {
       if (!dragging) return;
-      vp.style.setProperty('--dash-bp-h', clamp(startH + (e.clientY - startY)) + 'px');
+      varEl.style.setProperty(cssVar, clamp(startH + (e.clientY - startY)) + 'px');
     };
     const onUp = (e) => {
       if (!dragging) return;
@@ -327,13 +334,13 @@
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       const h = clamp(startH + (e.clientY - startY));
-      try { localStorage.setItem(KEY, String(h)); } catch (_) { /* 무시 */ }
+      try { localStorage.setItem(storeKey, String(h)); } catch (_) { /* 무시 */ }
     };
     handle.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       dragging = true;
       startY = e.clientY;
-      startH = vp.getBoundingClientRect().height; // 현재 렌더 높이(기본 clamp 또는 저장값)에서 시작
+      startH = measure();
       handle.classList.add('is-dragging');
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'ns-resize';
@@ -342,8 +349,32 @@
     });
     // 더블클릭 → 기본 높이로 복원
     handle.addEventListener('dblclick', () => {
-      vp.style.removeProperty('--dash-bp-h');
-      try { localStorage.removeItem(KEY); } catch (_) { /* 무시 */ }
+      varEl.style.removeProperty(cssVar);
+      try { localStorage.removeItem(storeKey); } catch (_) { /* 무시 */ }
+    });
+  }
+
+  // 전체 자산 분포도 높이 조절 (높이는 CSS 변수 --dash-bp-h 로 적용 → 전체화면 100% 규칙이 그대로 우선한다)
+  function bindBpResize() {
+    const vp = $('dash-bp-viewport');
+    bindResizeGrip({
+      varEl: vp, handle: $('dash-bp-resize'), storeKey: 'twms-dash-bp-height',
+      cssVar: '--dash-bp-h', min: 220, max: 1600,
+      measure: () => vp.getBoundingClientRect().height, // 현재 렌더 높이(기본 clamp 또는 저장값)에서 시작
+    });
+  }
+
+  // 작업 현황 타임라인 높이 조절: 같은 시간대 백업이 몰려 레인이 많아지면 스크롤 상자의
+  // 상한(max-height, --dash-tl-h)을 그립으로 조절한다. 변수는 재렌더에도 유지되도록 #timeline 에 건다.
+  function bindTimelineResize() {
+    const host = $('timeline');
+    bindResizeGrip({
+      varEl: host, handle: $('timeline-resize'), storeKey: 'twms-dash-tl-height',
+      cssVar: '--dash-tl-h', min: 120, max: 1200,
+      measure: () => {
+        const box = host && host.querySelector('.timeline-scrollbox');
+        return box ? box.getBoundingClientRect().height : 320;
+      },
     });
   }
 
@@ -396,6 +427,7 @@
     if (window.Shell) await Shell.init({ active: 'overview' });
     bindChartToggles();
     bindBpResize();
+    bindTimelineResize();
     bindBpEdit();
     bindAttnMenu();
     await load();

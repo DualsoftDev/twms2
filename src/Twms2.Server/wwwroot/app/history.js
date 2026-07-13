@@ -380,7 +380,7 @@
     const rows = logs.map(l => {
       const cls = LOG_LEVEL[l.level] || 'chip-default';
       return `<tr>
-        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--c-on-surface-variant);">${esc(fmtLogTime(l.dateTime))}</td>
+        <td style="font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--c-on-surface-variant);">${esc(fmtLogTime(l.dateTime))}</td>
         <td><span class="chip ${cls}">${esc(l.level || '-')}</span></td>
         <td style="white-space:pre-wrap;word-break:break-word;">${esc(l.message)}</td>
       </tr>`;

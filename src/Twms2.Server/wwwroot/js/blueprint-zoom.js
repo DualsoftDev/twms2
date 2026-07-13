@@ -19,10 +19,14 @@ window.blueprintZoom = (() => {
         // 기존 인스턴스 정리
         if (instances[containerId]) dispose(containerId);
 
+        // padding: 기본(줌 1) 화면에 도면 주위 여백 비율 — 0.04 면 사방 4% 여유를 두고 살짝 축소되어 보인다.
+        const pad = (opts && opts.padding) || 0;
+        const base = { x: -ORIG_W * pad, y: -ORIG_H * pad, w: ORIG_W * (1 + 2 * pad), h: ORIG_H * (1 + 2 * pad) };
         const inst = {
             svg,
             container,
-            vb: { x: 0, y: 0, w: ORIG_W, h: ORIG_H },
+            base,
+            vb: { ...base },
             zoom: 1,
             isPanning: false,
             panStart: null,
@@ -102,8 +106,8 @@ window.blueprintZoom = (() => {
         const mx = ((clientX - rect.left) / rect.width) * inst.vb.w + inst.vb.x;
         const my = ((clientY - rect.top) / rect.height) * inst.vb.h + inst.vb.y;
 
-        const newW = ORIG_W / newZoom;
-        const newH = ORIG_H / newZoom;
+        const newW = inst.base.w / newZoom;
+        const newH = inst.base.h / newZoom;
 
         // 마우스 위치를 기준으로 줌
         const ratio = ((clientX - rect.left) / rect.width);
@@ -149,7 +153,7 @@ window.blueprintZoom = (() => {
     function reset(containerId) {
         const inst = getInstance(containerId);
         if (!inst) return;
-        inst.vb = { x: 0, y: 0, w: ORIG_W, h: ORIG_H };
+        inst.vb = { ...inst.base };
         inst.zoom = 1;
         applyViewBox(inst);
         inst.svg.style.cursor = '';
@@ -170,7 +174,7 @@ window.blueprintZoom = (() => {
 
     function getViewBox(containerId) {
         const inst = getInstance(containerId);
-        if (!inst) return { x: 0, y: 0, w: ORIG_W, h: ORIG_H };
+        if (!inst) return null; // 미초기화 시 null — 호출부가 "저장된 줌 없음"으로 처리
         return { x: inst.vb.x, y: inst.vb.y, w: inst.vb.w, h: inst.vb.h };
     }
 
@@ -179,7 +183,7 @@ window.blueprintZoom = (() => {
         const inst = getInstance(containerId);
         if (!inst || !vb || !(vb.w > 0)) return;
         inst.vb = { x: vb.x, y: vb.y, w: vb.w, h: vb.h };
-        inst.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ORIG_W / vb.w));
+        inst.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, inst.base.w / vb.w));
         applyViewBox(inst);
         inst.svg.style.cursor = (inst.pan && inst.zoom > 1.01) ? 'grab' : '';
     }

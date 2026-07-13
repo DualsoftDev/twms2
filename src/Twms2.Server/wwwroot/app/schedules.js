@@ -145,7 +145,7 @@
         </div>
         <div data-role="custom-wrap" style="flex:1 1 200px;display:none;">
           <label class="sch-field-label">Cron 표현식 (sec min hour dom month dow)</label>
-          <input class="sch-input" data-role="custom" type="text" style="font-family:'JetBrains Mono',monospace;" />
+          <input class="sch-input" data-role="custom" type="text" style="font-family:var(--font-mono);font-variant-numeric:tabular-nums;" />
         </div>
       </div>
       <div class="sch-cron-preview" data-role="preview"></div>

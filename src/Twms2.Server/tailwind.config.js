@@ -57,10 +57,10 @@ module.exports = {
       borderRadius: { DEFAULT: '0.25rem', lg: '0.5rem', xl: '0.75rem', full: '9999px' },
       spacing: { gutter: '20px', unit: '8px', 'container-padding': '24px', 'element-gap': '16px' },
       fontFamily: {
-        'body-md': ['Hanken Grotesk', 'Pretendard', 'sans-serif'],
-        'display': ['Hanken Grotesk', 'Pretendard', 'sans-serif'],
-        'label-mono': ['JetBrains Mono', 'monospace'],
-        'headline-lg': ['Hanken Grotesk', 'Pretendard', 'sans-serif'],
+        'body-md': ['Inter', 'Noto Sans KR', 'sans-serif'],
+        'display': ['Inter', 'Noto Sans KR', 'sans-serif'],
+        'label-mono': ['Inter', 'Noto Sans KR', 'ui-monospace', 'Cascadia Code', 'Consolas', 'monospace'],
+        'headline-lg': ['Inter', 'Noto Sans KR', 'sans-serif'],
       },
       fontSize: {
         'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],

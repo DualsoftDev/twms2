@@ -6,7 +6,7 @@
   <title>자산 테이블 편집 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -110,7 +110,7 @@
     .dark td.cell-na-bg { background: rgba(255, 255, 255, 0.04); }
 
     /* ID/체크 셀 */
-    .nm-table td.col-id, .nm-table th.col-id { width: 44px; color: var(--c-on-surface-variant); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .nm-table td.col-id, .nm-table th.col-id { width: 44px; color: var(--c-on-surface-variant); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; }
     .nm-table td.col-sel, .nm-table th.col-sel { width: 34px; text-align: center; cursor: default; }
     .nm-table td.col-type, .nm-table th.col-type { width: 84px; }
     .type-cell { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }

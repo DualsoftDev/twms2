@@ -6,7 +6,7 @@
   <title>자산 상세 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -141,6 +141,18 @@
     .ad-via-meta { font-size: 12px; color: var(--c-on-surface-variant); margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .ad-via-meta .ad-via-ip { font-family: var(--font-mono, monospace); }
 
+    /* ── 백업 로그 다이얼로그 (history.html 로그 다이얼로그와 동일 톤) ── */
+    .ad-modal--wide { width: min(860px, 100%); }
+    #ad-log-sub { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    #ad-log-sub .ad-btn { padding: 5px 10px; font-size: 12px; }
+    .ad-log-body {
+      overflow-y: auto; flex: 1 1 auto; border-radius: 12px; padding: 4px 8px;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low);
+    }
+    .ad-log-body .nm-table th { white-space: nowrap; }
+    .ad-log-body .nm-table td { vertical-align: top; }
+
     @media (max-width: 860px) { .ad-grid2 { grid-template-columns: 1fr; } }
     @media (max-width: 560px) { .ad-row2 { grid-template-columns: 1fr; } }
   </style>
@@ -175,6 +187,18 @@
       </div>
       <p class="ad-modal-sub" id="ad-via-sub"></p>
       <div class="ad-via-list" id="ad-via-list"></div>
+    </div>
+  </div>
+
+  <!-- ─── 다이얼로그: 백업 로그 ─── -->
+  <div class="ad-modal-backdrop" id="ad-log-modal">
+    <div class="ad-modal ad-modal--wide">
+      <div class="ad-modal-head">
+        <h3 class="ad-modal-title"><span class="material-symbols-outlined">article</span><span id="ad-log-title">백업 로그</span></h3>
+        <button class="ad-iconbtn" data-close title="닫기"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <p class="ad-modal-sub" id="ad-log-sub"></p>
+      <div class="ad-log-body" id="ad-log-body"></div>
     </div>
   </div>
 

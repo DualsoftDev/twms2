@@ -6,7 +6,7 @@
   <title>자산 관리 — TWMS</title>
   <!-- 테마 선적용 (FOUC 방지) -->
   <script>(function(){try{var t=localStorage.getItem('twms-theme');if(t==='dark')document.documentElement.classList.add('dark');else if(t==='light')document.documentElement.classList.remove('dark');}catch(e){}})();</script>
-  <!-- 폰트: Pretendard(한글) + Hanken Grotesk + JetBrains Mono + Material Symbols -->
+  <!-- 폰트: Inter(라틴) + Noto Sans KR(한글) + Material Symbols -->
   <link rel="stylesheet" href="/lib/fonts/fonts.css" />
   <!-- Tailwind: 빌드타임 컴파일(twms.css) + 폰트 self-host(fonts.css). CDN 제거됨. -->
   <link rel="stylesheet" href="/app/twms.css" />
@@ -67,7 +67,7 @@
     .ax-card-name { font-weight: 700; font-size: 14px; color: var(--c-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ax-card-sub { font-size: 12px; color: var(--c-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ax-card-bottom { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-    .ax-card-time { font-size: 11px; color: var(--c-on-surface-variant); font-family: 'JetBrains Mono', monospace; }
+    .ax-card-time { font-size: 11px; color: var(--c-on-surface-variant); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .ax-dot { width: 9px; height: 9px; border-radius: 9999px; flex-shrink: 0; }
     .ax-dot.on { background: var(--health-backedup); box-shadow: 0 0 6px var(--health-backedup); }
     .ax-dot.off { background: var(--health-failed); box-shadow: 0 0 6px var(--health-failed); }

@@ -200,7 +200,7 @@
         body = `<div class="ac-sched-row">매월 <select class="ac-input" data-f="dom">${opts}</select> 일 <input type="time" class="ac-input" data-f="time" value="${st.time}" /> 에 실행</div>
           <div class="ac-hint">29~31일은 해당 일자가 없는 달에는 실행되지 않습니다.</div>`;
       } else {
-        body = `<div class="ac-sched-row"><input type="text" class="ac-input" style="width:100%;font-family:'JetBrains Mono',monospace;" data-f="raw" value="${esc(st.raw)}" placeholder="0 0 2 * * ?" /></div>
+        body = `<div class="ac-sched-row"><input type="text" class="ac-input" style="width:100%;font-family:var(--font-mono);font-variant-numeric:tabular-nums;" data-f="raw" value="${esc(st.raw)}" placeholder="0 0 2 * * ?" /></div>
           <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드). 예) 매일 02:00 → 0 0 2 * * ?</div>`;
       }
       host.innerHTML = `<div class="ac-seg">${seg}</div>${body}

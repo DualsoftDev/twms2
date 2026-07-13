@@ -26,6 +26,7 @@
 
   const SVGNS = 'http://www.w3.org/2000/svg';
   const VB_W = 1000, VB_H = 600;
+  const VB_PAD = 0.04; // 기본(줌 1) 화면에서 도면 사방 4% 여유 — blueprintZoom padding 옵션과 동일 값
   const HEALTH_COLOR = {
     backedup: '#65B991', unchanged: '#6BA0DE', failed: '#E67E7E',
     inprogress: '#f59e0b', unknown: '#999',
@@ -130,7 +131,7 @@
       style: 'cursor:pointer',
       opacity: '0.92',
       'data-tip': titleFor(asset, floor),
-      'data-asset-id': asset.assetId, // 클릭은 인스턴스 위임 핸들러가 처리(네비/팝오버)
+      'data-asset-id': asset.assetId, // 클릭은 인스턴스 위임 핸들러가 처리(상세 페이지 이동)
     });
     g.appendChild(svgEl('rect', {
       width: size, height: size, rx: Math.max(1, size * 0.12),
@@ -545,7 +546,6 @@
     }));
     if (card.isAlert) {
       g.appendChild(svgEl('rect', { x: 0, y: 0, width: W, height: H, rx: 6, fill: card.aggColor, 'fill-opacity': 0.06 }));
-      g.appendChild(svgEl('rect', { x: 1, y: 4, width: 2, height: H - 8, rx: 1, fill: card.aggColor }));
     }
 
     // ── 헤더: PLC 아이콘(자체 상태색) ──
@@ -608,7 +608,7 @@
     const splitKey = opts.splitStoreKey || null;
     if (!viewport) { console.warn('LayoutRenderer: viewport 요소 없음'); return null; }
 
-    // 줌/팬 + 컨트롤(blueprint-zoom.js 필요) · 클릭 팝오버 — 둘 다 opt-in(/layout 만 사용, 대시보드 위젯은 미사용)
+    // 줌/팬 + 컨트롤(blueprint-zoom.js 필요) · 라인 클릭 팝오버 — 둘 다 opt-in(/layout 만 사용, 대시보드 위젯은 미사용)
     const zoomEnabled = !!opts.zoom && !!window.blueprintZoom;
     const panEnabled = opts.pan !== false; // 드래그 팬 (기본 on; 대시보드 위젯은 pan:false 로 끔)
     const popoverEnabled = !!opts.popover;
@@ -678,7 +678,7 @@
       svg.addEventListener('mouseleave', hideTip);
     }
 
-    // ── 클릭 팝오버 (자산 / 라인) — BlueprintView 의 클릭 다이얼로그 이식 ──────────
+    // ── 라인 클릭 팝오버 — 라인 소속 자산 목록(hover 로는 볼 수 없는 정보만 팝오버로) ──
     let popEl = null;
     function ensurePop() {
       if (popEl && popEl.parentNode === viewport) return popEl;
@@ -699,18 +699,6 @@
       popEl.style.top = Math.max(4, y) + 'px';
     }
     function closePop() { if (popEl) popEl.style.display = 'none'; }
-
-    function openAssetPopover(id, evt) {
-      const a = assetById(id);
-      if (!a) { location.href = `/assets/${id}`; return; }
-      hideTip(); // hover 툴팁과 같은 좌표에 뜨므로 먼저 치움
-      const p = ensurePop();
-      p.innerHTML = `<button class="lv-pop-close" title="닫기">&times;</button>`
-        + titleFor(a, a.floor)
-        + `<a class="lv-pop-link" href="/assets/${a.assetId}"><span class="material-symbols-outlined">open_in_new</span>상세 보기</a>`;
-      p.querySelector('.lv-pop-close').addEventListener('click', (e) => { e.stopPropagation(); closePop(); });
-      positionPop(evt);
-    }
 
     function openLinePopover(lineId, evt) {
       hideTip();
@@ -733,8 +721,9 @@
       positionPop(evt);
     }
 
-    // 위임 클릭: 다수묶음(data-asset-ids) → 자산표 필터 이동, 자산(data-asset-id) → 팝오버/네비,
+    // 위임 클릭: 다수묶음(data-asset-ids) → 자산표 필터 이동, 자산(data-asset-id) → 상세 이동,
     // 라인영역(data-line-id, 라인별 뷰) → 라인 팝오버.
+    // 자산 정보는 hover 툴팁과 상세 페이지가 담당하므로 자산 클릭 팝오버는 두지 않는다(내용 중복).
     // blueprintZoom 의 capture 핸들러가 드래그-클릭을 먼저 억제하므로, 여기 도달하는 건 순수 클릭뿐.
     function attachClicks(svg) {
       svg.addEventListener('click', (e) => {
@@ -748,9 +737,7 @@
         }
         const assetEl = e.target.closest('[data-asset-id]');
         if (assetEl) {
-          const id = parseInt(assetEl.getAttribute('data-asset-id'), 10);
-          if (usePop) { e.stopPropagation(); openAssetPopover(id, e); }
-          else location.href = `/assets/${id}`;
+          location.href = `/assets/${parseInt(assetEl.getAttribute('data-asset-id'), 10)}`;
           return;
         }
         if (usePop && inst.viewMode === 0) {
@@ -804,13 +791,15 @@
       const lum = (0.2126 * effR + 0.7152 * effG + 0.0722 * effB) / 255;
       const lightBg = lum > 0.55;
 
-      // PLC 카드 배경 파생 — 라인 실효색 기준 명도 계단 자동 유지:
-      // 밝은 라인 = 고정 다크 카드(검증된 대비), 깊은 다크 = 살짝 밝게, 중간톤 = 어둡게.
-      // 두 규칙은 lum 0.15~0.25 구간에서 선형 블렌드(투명도 슬라이더 연속 변화 시 점프 방지).
+      // PLC 카드 배경 파생 — 라인 실효색의 색조를 유지한 채 명도 계단 자동 유지:
+      // 깊은 다크 = 살짝 밝게, 그 외 = 어둡게. 어둡기 계수 k 는 목표 명도 ~0.24 기준으로
+      // 라인이 밝을수록 강해져(0.24/lum), 어떤 사용자 색에서도 "짙은 같은 색조" 카드가 나온다.
+      // 두 규칙은 lum 0.15~0.25 구간 선형 블렌드(투명도 슬라이더 연속 변화 시 점프 방지).
       let cardBg = CARD_BG;
-      if (!lightBg) {
+      {
         const t = Math.max(0, Math.min(1, (lum - 0.15) / 0.10));
-        const ch = (v) => Math.round((v + (255 - v) * 0.10) * (1 - t) + v * 0.52 * t);
+        const k = Math.min(0.52, 0.24 / Math.max(lum, 0.001));
+        const ch = (v) => Math.round(Math.max(0, Math.min(255, (v + (255 - v) * 0.10) * (1 - t) + v * k * t)));
         cardBg = '#' + [effR, effG, effB].map(v => ch(v).toString(16).padStart(2, '0')).join('');
       }
       const ink = lightBg ? '#1d2433' : '#e8edf9';
@@ -841,30 +830,14 @@
         if (alertColor)
           g.appendChild(svgEl('rect', { x: rect.x + 8, y: rect.y + 0.6, width: Math.max(10, rect.width - 16), height: 2.2, rx: 1.1, fill: alertColor }));
 
-        // ── 헤더: 라인명·N대(좌) + 상태 세그먼트바·실패칩(우) — 중앙 워터마크 제거.
-        //    이름이 우선: 칩/바는 이름 최소폭을 확보하고도 공간이 남을 때만 그린다("WB…" 방지).
+        // ── 헤더: 라인명·N대(좌) + 상태 세그먼트바(우) — 중앙 워터마크 제거.
+        //    이름이 우선: 바는 이름 최소폭을 확보하고도 공간이 남을 때만 그린다("WB…" 방지).
         const padL = rect.x + 7;
         const cntStr = lineAssets.length > 0 ? `${lineAssets.length}대` : '';
         const nameW = (s) => textWidth(s, 10) * 1.12; // 볼드 보정 — textWidth 는 일반 굵기 기준
         const cntW = cntStr ? textWidth(cntStr, 6.5) + 5 : 0;
         const minNameW = Math.min(nameW(String(line.name || '')), (rect.width - 14) * 0.55);
-        let rightX = rect.x + rect.width - 7; // 우측 클러스터 커서 (칩 → 바 순서로 왼쪽으로 채움)
-        if (bd.counts.failed > 0) {
-          const ftxt = `실패 ${bd.counts.failed}`;
-          const chipW = textWidth(ftxt, 6.2) + 9, chipH = 10.5, chipY = rect.y + 4.6;
-          if (rightX - chipW - 5 - padL - cntW >= minNameW) {
-            g.appendChild(svgEl('rect', {
-              x: rightX - chipW, y: chipY, width: chipW, height: chipH, rx: chipH / 2,
-              fill: HEALTH_COLOR.failed, 'fill-opacity': 0.2, stroke: HEALTH_COLOR.failed, 'stroke-width': 0.7,
-            }));
-            const ft = svgEl('text', {
-              x: rightX - chipW / 2, y: chipY + chipH / 2 + 6.2 * 0.36, 'text-anchor': 'middle',
-              'font-size': 6.2, 'font-weight': 'bold', fill: lightBg ? '#a33c36' : '#ffd9d6',
-            });
-            ft.textContent = ftxt; g.appendChild(ft);
-            rightX -= chipW + 5;
-          }
-        }
+        let rightX = rect.x + rect.width - 7; // 우측 클러스터 커서 (바를 왼쪽으로 채움)
         if (lineAssets.length >= 2) {
           const barW = Math.min(52, rect.width * 0.2);
           if (barW >= 18 && rightX - barW - 6 - padL - cntW >= minNameW) {
@@ -1070,7 +1043,7 @@
       let savedVb = null;
       if (zoomEnabled && !inst._resetZoom) {
         const vb = window.blueprintZoom.getViewBox(viewport.id);
-        if (vb && vb.w < VB_W - 0.5) savedVb = vb;
+        if (vb && vb.w < VB_W * (1 + 2 * VB_PAD) - 0.5) savedVb = vb;
       }
       inst._resetZoom = false;
       const svg = buildSvg(data);
@@ -1080,7 +1053,7 @@
       attachTooltip(svg);
       attachClicks(svg);
       if (zoomEnabled) {
-        window.blueprintZoom.init(viewport.id, { clampMargin: 0.3, pan: panEnabled });
+        window.blueprintZoom.init(viewport.id, { clampMargin: 0.3, pan: panEnabled, padding: VB_PAD });
         if (savedVb) window.blueprintZoom.setViewBox(viewport.id, savedVb);
         viewport.appendChild(buildControls());
         onFsChange(); // 전체화면 아이콘 동기화

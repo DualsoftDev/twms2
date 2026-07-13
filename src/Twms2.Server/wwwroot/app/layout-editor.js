@@ -287,12 +287,13 @@
    * ═════════════════════════════════════════════════════════════════════*/
   const Bp = (() => {
     let rects = [];          // [{lineId,x,y,width,height}]
-    let snapEnabled = true, snapGridSize = 20;
+    // 개별 자산 배치와 동일: 주변 영역 스냅 기본 ON, 격자 스냅 기본 OFF
+    let neighborSnap = true, gridSnap = false, snapGridSize = 20;
     let hasChanges = false, inited = false;
     let undo = [], redo = [];
     const MAX_UNDO = 30;
 
-    const shim = { invokeMethodAsync(name, ...a) { if (name === 'OnRectMoved') onRectMoved(...a); else if (name === 'OnRectDeleted') onRectDeleted(...a); return Promise.resolve(); } };
+    const shim = { invokeMethodAsync(name, ...a) { if (name === 'OnRectMoved') onRectMoved(...a); else if (name === 'OnRectDeleted') onRectDeleted(...a); else if (name === 'OnKeyAction') onKeyAction(...a); return Promise.resolve(); } };
 
     function load() { rects = (window.__rectsSeed || []).map(r => ({ ...r })); undo = []; redo = []; hasChanges = false; }
 
@@ -304,8 +305,9 @@
 
     function renderSvg() {
       const svg = $('bp-editor-svg');
-      const gs = config.gridSize > 0 ? config.gridSize : 20, gl = gs * 5;
-      const gEnabled = config.gridEnabled !== false, gColor = config.gridColor || '#e0e0e0', bg = config.bgColor || '#ffffff';
+      // 편집용 격자는 스냅 격자 크기를 그대로 표시 (격자 스냅 ON 일 때만) — 자산 배치 탭과 동일
+      const gs = snapGridSize, gl = gs * 5;
+      const gColor = config.gridColor || '#e0e0e0', bg = config.bgColor || '#ffffff';
       let defs = `<pattern id="bp-grid-small" width="${gs}" height="${gs}" patternUnits="userSpaceOnUse">`
         + `<path d="M ${gs} 0 L 0 0 0 ${gs}" fill="none" stroke="${gColor}" stroke-width="0.5" opacity="0.2"/></pattern>`
         + `<pattern id="bp-grid-large" width="${gl}" height="${gl}" patternUnits="userSpaceOnUse">`
@@ -313,7 +315,7 @@
         + `<path d="M ${gl} 0 L 0 0 0 ${gl}" fill="none" stroke="${gColor}" stroke-width="0.8" opacity="0.3"/></pattern>`;
       let body = `<rect x="-2000" y="-2000" width="5000" height="4000" fill="#111122"/>`
         + `<rect width="1000" height="600" fill="${bg}"/>`
-        + (gEnabled ? `<rect width="1000" height="600" fill="url(#bp-grid-large)"/>` : '')
+        + (gridSnap ? `<rect width="1000" height="600" fill="url(#bp-grid-large)"/>` : '')
         + `<rect width="1000" height="600" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="8 4" opacity="0.4"/>`;
       if (config.imagePath) { const ir = calcImageRect(config); body += `<image href="${iconHref(config.imagePath)}" x="${F(ir.x)}" y="${F(ir.y)}" width="${F(ir.w)}" height="${F(ir.h)}" preserveAspectRatio="none" opacity="0.5"/>`; }
       for (const r of rects) {
@@ -334,7 +336,7 @@
       }
       svg.innerHTML = `<defs>${defs}</defs>${body}`;
       window.blueprintEditor.init('bp-editor-container', shim);
-      window.blueprintEditor.setSnapConfig('bp-editor-container', snapEnabled, snapGridSize);
+      window.blueprintEditor.setSnapConfig('bp-editor-container', neighborSnap, snapGridSize, gridSnap);
     }
 
     function renderPanel() {
@@ -395,7 +397,8 @@
     }
 
     function updateToolbar() {
-      $('bp-snap').classList.toggle('is-active', snapEnabled);
+      $('bp-snap').classList.toggle('is-active', neighborSnap);
+      $('bp-gridsnap').classList.toggle('is-active', gridSnap);
       $('bp-undo').disabled = undo.length === 0;
       $('bp-redo').disabled = redo.length === 0;
       $('bp-changed').hidden = !hasChanges;
@@ -426,6 +429,7 @@
     }
     function doUndo() { if (!undo.length) return; redo.push(snapshot()); restore(undo.pop()); markChanged(); renderSvg(); renderPanel(); }
     function doRedo() { if (!redo.length) return; undo.push(snapshot()); restore(redo.pop()); markChanged(); renderSvg(); renderPanel(); }
+    function onKeyAction(action) { if (action === 'undo') doUndo(); else if (action === 'redo') doRedo(); }
 
     async function save() {
       // 캔버스 DOM 의 최신 좌표를 동기화 후 저장
@@ -457,8 +461,9 @@
     function hasUnsaved() { return hasChanges; }
 
     function bind() {
-      $('bp-snap').addEventListener('click', () => { snapEnabled = !snapEnabled; window.blueprintEditor.setSnapConfig('bp-editor-container', snapEnabled, snapGridSize); updateToolbar(); });
-      $('bp-grid').addEventListener('change', e => { snapGridSize = clamp(parseInt(e.target.value, 10) || 20, 5, 100); e.target.value = snapGridSize; window.blueprintEditor.setSnapConfig('bp-editor-container', snapEnabled, snapGridSize); });
+      $('bp-snap').addEventListener('click', () => { neighborSnap = !neighborSnap; window.blueprintEditor.setSnapConfig('bp-editor-container', neighborSnap, snapGridSize, gridSnap); updateToolbar(); });
+      $('bp-gridsnap').addEventListener('click', () => { gridSnap = !gridSnap; window.blueprintEditor.setSnapConfig('bp-editor-container', neighborSnap, snapGridSize, gridSnap); renderSvg(); updateToolbar(); });
+      $('bp-grid').addEventListener('change', e => { snapGridSize = clamp(parseInt(e.target.value, 10) || 20, 5, 100); e.target.value = snapGridSize; window.blueprintEditor.setSnapConfig('bp-editor-container', neighborSnap, snapGridSize, gridSnap); renderSvg(); });
       $('bp-zoom-in').addEventListener('click', () => window.blueprintZoom.zoomIn('bp-editor-container'));
       $('bp-zoom-out').addEventListener('click', () => window.blueprintZoom.zoomOut('bp-editor-container'));
       $('bp-zoom-reset').addEventListener('click', () => window.blueprintZoom.reset('bp-editor-container'));
@@ -715,7 +720,7 @@
           + `<span class="material-symbols-outlined" data-grp-exp="${g.id}" style="font-size:18px;cursor:pointer;border-radius:6px;" title="${isExp ? '접기' : '펼치기'}">${isExp ? 'expand_more' : 'chevron_right'}</span>`
           + `<span class="ap-group-color" style="background:${g.color || '#4a90d9'}"></span>`
           + `<span class="flex-grow-1 ap-list-name" style="font-size:.72rem;">${esc(groupLabel(g.id))}</span>`
-          + `<input type="number" class="le-floor-input" data-grp-floor="${g.id}" value="${g.floor}" min="-20" max="100" title="층" onclick="event.stopPropagation()"/>`
+          + `<span class="le-floor-wrap" title="그룹이 표시될 층" onclick="event.stopPropagation()"><input type="number" class="le-floor-input" data-grp-floor="${g.id}" value="${g.floor}" min="-20" max="100"/><span class="le-floor-suffix">층</span></span>`
           + `<span class="ap-group-count">${ids.length}</span>`
           + `<button class="le-mini" data-grp-ungroup="${g.id}" title="그룹 해제 (도면에 개별 배치)"><span class="material-symbols-outlined">grid_view</span></button>`
           + `</div>${members}</div>`;
@@ -757,10 +762,10 @@
         html += `<span class="ap-sel-size-wrap" title="선택 자산 크기 (${selAssets.size}개)">`
           + `<span class="material-symbols-outlined" style="font-size:18px;color:var(--c-on-surface-variant);">photo_size_select_large</span>`
           + `<input type="range" id="ap-sel-size" min="0.1" max="3" step="0.05" value="${clamp(initSize, 0.1, 3)}" style="width:104px;accent-color:var(--c-primary);"/>`
-          + `<span id="ap-sel-size-val" style="min-width:36px;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--c-on-surface-variant);">${initSize.toFixed(2)}×</span></span>`;
+          + `<span id="ap-sel-size-val" style="min-width:36px;font-size:12px;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--c-on-surface-variant);">${initSize.toFixed(2)}×</span></span>`;
       }
       if (selGroups.size > 0) {
-        html += `<input type="number" class="le-floor-input" id="ap-sel-floor" style="width:64px;" min="-20" max="100" placeholder="혼합" value="${selectedSharedFloor()}" title="선택 그룹 층"/>`;
+        html += `<span class="le-floor-wrap" title="선택 그룹이 표시될 층"><input type="number" class="le-floor-input" id="ap-sel-floor" style="width:36px;" min="-20" max="100" placeholder="혼합" value="${selectedSharedFloor()}"/><span class="le-floor-suffix">층</span></span>`;
       }
       html += `<button class="le-pillbtn danger" id="ap-del-sel"><span class="material-symbols-outlined">delete</span>삭제</button>`;
       host.innerHTML = html;

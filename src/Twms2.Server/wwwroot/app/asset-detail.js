@@ -24,6 +24,14 @@
     inprogress: { label: '작업중',    chip: 'chip-warning', icon: 'hourglass_top' },
     unknown:    { label: '내역 없음', chip: 'chip-default', icon: 'help' },
   };
+  // 백업 로그 레벨 → 칩 클래스 (history.js LOG_LEVEL 과 동일 — BackupLog.razor.GetLevelColor 이식)
+  const LOG_LEVEL = {
+    INFO:  'chip-info',
+    WARN:  'chip-warning',
+    ERROR: 'chip-error',
+    FATAL: 'chip-error',
+    DEBUG: 'chip-default',
+  };
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const $ = (id) => document.getElementById(id);
@@ -72,6 +80,13 @@
     const d = new Date(s); if (isNaN(d)) return '';
     const p = (n) => String(n).padStart(2, '0');
     return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+  // 로그 다이얼로그용 시각 (history.js / BackupLog.razor 와 동일하게 HH:mm:ss.fff)
+  function fmtLogTime(s) {
+    if (!s) return '-';
+    const d = new Date(s); if (isNaN(d)) return s;
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')}`;
   }
 
   async function load() {
@@ -206,6 +221,7 @@
       }
       const report = a.hasReport
         ? `<a class="ad-iconbtn" href="/report/${ASSET_ID}/${a.version}/index.html" target="_blank" title="리포트 보기"><span class="material-symbols-outlined">open_in_new</span></a>` : '';
+      const log = `<button class="ad-iconbtn" data-log="${a.id}" title="로그 보기"><span class="material-symbols-outlined">article</span></button>`;
       return `<tr>
         <td>${verCell}</td>
         <td>${fmtDateTime(a.started)}</td>
@@ -213,10 +229,11 @@
         <td>${resultChip}</td>
         <td>${dl}</td>
         <td>${report}</td>
+        <td>${log}</td>
       </tr>`;
     }).join('');
     return `<div class="ad-table-wrap"><table class="nm-table">
-      <thead><tr><th>버전</th><th>작업 시작</th><th>작업 종료</th><th>결과</th><th>다운로드</th><th>리포트</th></tr></thead>
+      <thead><tr><th>버전</th><th>작업 시작</th><th>작업 종료</th><th>결과</th><th>다운로드</th><th>리포트</th><th>로그</th></tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
   }
@@ -631,6 +648,57 @@
   }
   function closeViaModal() { $('ad-via-modal').classList.remove('show'); }
 
+  /* ── 백업 로그 다이얼로그 (history.js openLogModal 이식 — 자산은 현재 페이지로 고정) ── */
+  async function openLogModal(actionId) {
+    $('ad-log-title').textContent = `액션 #${actionId} 로그`;
+    $('ad-log-sub').textContent = '불러오는 중…';
+    $('ad-log-body').innerHTML = '';
+    $('ad-log-modal').classList.add('show');
+    await fetchLogs(actionId, false);
+  }
+
+  async function fetchLogs(actionId, all) {
+    try {
+      const res = await fetch(`/api/history/logs/${actionId}${all ? '?all=true' : ''}`, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('http ' + res.status);
+      const d = await res.json();
+      renderLogs(d.logs || [], d.total || 0, all, actionId);
+    } catch (e) {
+      $('ad-log-sub').textContent = '';
+      $('ad-log-body').innerHTML = `<div class="ad-empty">로그를 불러오지 못했습니다.</div>`;
+    }
+  }
+
+  function renderLogs(logs, total, all, actionId) {
+    if (logs.length === 0) {
+      $('ad-log-sub').textContent = '';
+      $('ad-log-body').innerHTML = `<div class="ad-empty">로그가 없습니다.</div>`;
+      return;
+    }
+    const showAll = !all && total > logs.length;
+    $('ad-log-sub').innerHTML =
+      `<span>로그 ${logs.length} / ${total} 건</span>` +
+      (showAll ? `<button class="ad-btn" id="ad-log-all"><span class="material-symbols-outlined">unfold_more</span>전체 보기 (${total}건)</button>` : '');
+    const rows = logs.map(l => {
+      const cls = LOG_LEVEL[l.level] || 'chip-default';
+      return `<tr>
+        <td style="font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--c-on-surface-variant);">${esc(fmtLogTime(l.dateTime))}</td>
+        <td><span class="chip ${cls}">${esc(l.level || '-')}</span></td>
+        <td style="white-space:pre-wrap;word-break:break-word;">${esc(l.message)}</td>
+      </tr>`;
+    }).join('');
+    $('ad-log-body').innerHTML =
+      `<table class="nm-table"><thead><tr><th style="width:110px;">시간</th><th style="width:90px;">레벨</th><th>메시지</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const allBtn = $('ad-log-all');
+    if (allBtn) allBtn.addEventListener('click', () => {
+      allBtn.disabled = true;
+      allBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_top</span>불러오는 중…';
+      fetchLogs(actionId, true);
+    });
+  }
+
+  function closeLogModal() { $('ad-log-modal').classList.remove('show'); }
+
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: '' });
     ASSET_ID = readId();
@@ -642,7 +710,20 @@
         if (e.target === viaModal || e.target.closest('[data-close]')) closeViaModal();
       });
     }
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeViaModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeViaModal(); closeLogModal(); } });
+
+    // 백업 이력 "로그" 버튼 — render() 가 폴링마다 테이블을 재생성하므로 ad-root 에 위임
+    $('ad-root').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-log]');
+      if (btn) openLogModal(+btn.getAttribute('data-log'));
+    });
+    // 로그 다이얼로그 닫기: 배경 클릭 / 닫기 버튼
+    const logModal = $('ad-log-modal');
+    if (logModal) {
+      logModal.addEventListener('click', (e) => {
+        if (e.target === logModal || e.target.closest('[data-close]')) closeLogModal();
+      });
+    }
 
     // 로그인/로그아웃 시 편집 버튼 노출 갱신 (편집 중이면 유지)
     document.addEventListener('shell:auth', () => { if (!EDIT.on && LAST) render(LAST); });
