@@ -191,6 +191,13 @@
       box-shadow: inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light); }
     .ap-canvas-svg { width: 100%; height: 100%; display: block; }
 
+    /* 좁은 화면: 좌측 패널을 도면 위로 쌓아 캔버스가 짓눌리지 않게 (드래그 편집은 데스크톱 권장) */
+    @media (max-width: 860px) {
+      .ap-editor-layout { flex-direction: column; height: auto; min-height: 0; }
+      .ap-left-panel { width: 100%; min-width: 0; max-height: 240px; }
+      .ap-canvas-area { height: 62vh; min-height: 360px; }
+    }
+
     .ap-panel-section { margin-bottom: 6px; }
     .ap-asset-list, .ap-group-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--c-outline); border-radius: 8px; }
     .ap-list-item { display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-bottom: 1px solid color-mix(in srgb, var(--c-outline) 40%, transparent);
@@ -282,13 +289,31 @@
             <label class="le-color-swatch" id="cfg-bg-swatch" for="cfg-bg-color"></label>
             <input type="color" id="cfg-bg-color" class="le-color-input" />
             <div>
-              <div class="le-color-hex" id="cfg-bg-hex">#1a1a2e</div>
+              <div class="le-color-hex" id="cfg-bg-hex">#ffffff</div>
             </div>
           </div>
           <div class="le-field-row">
-            <button class="le-preset" data-bg="#1a1a2e">기본 (다크 블루)</button>
-            <button class="le-preset" data-bg="#ffffff">흰색</button>
+            <button class="le-preset" data-bg="#ffffff">기본 (흰색)</button>
+            <button class="le-preset" data-bg="#1a1a2e">다크 블루</button>
             <button class="le-preset" data-bg="#0f172a">짙은 남색</button>
+          </div>
+
+          <div class="le-card-title" style="margin-top:20px;"><span class="material-symbols-outlined">space_dashboard</span>라인 영역 색</div>
+          <div class="le-field-row">
+            <label class="le-color-swatch" id="cfg-line-swatch" for="cfg-line-color" style="width:32px;height:32px;"></label>
+            <input type="color" id="cfg-line-color" class="le-color-input" />
+            <span class="le-color-hex" id="cfg-line-hex"></span>
+          </div>
+          <div class="le-field-row">
+            <span class="le-tb-label" style="min-width:64px;">불투명도</span>
+            <input type="range" id="cfg-line-alpha" class="le-range" min="10" max="100" step="5" />
+            <span class="le-color-hex" id="cfg-line-alpha-val" style="min-width:46px;text-align:right;">100 %</span>
+          </div>
+          <div class="le-field-row">
+            <button class="le-preset" data-line="">기본 (차콜 65%)</button>
+            <button class="le-preset" data-line="#12263f">딥 블루</button>
+            <button class="le-preset" data-line="#20203a">다크 퍼플</button>
+            <button class="le-preset" data-line="#eef2f9">라이트</button>
           </div>
 
           <div class="le-card-title" style="margin-top:20px;"><span class="material-symbols-outlined">grid_on</span>그리드</div>

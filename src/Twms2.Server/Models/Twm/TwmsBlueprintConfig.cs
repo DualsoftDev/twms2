@@ -10,6 +10,7 @@ public class TwmsBlueprintConfig
     public string?  DrawingData { get; set; }
     public string?  BgColor     { get; set; }
     public string?  GridColor   { get; set; }
+    public string?  LineColor   { get; set; }   // 라인 영역 카드 배경색 (null=기본값)
     public bool     GridEnabled { get; set; } = true;
     public int      GridSize    { get; set; } = 20;
     public DateTime UpdatedAt   { get; set; }

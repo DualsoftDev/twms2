@@ -14,23 +14,26 @@ namespace Twms2.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/assets/table")]
-// 조회(GET)는 공개. 저장/배치(POST)는 로그인 필요(아래 액션별 [Authorize]).
+// 자산 편집기 API — 조회/저장/배치 모두 Admin 전용(액션별 [Authorize(Roles=Admin)]).
+// (자산 상세 편집 + 설정>자산 관리 탭이 admin 로그인 시에만 편집 UI 를 노출하는 정책과 일치.)
 public class AssetTableController : ControllerBase
 {
     private readonly AssetService _assetService;
     private readonly LayoutDbService _layoutDb;
+    private readonly DexaReadService _dexaRead;
 
-    public AssetTableController(AssetService assetService, LayoutDbService layoutDb)
+    public AssetTableController(AssetService assetService, LayoutDbService layoutDb, DexaReadService dexaRead)
     {
         _assetService = assetService;
         _layoutDb = layoutDb;
+        _dexaRead = dexaRead;
     }
 
     /// <summary>
-    /// 편집 가능한 자산 행 + 라인 옵션 + 유형별 컬럼 가시성 메타데이터.
-    /// 편집기는 로그인 필요(원본 AssetTableEditor [Authorize]). 조회도 인증 요구.
+    /// 편집 가능한 자산 행 + 라인 옵션 + 유형별 컬럼 가시성 메타데이터 + 에이전트 이름 목록.
+    /// 편집 데이터이므로 조회도 Admin 요구.
     /// </summary>
-    [Authorize(AuthenticationSchemes = AuthController.Scheme)]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
     [HttpGet]
     public async Task<IActionResult> Get()
     {
@@ -60,6 +63,7 @@ public class AssetTableController : ControllerBase
                 // DisplayIp = FTP/Drive/XP → Ip, PLC/Servo → ConnIp 자동 매핑 (AssetEditRow.DisplayIp)
                 displayIp = r.DisplayIp,
                 connIpVia = r.ConnIpVia,
+                connViaEnabled = r.ConnViaEnabled,
                 connBase = r.ConnBase,
                 connSlot = r.ConnSlot,
                 connIsRobot = r.ConnIsRobot,
@@ -77,10 +81,29 @@ public class AssetTableController : ControllerBase
             .Select(kv => new { id = kv.Key, name = kv.Value })
             .ToList();
 
+        // 에이전트 이름 목록 (자산 상세 편집의 에이전트 select 용 — AssetDetail.razor 는 DexaRead.GetAgentsAsync 사용).
+        // DEXA 미연결 등으로 실패해도 편집기 자체는 동작해야 하므로 빈 목록으로 대체.
+        List<string> agents;
+        try
+        {
+            agents = (await _dexaRead.GetAgentsAsync())
+                .Select(a => a.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!)
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+        }
+        catch
+        {
+            agents = [];
+        }
+
         return Ok(new
         {
             rows,
             lineOptions,
+            agents,
             // 유형별 컬럼 가시성 규칙 (AssetEditGrid.HasIp/HasVia/HasVersion/HasRobot 이식)
             types = new object[]
             {
@@ -98,12 +121,19 @@ public class AssetTableController : ControllerBase
     /// 인라인 편집 일괄 저장. 클라이언트가 보낸 변경 행을 서버에서 재로드한 행에 적용 후
     /// AssetService.SaveAssetEditRowsAsync 로 저장(변경 추적 스냅샷 보존을 위해 재로드 후 적용).
     /// </summary>
-    [Authorize(AuthenticationSchemes = AuthController.Scheme)]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> Save([FromBody] SaveRequest request)
     {
         if (request?.Rows == null || request.Rows.Count == 0)
             return Ok(new { success = 0, fail = 0, results = Array.Empty<object>() });
+
+        // 자산명은 DEXA 백업 저장 경로(폴더/파일명)에 쓰이므로 Windows 파일명 규칙 위반을 거부.
+        foreach (var edit in request.Rows)
+        {
+            if (edit.Name != null && WinNameError(edit.Name) is string nameErr)
+                return BadRequest(new { error = $"자산 #{edit.AssetId} 이름 오류: {nameErr}" });
+        }
 
         var lineMap = await _layoutDb.GetTwmsLayoutLineMapAsync();
         var allRows = await _assetService.GetAssetEditRowsAsync();
@@ -128,6 +158,7 @@ public class AssetTableController : ControllerBase
             if (edit.ConnIpVia != null) row.ConnIpVia = edit.ConnIpVia.Length == 0 ? null : edit.ConnIpVia;
 
             if (edit.ConnBase.HasValue) row.ConnBase = edit.ConnBase.Value;
+            if (edit.ConnViaEnabledSet) row.ConnViaEnabled = edit.ConnViaEnabled;
             if (edit.ConnSlotSet) row.ConnSlot = edit.ConnSlot;
             if (edit.ConnIsRobotSet) row.ConnIsRobot = edit.ConnIsRobot;
             if (edit.StationNumberSet) row.StationNumber = edit.StationNumber;
@@ -157,12 +188,16 @@ public class AssetTableController : ControllerBase
     /// 배치 편집: 선택된 자산들에 체크된 필드만 일괄 적용 (AssetBatchEditDialog 이식).
     /// AssetService.BatchUpdateAssetsAsync(int[], BatchEditSpec) 호출.
     /// </summary>
-    [Authorize(AuthenticationSchemes = AuthController.Scheme)]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
     [HttpPost("batch")]
     public async Task<IActionResult> Batch([FromBody] BatchRequest request)
     {
         if (request?.AssetIds == null || request.AssetIds.Length == 0)
             return BadRequest(new { error = "선택된 자산이 없습니다." });
+
+        // 자산명 일괄 변경 시에도 Windows 파일명 규칙 검사 (DEXA 백업 저장 경로에 사용).
+        if (request.ApplyName && WinNameError(request.Name ?? "") is string nameErr)
+            return BadRequest(new { error = $"자산명 오류: {nameErr}" });
 
         var spec = new BatchEditSpec
         {
@@ -190,6 +225,25 @@ public class AssetTableController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// 자산명이 Windows 파일/폴더명 규칙에 맞는지 검사 (위반 시 사유, 통과 시 null).
+    /// DEXA 가 자산명으로 백업 폴더/파일을 만들기 때문에 금지문자·예약어·끝 공백/마침표를 거부한다.
+    /// </summary>
+    private static string? WinNameError(string name)
+    {
+        var s = name.Trim();
+        if (s.Length == 0) return "자산명이 비어 있습니다.";
+        if (s.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            return "\\ / : * ? \" < > | 등 파일명에 쓸 수 없는 문자가 포함되어 있습니다.";
+        if (name.EndsWith('.') || name.EndsWith(' '))
+            return "이름은 마침표(.)나 공백으로 끝날 수 없습니다.";
+        var stem = s.Split('.')[0].ToUpperInvariant();
+        if (stem is "CON" or "PRN" or "AUX" or "NUL"
+            || (stem.Length == 4 && (stem.StartsWith("COM") || stem.StartsWith("LPT")) && stem[3] is >= '1' and <= '9'))
+            return $"'{s}' 은(는) Windows 예약어라 사용할 수 없습니다.";
+        return null;
+    }
+
     // ── 요청 DTO ──────────────────────────────────────────────
 
     public class SaveRequest
@@ -214,6 +268,10 @@ public class AssetTableController : ControllerBase
         public string? ConnIpVia { get; set; }
 
         public int? ConnBase { get; set; }
+
+        // Drive(typeId 4) 전용: 경유 연결 사용(2단) 스위치 — 자산 상세 편집에서 사용.
+        public bool ConnViaEnabledSet { get; set; }
+        public bool ConnViaEnabled { get; set; }
 
         public bool ConnSlotSet { get; set; }
         public int? ConnSlot { get; set; }

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>라인 레이아웃 뷰 개선안</title>
+<style>
+  :root {
+    --bg: #f6f9ff; --card: #ffffff; --ink: #171c21; --ink-2: #434654;
+    --ink-3: #737685; --line: #d8deea; --accent: #0052cc;
+    --code-bg: #eef2f9;
+    /* health palette (기존 layout-render.js 값 유지) */
+    --h-ok: #65B991; --h-keep: #6BA0DE; --h-fail: #E67E7E; --h-work: #f0a63a; --h-none: #6b7690;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0b1c30; --card: #10213a; --ink: #ecf1f8; --ink-2: #c3c6d6; --ink-3: #8d94ad; --line: #23344e; --accent: #9db9ff; --code-bg: #0d1a2c; }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Segoe UI', 'Malgun Gothic', -apple-system, sans-serif;
+    font-size: 15px; line-height: 1.65;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 22px 90px; }
+  .prose { max-width: 760px; }
+  h1 { font-size: 26px; line-height: 1.3; margin: 0 0 6px; letter-spacing: -0.3px; text-wrap: balance; }
+  .sub { color: var(--ink-2); margin: 0 0 38px; max-width: 700px; }
+  h2 { font-size: 19px; margin: 54px 0 4px; letter-spacing: -0.2px; }
+  h2 .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  h3 { font-size: 15px; margin: 26px 0 8px; }
+  p { margin: 10px 0; color: var(--ink-2); }
+  p strong, li strong { color: var(--ink); }
+  ul { margin: 8px 0; padding-left: 20px; color: var(--ink-2); }
+  li { margin: 5px 0; }
+  code { font-family: Consolas, monospace; font-size: 13px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .hr { border: 0; border-top: 1px solid var(--line); margin: 46px 0 0; }
+
+  /* ── 진단 카드 ── */
+  .diag { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 18px 0 6px; }
+  .diag > div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .diag b { display: block; font-size: 14px; margin-bottom: 4px; }
+  .diag span { font-size: 13px; color: var(--ink-2); }
+  .diag .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; color: #c4554e; margin-bottom: 6px; }
+  @media (prefers-color-scheme: dark) { .diag .tag { color: #f0a29c; } }
+
+  /* ── before / after 공통 ── */
+  .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0 8px; }
+  @media (max-width: 780px) { .cmp { grid-template-columns: 1fr; } }
+  .pane { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); }
+  .pane .cap { padding: 9px 14px; font-size: 12px; font-weight: 700; letter-spacing: .05em; border-bottom: 1px solid var(--line); color: var(--ink-3); }
+  .pane .cap em { font-style: normal; color: var(--ink); }
+  .pane .body { padding: 16px; }
+  .pane ul.notes { font-size: 13px; margin: 10px 14px 12px; }
+
+  /* ── BEFORE: 현재 렌더 재현 (라이트 캔버스 고정 — 현재 모습 그대로) ── */
+  .bf-canvas { background: #fdfdfe; border-radius: 8px; padding: 14px; min-height: 210px; position: relative; }
+  .bf-region { position: relative; border: 1px solid rgba(230,126,126,.6); background: rgba(230,126,126,.10); border-radius: 8px; padding: 26px 12px 12px; min-height: 180px; }
+  .bf-ghost { position: absolute; top: 4px; left: 0; right: 0; text-align: center; font-size: 17px; font-weight: 800; color: #fff; text-shadow: 0 0 3px rgba(230,126,126,.9), 0 0 1px rgba(230,126,126,1); letter-spacing: .05em; }
+  .bf-ghost i { font-style: normal; display: inline-block; background: #E67E7E; color: #fff; font-size: 10px; border-radius: 50%; width: 15px; height: 15px; line-height: 15px; vertical-align: 3px; margin-left: 4px; border: 1px solid #fff; }
+  .bf-flow { display: flex; flex-wrap: wrap; gap: 14px 12px; justify-content: center; padding-top: 6px; }
+  .bf-item { width: 52px; text-align: center; position: relative; }
+  .bf-dev { width: 46px; height: 36px; margin: 0 auto; border: 2px solid rgba(230,126,126,.85); background: #f3f4f6; border-radius: 7px; position: relative; box-shadow: 1px 2px 3px rgba(0,0,0,.18); }
+  .bf-dev::before { content: ''; position: absolute; inset: 6px 8px 12px; background: #cdd2da; border-radius: 2px; border: 1px solid #9aa1ad; }
+  .bf-dev::after { content: 'LS'; position: absolute; bottom: 1px; left: 0; right: 0; text-align: center; font-size: 7px; color: #8b93a3; font-weight: 700; }
+  .bf-slash { position: absolute; top: -6px; left: -4px; width: 15px; height: 15px; border-radius: 50%; background: #8b93b0; border: 1.5px solid #fff; }
+  .bf-slash::before { content: ''; position: absolute; left: 3px; top: 6px; width: 8px; height: 2px; background: #fff; border-radius: 2px; transform: rotate(45deg); }
+  .bf-num { margin-top: 5px; display: inline-block; font-size: 11px; font-weight: 700; color: #3f9e57; background: #fff; border: 1px solid #d8deea; border-radius: 4px; padding: 0 7px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+  /* ── AFTER: 개선 렌더 (관제 캔버스 — 다크 고정) ── */
+  .af-canvas { background: #0d1526; border-radius: 8px; padding: 14px; min-height: 210px; }
+  .region { background: #16233c; border: 1px solid #2a3a58; border-radius: 10px; padding: 10px 12px 12px; position: relative; min-height: 178px; }
+  .region.alert { border-color: rgba(230,126,126,.55); }
+  .region.alert::before { content: ''; position: absolute; top: -1px; left: 14px; right: 14px; height: 3px; border-radius: 0 0 3px 3px; background: var(--h-fail); }
+  .rg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .rg-name { font-size: 13px; font-weight: 800; color: #e8edf9; letter-spacing: .02em; }
+  .rg-cnt { font-size: 11px; color: #8d97b4; font-variant-numeric: tabular-nums; }
+  .rg-spacer { flex: 1; }
+  .segbar { display: flex; width: 76px; height: 5px; border-radius: 3px; overflow: hidden; gap: 1px; }
+  .segbar i { display: block; height: 100%; }
+  .failchip { font-size: 10px; font-weight: 800; color: #ffd9d6; background: rgba(230,126,126,.22); border: 1px solid rgba(230,126,126,.55); border-radius: 999px; padding: 0 7px; line-height: 15px; }
+  .sublane { margin: 8px 0 2px; }
+  .sublane .sl-cap { font-size: 10px; font-weight: 700; color: #7d88a6; letter-spacing: .08em; margin: 0 0 4px 1px; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tile { min-width: 36px; height: 24px; padding: 0 5px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-family: Consolas, monospace; font-size: 11px; font-weight: 700; position: relative; }
+  .tile.ok   { background: rgba(101,185,145,.13); border: 1px solid rgba(101,185,145,.55); color: #9fdcbe; }
+  .tile.keep { background: rgba(107,160,222,.12); border: 1px solid rgba(107,160,222,.5); color: #a9c9ef; }
+  .tile.fail { background: #E67E7E; border: 1px solid #f2a5a5; color: #2a1215; box-shadow: 0 0 8px rgba(230,126,126,.45); }
+  .tile.work { background: rgba(240,166,58,.16); border: 1px solid rgba(240,166,58,.6); color: #f5c98a; }
+  .tile.none { background: transparent; border: 1px dashed #39476400; outline: 1px dashed #394764; color: #5d6a85; }
+  .tile.off::after { content: ''; position: absolute; top: -3px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: #8b93b0; border: 1.5px solid #0d1526; }
+  /* PLC 카드 — 타일과 같은 시각 언어 */
+  .plc { background: #1c2b47; border: 1px solid #33456a; border-radius: 8px; padding: 7px 9px 9px; width: 100%; }
+  .plc.alert { border-color: rgba(230,126,126,.6); }
+  .plc-head { display: flex; align-items: baseline; gap: 7px; margin-bottom: 6px; }
+  .plc-name { font-size: 11.5px; font-weight: 800; color: #eef1fb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plc-ip { font-family: Consolas, monospace; font-size: 10px; color: #7f8bab; }
+  .plc-cnt { margin-left: auto; font-size: 10px; font-weight: 700; color: #aeb9d6; white-space: nowrap; }
+  .plc-cnt i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; vertical-align: 0; margin-right: 3px; }
+  .plc .tiles { gap: 4px; }
+  .plc .tile { min-width: 32px; height: 21px; font-size: 10px; }
+
+  /* AFTER 전체 캔버스(절대배치) */
+  .full { border: 1px solid var(--line); border-radius: 12px; background: var(--card); overflow: hidden; margin: 18px 0 8px; }
+  .full .cap { padding: 9px 14px; font-size: 12px; font-weight: 700; letter-spacing: .05em; border-bottom: 1px solid var(--line); color: var(--ink-3); }
+  .full .cap em { font-style: normal; color: var(--ink); }
+  .full-scroll { overflow-x: auto; }
+  .plant { position: relative; min-width: 920px; height: 560px; background: #0d1526; }
+  .plant .region { position: absolute; min-height: 0; padding: 8px 10px 10px; overflow: hidden; }
+  .plant .rg-head { margin-bottom: 7px; }
+  /* 영역 본문 래퍼 — 실제 렌더러의 scaler(<g transform>)처럼 내용 전체를 영역에 맞춰 일괄 축소 */
+  .rg-body { transform-origin: 0 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  /* 아이디어 카드 */
+  .ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 16px 0; }
+  .ideas > div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 13.5px; }
+  .ideas b { display: block; font-size: 14px; margin-bottom: 5px; }
+  .ideas span { color: var(--ink-2); }
+  .pri { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; border-radius: 4px; padding: 1px 6px; margin-bottom: 8px; }
+  .pri.p1 { color: #fff; background: var(--accent); }
+  .pri.p2 { color: var(--accent); border: 1px solid var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>라인별 레이아웃 뷰 — 왜 어수선한가, 어떻게 고칠 것인가</h1>
+  <p class="sub">현재 화면이 나빠 보이는 건 배치의 문제가 아니라 <strong>색·아이콘·라벨이 전부 동시에 소리치고 있기 때문</strong>입니다. 규칙 3개로 정리하면 같은 데이터·같은 배치로도 관제 화면다워집니다.</p>
+
+  <div class="prose">
+    <h2><span class="no">1</span>진단 — 문제는 네 가지</h2>
+  </div>
+  <div class="diag">
+    <div><i class="tag">가장 큼</i><b>실패 1대 = 라인 전체가 분홍</b><span>영역 배경이 집계 상태색 10% 틴트라, 어느 라인이든 실패가 1대만 있어도 면 전체가 붉게 물듭니다. 대부분 라인에 실패가 있으니 <b>화면 전체가 분홍</b> → 경보색이 정보가 아니라 배경이 됩니다.</span></div>
+    <div><i class="tag">노이즈</i><b>똑같은 장비 사진의 반복</b><span>동일한 LS PLC 사진 아이콘이 100개 넘게 반복됩니다. 이 줌 레벨에서 사진은 정보량 0인데 픽셀은 가장 많이 차지하고, 오프라인 슬래시 마크까지 얹혀 더 어지럽습니다.</span></div>
+    <div><i class="tag">불일치</i><b>시각 언어가 3개</b><span>다크 PLC 카드, 사진 아이콘, 따로 떠다니는 초록 번호 배지 — 세 가지 문법이 한 영역에 섞여 있고, 라이트 캔버스 위의 다크 카드는 배경과도 충돌합니다.</span></div>
+    <div><i class="tag">라벨</i><b>유령 라벨 + 여백 불균형</b><span>라인명이 콘텐츠 위에 겹치는 중앙 워터마크로 떠 있고, 물리 비율 그대로인 영역은 자산이 적으면 텅 비고 많으면 미어터집니다.</span></div>
+  </div>
+
+  <div class="prose">
+    <h2><span class="no">2</span>규칙 세 가지</h2>
+    <ul>
+      <li><strong>① 면은 중립, 색은 예외에만.</strong> 영역 배경은 무채색 서피스로 통일하고, 상태색은 실패·작업중 타일과 헤더 요약에만 씁니다. 조용한 화면에서 빨강 몇 개가 튀어야 관제입니다.</li>
+      <li><strong>② 시각 언어는 하나 — 번호 타일.</strong> 사진 아이콘과 떠다니는 번호 배지를 없애고, <em>번호가 곧 몸통</em>인 상태색 타일 하나로 통일합니다. PLC 카드 내부 자식도 같은 타일을 씁니다.</li>
+      <li><strong>③ 요약 먼저.</strong> 라인 헤더를 상단 좌측 정렬 바(이름 · N대 · 상태 세그먼트바 · 실패칩)로 바꾸고, 중앙 워터마크는 제거합니다. 멀리서는 헤더만 훑어도 어느 라인이 아픈지 보입니다.</li>
+    </ul>
+  </div>
+
+  <h2 class="prose"><span class="no">3</span>Before / After — BC 라인 하나로 비교</h2>
+  <div class="cmp">
+    <div class="pane">
+      <div class="cap">BEFORE — <em>현재 렌더</em></div>
+      <div class="body bf-canvas">
+        <div class="bf-region">
+          <div class="bf-ghost">BC <i>16</i></div>
+          <div class="bf-flow">
+            <div class="bf-item"><div class="bf-dev"><div class="bf-slash"></div></div><span class="bf-num">507</span></div>
+            <div class="bf-item"><div class="bf-dev"><div class="bf-slash"></div></div><span class="bf-num">508</span></div>
+            <div class="bf-item"><div class="bf-dev"><div class="bf-slash"></div></div><span class="bf-num">509</span></div>
+            <div class="bf-item"><div class="bf-dev"></div><span class="bf-num">510</span></div>
+            <div class="bf-item"><div class="bf-dev"><div class="bf-slash"></div></div><span class="bf-num">511</span></div>
+            <div class="bf-item"><div class="bf-dev"><div class="bf-slash"></div></div><span class="bf-num">512</span></div>
+            <div class="bf-item"><div class="bf-dev"></div><span class="bf-num">513</span></div>
+            <div class="bf-item"><div class="bf-dev"><div class="bf-slash"></div></div><span class="bf-num">514</span></div>
+            <div class="bf-item"><div class="bf-dev"><div class="bf-slash"></div></div><span class="bf-num">515</span></div>
+            <div class="bf-item"><div class="bf-dev"></div><span class="bf-num">516</span></div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>실패 몇 대 때문에 16대짜리 라인 전체가 분홍</li>
+        <li>사진 10장이 전부 동일 — 픽셀만 차지</li>
+        <li>번호는 장비와 분리된 채 아래에 떠 있음</li>
+      </ul>
+    </div>
+    <div class="pane">
+      <div class="cap">AFTER — <em>제안</em></div>
+      <div class="body af-canvas">
+        <div class="region alert">
+          <div class="rg-head">
+            <span class="rg-name">BC</span><span class="rg-cnt">16대</span>
+            <span class="rg-spacer"></span>
+            <span class="segbar"><i style="width:44%;background:var(--h-ok)"></i><i style="width:31%;background:var(--h-keep)"></i><i style="width:13%;background:var(--h-fail)"></i><i style="width:12%;background:#394764"></i></span>
+            <span class="failchip">실패 2</span>
+          </div>
+          <div class="sublane"><div class="sl-cap">BC2</div>
+            <div class="tiles">
+              <span class="tile ok">507</span><span class="tile ok off">508</span><span class="tile keep">509</span><span class="tile ok">510</span><span class="tile fail">511</span><span class="tile keep off">512</span><span class="tile ok">513</span><span class="tile keep">514</span><span class="tile ok">515</span><span class="tile none">516</span><span class="tile ok">517</span>
+            </div>
+          </div>
+          <div class="sublane"><div class="sl-cap">BC1</div>
+            <div class="tiles">
+              <span class="tile keep">506</span><span class="tile ok">505</span><span class="tile ok">504</span><span class="tile fail off">503</span><span class="tile ok">502</span><span class="tile none">501</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>면은 중립 — 실패는 <b>빨간 타일 2개</b>와 헤더 칩으로만 표시</li>
+        <li>번호가 곧 몸통: 타일색 = 상태, 모서리 점 = 오프라인</li>
+        <li>BC1/BC2 겹침 박스 대신 서브레인 행으로 정리</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 class="prose"><span class="no">4</span>전체 화면에 적용하면</h2>
+  <div class="full">
+    <div class="cap">MOCK — <em>전체 자산 분포도 (개선안, 같은 배치 좌표 그대로)</em></div>
+    <div class="full-scroll">
+      <div class="plant">
+
+        <div class="region" style="left:1.5%; top:3%; width:22%; height:26%;">
+          <div class="rg-head"><span class="rg-name">E/ROOM</span><span class="rg-cnt">7대</span><span class="rg-spacer"></span><span class="segbar" style="width:52px"><i style="width:58%;background:var(--h-ok)"></i><i style="width:28%;background:var(--h-keep)"></i><i style="width:14%;background:#394764"></i></span></div>
+          <div class="plc" style="margin-bottom:6px;">
+            <div class="plc-head"><span class="plc-name">E/ROOM LINE PLC</span><span class="plc-ip">120.200.200.10</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>2대</span></div>
+            <div class="tiles"><span class="tile ok">108</span><span class="tile ok">131</span></div>
+          </div>
+          <div class="tiles"><span class="tile keep">102</span><span class="tile ok">103</span><span class="tile ok">104</span><span class="tile none">107</span></div>
+        </div>
+
+        <div class="region alert" style="left:25%; top:3%; width:39%; height:38%;">
+          <div class="rg-head"><span class="rg-name">BC</span><span class="rg-cnt">16대</span><span class="rg-spacer"></span><span class="segbar"><i style="width:44%;background:var(--h-ok)"></i><i style="width:31%;background:var(--h-keep)"></i><i style="width:13%;background:var(--h-fail)"></i><i style="width:12%;background:#394764"></i></span><span class="failchip">실패 2</span></div>
+          <div class="sublane"><div class="sl-cap">BC2</div><div class="tiles"><span class="tile ok">507</span><span class="tile ok off">508</span><span class="tile keep">509</span><span class="tile ok">510</span><span class="tile fail">511</span><span class="tile keep off">512</span><span class="tile ok">513</span><span class="tile keep">514</span><span class="tile ok">515</span><span class="tile none">516</span><span class="tile ok">517</span></div></div>
+          <div class="sublane"><div class="sl-cap">BC1</div><div class="tiles"><span class="tile keep">506</span><span class="tile ok">505</span><span class="tile ok">504</span><span class="tile fail off">503</span><span class="tile ok">502</span><span class="tile none">501</span></div></div>
+          <div class="sublane"><div class="sl-cap">MF</div><div class="tiles"><span class="tile keep">M1</span><span class="tile ok">M2</span></div></div>
+        </div>
+
+        <div class="region" style="left:65.5%; top:3%; width:16%; height:38%;">
+          <div class="rg-head"><span class="rg-name">BC BUFFER</span><span class="rg-cnt">25대</span><span class="rg-spacer"></span><span class="segbar" style="width:46px"><i style="width:70%;background:var(--h-ok)"></i><i style="width:30%;background:#394764"></i></span></div>
+          <div class="plc" style="margin-bottom:6px;">
+            <div class="plc-head"><span class="plc-name">BC1 BUFFER 제어반</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>6대</span></div>
+            <div class="tiles"><span class="tile ok">1-1</span><span class="tile ok">1-2</span><span class="tile ok">2-1</span><span class="tile keep">3-1</span><span class="tile ok">3-2</span><span class="tile ok">4-1</span></div>
+          </div>
+          <div class="plc">
+            <div class="plc-head"><span class="plc-name">BC2 BUFFER 제어반</span><span class="plc-cnt"><i style="background:var(--h-keep)"></i>9대</span></div>
+            <div class="tiles"><span class="tile ok">1</span><span class="tile ok">2</span><span class="tile keep">3</span><span class="tile ok">4</span><span class="tile keep">5</span><span class="tile none">6</span></div>
+          </div>
+        </div>
+
+        <div class="region" style="left:82.5%; top:3%; width:16%; height:24%;">
+          <div class="rg-head"><span class="rg-name">도장2투입설비</span><span class="rg-cnt">14대</span><span class="rg-spacer"></span></div>
+          <div class="plc"><div class="plc-head"><span class="plc-name">도장투입설비 PLC</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>8대</span></div>
+          <div class="tiles"><span class="tile ok">A1</span><span class="tile ok">A2</span><span class="tile keep">A3</span><span class="tile ok">A4</span><span class="tile ok off">A5</span><span class="tile keep">A6</span></div></div>
+        </div>
+
+        <div class="region" style="left:82.5%; top:29%; width:16%; height:22%;">
+          <div class="rg-head"><span class="rg-name">WBS BUFFER</span><span class="rg-cnt">41대</span><span class="rg-spacer"></span><span class="segbar" style="width:46px"><i style="width:62%;background:var(--h-ok)"></i><i style="width:24%;background:var(--h-keep)"></i><i style="width:14%;background:#394764"></i></span></div>
+          <div class="plc"><div class="plc-head"><span class="plc-name">WBS BUFFER 라인 PLC</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>30대</span></div>
+          <div class="tiles"><span class="tile ok">·</span><span class="tile ok">·</span><span class="tile keep">·</span><span class="tile ok">·</span><span class="tile ok">·</span><span class="tile keep">·</span><span class="tile none">·</span><span class="tile ok">·</span></div></div>
+        </div>
+
+        <div class="region" style="left:1.5%; top:31%; width:30%; height:24%;">
+          <div class="rg-head"><span class="rg-name">UB</span><span class="rg-cnt">9대</span><span class="rg-spacer"></span><span class="segbar" style="width:52px"><i style="width:50%;background:var(--h-ok)"></i><i style="width:34%;background:var(--h-keep)"></i><i style="width:16%;background:#394764"></i></span></div>
+          <div class="plc" style="margin-bottom:6px;"><div class="plc-head"><span class="plc-name">U/B1 #135~셔틀</span><span class="plc-ip">120.200.200.30</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>2대</span></div>
+          <div class="tiles"><span class="tile ok">137a</span><span class="tile ok">137b</span></div></div>
+          <div class="tiles"><span class="tile keep">121</span><span class="tile ok">131</span><span class="tile ok">132</span><span class="tile keep">133</span><span class="tile ok">134</span><span class="tile none">135</span><span class="tile ok">136</span></div>
+        </div>
+
+        <div class="region alert" style="left:33%; top:31%; width:38%; height:24%;">
+          <div class="rg-head"><span class="rg-name">BB</span><span class="rg-cnt">18대</span><span class="rg-spacer"></span><span class="segbar"><i style="width:52%;background:var(--h-ok)"></i><i style="width:30%;background:var(--h-keep)"></i><i style="width:6%;background:var(--h-fail)"></i><i style="width:12%;background:#394764"></i></span><span class="failchip">실패 1</span></div>
+          <div style="display:flex; gap:6px; align-items:flex-start;">
+            <div class="plc" style="flex:1;"><div class="plc-head"><span class="plc-name">BB1 PLC(이송기)</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>2대</span></div>
+            <div class="tiles"><span class="tile ok">301a</span><span class="tile ok">301b</span></div></div>
+            <div class="plc alert" style="flex:1.4;"><div class="plc-head"><span class="plc-name">BB2 PLC(306~)</span><span class="plc-cnt"><i style="background:var(--h-fail)"></i>6대</span></div>
+            <div class="tiles"><span class="tile ok">LH1</span><span class="tile fail">LH2</span><span class="tile ok">RH1</span><span class="tile keep">RH2</span><span class="tile ok">FE1</span><span class="tile ok">FE2</span></div></div>
+          </div>
+          <div class="tiles" style="margin-top:6px;"><span class="tile keep">302</span><span class="tile ok">303</span><span class="tile ok">304</span><span class="tile keep off">305</span><span class="tile ok">307</span><span class="tile ok">308</span><span class="tile none">310</span><span class="tile ok">311</span><span class="tile ok">312</span></div>
+        </div>
+
+        <div class="region" style="left:72%; top:31%; width:9.5%; height:20%;">
+          <div class="rg-head"><span class="rg-name">BB BUF</span><span class="rg-cnt">15</span></div>
+          <div class="tiles"><span class="tile ok">313</span><span class="tile keep">314</span><span class="tile ok">B1</span><span class="tile none">B2</span><span class="tile ok">B3</span></div>
+        </div>
+
+        <div class="region" style="left:1.5%; top:59%; width:41%; height:37%;">
+          <div class="rg-head"><span class="rg-name">SIDE RH</span><span class="rg-cnt">16대</span><span class="rg-spacer"></span><span class="segbar"><i style="width:60%;background:var(--h-ok)"></i><i style="width:28%;background:var(--h-keep)"></i><i style="width:12%;background:#394764"></i></span></div>
+          <div style="display:flex; gap:6px; align-items:flex-start; margin-bottom:6px;">
+            <div class="plc" style="flex:1;"><div class="plc-head"><span class="plc-name">SIDE CPU1 RH</span><span class="plc-ip">…200.210</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>1대</span></div>
+            <div class="tiles"><span class="tile ok">223</span></div></div>
+            <div class="plc" style="flex:1;"><div class="plc-head"><span class="plc-name">SIDE CPU2 RH</span><span class="plc-ip">…200.220</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>2대</span></div>
+            <div class="tiles"><span class="tile ok">225</span><span class="tile keep">227</span></div></div>
+            <div class="plc" style="flex:1;"><div class="plc-head"><span class="plc-name">SIDE CPU3 RH</span><span class="plc-ip">…200.230</span><span class="plc-cnt"><i style="background:var(--h-keep)"></i>3대</span></div>
+            <div class="tiles"><span class="tile ok">D/L</span><span class="tile keep">FORK</span><span class="tile ok">O/H</span></div></div>
+          </div>
+          <div class="tiles"><span class="tile keep">221</span><span class="tile ok">222</span><span class="tile ok">224</span><span class="tile none">228</span><span class="tile ok">229</span><span class="tile ok">232</span><span class="tile keep off">234</span><span class="tile ok">252</span></div>
+        </div>
+
+        <div class="region" style="left:44%; top:59%; width:40%; height:37%;">
+          <div class="rg-head"><span class="rg-name">SIDE LH</span><span class="rg-cnt">18대</span><span class="rg-spacer"></span><span class="segbar"><i style="width:55%;background:var(--h-ok)"></i><i style="width:33%;background:var(--h-keep)"></i><i style="width:12%;background:#394764"></i></span></div>
+          <div style="display:flex; gap:6px; align-items:flex-start; margin-bottom:6px;">
+            <div class="plc" style="flex:1;"><div class="plc-head"><span class="plc-name">SIDE CPU1 LH</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>1대</span></div>
+            <div class="tiles"><span class="tile ok">203</span></div></div>
+            <div class="plc" style="flex:1;"><div class="plc-head"><span class="plc-name">SIDE CPU2 LH</span><span class="plc-cnt"><i style="background:var(--h-ok)"></i>2대</span></div>
+            <div class="tiles"><span class="tile ok">205</span><span class="tile ok">207</span></div></div>
+            <div class="plc" style="flex:1.2;"><div class="plc-head"><span class="plc-name">SIDE CPU3 LH</span><span class="plc-cnt"><i style="background:var(--h-keep)"></i>5대</span></div>
+            <div class="tiles"><span class="tile ok">D/L</span><span class="tile keep">FORK</span><span class="tile ok">O/H</span><span class="tile ok">이송1</span><span class="tile keep">이송2</span></div></div>
+          </div>
+          <div class="tiles"><span class="tile ok">201</span><span class="tile keep">202</span><span class="tile ok">204</span><span class="tile none">206</span><span class="tile ok">209</span><span class="tile ok">212</span><span class="tile keep">214</span></div>
+        </div>
+
+        <div class="region" style="left:85.5%; top:55%; width:13%; height:41%;">
+          <div class="rg-head"><span class="rg-name">DECK</span><span class="rg-cnt">1대</span></div>
+          <div class="tiles"><span class="tile ok">D-1</span></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--h-ok)"></i>백업 갱신</span>
+      <span><i style="background:var(--h-keep)"></i>변경 없음</span>
+      <span><i style="background:var(--h-fail)"></i>작업 실패 (채움 + 헤더칩)</span>
+      <span><i style="background:var(--h-work)"></i>작업중</span>
+      <span><i style="background:#394764"></i>내역 없음 (점선·저채도)</span>
+      <span><i style="background:#8b93b0;border-radius:50%"></i>모서리 점 = 오프라인</span>
+    </div>
+  </div>
+  <p class="prose" style="font-size:13.5px;">배치 좌표는 편집기에서 그린 그대로입니다. 바뀐 건 <strong>영역의 채색 규칙, 자산의 표현 단위, 헤더의 위치</strong>뿐인데 밀도와 긴장감이 달라집니다. 캔버스는 라이트 테마에서도 다크 고정을 권합니다 — PLC 카드가 이미 다크라 배경 충돌이 사라지고, 상태색 대비도 최대가 됩니다.</p>
+
+  <div class="prose">
+    <h2><span class="no">5</span>구현 매핑 (layout-render.js)</h2>
+    <ul>
+      <li><strong>영역 배경</strong> — <code>renderLineView</code>의 <code>fill: healthColor+'1a'</code>를 중립 서피스 고정값으로. 경보는 상단 3px 스트립 + 테두리만 상태색. (rect 1곳 수정)</li>
+      <li><strong>헤더</strong> — 중앙 라벨/원형 배지 블록을 좌측 정렬 행(이름·N대·세그먼트바·실패칩)으로 교체. 세그먼트바는 <code>drawStatusBar</code> 재사용 가능.</li>
+      <li><strong>자산 타일</strong> — <code>assetMarker</code>(사진 아이콘)를 라인 뷰에서 번호 타일(rect+text)로 교체. PLC 카드 자식 타일(<code>drawChildTiles</code>)과 스타일 토큰 공유. 사진 아이콘은 개별(배치도) 뷰·팝오버에만 유지.</li>
+      <li><strong>오프라인</strong> — <code>offlineMark</code> 그대로 재사용 (타일 좌상단 점).</li>
+      <li><strong>내역없음</strong> — 점선 테두리 + 저채도로 감쇠. 실패가 아니라 '아직 모름'이 그렇게 읽히게.</li>
+    </ul>
+
+    <h2><span class="no">6</span>그 다음 단계 아이디어</h2>
+  </div>
+  <div class="ideas">
+    <div><i class="pri p1">지금 함께</i><b>겹침 라인 → 서브레인</b><span>BC 안의 BC1/BC2/MF처럼 편집기에서 영역이 포함 관계면, 렌더 시 박스 겹침 대신 부모 영역 안의 레인(행)으로 그립니다. 편집기 데이터는 그대로, 렌더에서 포함 판정만 추가.</span></div>
+    <div><i class="pri p1">지금 함께</i><b>줌 LOD (멀리선 요약, 가까이선 타일)</b><span>축소 상태에선 영역을 헤더+세그먼트바만으로, 확대하면 타일이 나타나게. 이미 blueprint-zoom이 있으니 scale 임계값으로 타일 레이어 표시만 토글하면 됩니다.</span></div>
+    <div><i class="pri p2">다음</i><b>'정돈 보기' 토글</b><span>물리 배치(현재) ↔ 균등 카드 그리드(상태판) 전환 버튼. 물리 배치는 현장 감각용, 정돈 보기는 아침 점검용. 라인별/개별 토글 옆에 추가.</span></div>
+    <div><i class="pri p2">다음</i><b>실패 우선 시선 유도</b><span>실패 타일에만 미세한 pulse(2s, <code>prefers-reduced-motion</code> 존중), 헤더 실패칩 클릭 시 해당 자산 필터 목록 — 기존 <code>data-asset-ids</code> 팝오버 재사용.</span></div>
+  </div>
+
+  <hr class="hr">
+  <p class="prose" style="font-size:13px; color:var(--ink-3);">TWMS 2.0 · 라인별 레이아웃 뷰 개선 제안 · 상태색은 기존 HEALTH_COLOR 팔레트 그대로 · 임시 미리보기 파일 (삭제해도 됨)</p>
+</div>
+<script>
+  // 실제 layout-render.js 의 layoutLineAssets + scaler 를 흉내내는 fit 로직:
+  // 영역 본문(rg-body)을 폭 availW/s 로 넓혀 배치한 뒤 scale(s) 로 축소 —
+  // 어떤 밀도에서도 그룹블럭/개별 타일이 라인 카드 밖으로 나가지 않는다.
+  function fitRegions() {
+    document.querySelectorAll('.plant .region').forEach(function (rg) {
+      var body = rg.querySelector(':scope > .rg-body');
+      if (!body) {
+        body = document.createElement('div');
+        body.className = 'rg-body';
+        Array.prototype.slice.call(rg.children)
+          .filter(function (el) { return !el.classList.contains('rg-head'); })
+          .forEach(function (el) { body.appendChild(el); });
+        rg.appendChild(body);
+      }
+      body.style.transform = '';
+      body.style.width = '';
+      var cs = getComputedStyle(rg);
+      var availW = rg.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      var head = rg.querySelector('.rg-head');
+      var availH = rg.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+        - (head ? head.offsetHeight + 7 : 0);
+      if (availW <= 0 || availH <= 0) return;
+
+      var fitsAt = function (s) {
+        body.style.width = (availW / s) + 'px';
+        return body.scrollHeight * s <= availH + 0.5 && body.scrollWidth * s <= availW + 0.5;
+      };
+      var s = 1;
+      if (!fitsAt(1)) {           // 이분 탐색으로 들어가는 최대 배율 탐색
+        var lo = 0.25, hi = 1;
+        for (var i = 0; i < 9; i++) {
+          var mid = (lo + hi) / 2;
+          if (fitsAt(mid)) lo = mid; else hi = mid;
+        }
+        s = lo;
+      }
+      body.style.width = (availW / s) + 'px';
+      body.style.transform = 'scale(' + s + ')';
+    });
+  }
+  window.addEventListener('load', fitRegions);
+  window.addEventListener('resize', fitRegions);
+</script>
+</body>
+</html>

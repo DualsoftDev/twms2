@@ -164,8 +164,8 @@ public class LayoutDbService
                 """, new { Name = newName }, transaction: tx);
 
             await conn.ExecuteAsync("""
-                INSERT INTO TwmsBlueprintConfig (LayoutId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, UpdatedAt)
-                SELECT @NewId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, CURRENT_TIMESTAMP
+                INSERT INTO TwmsBlueprintConfig (LayoutId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, LineColor, UpdatedAt)
+                SELECT @NewId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, LineColor, CURRENT_TIMESTAMP
                 FROM TwmsBlueprintConfig WHERE LayoutId = @SrcId
                 """, new { NewId = newId, SrcId = sourceLayoutId }, transaction: tx);
 
@@ -249,8 +249,8 @@ public class LayoutDbService
     {
         using var conn = _db.Create();
         await conn.ExecuteAsync("""
-            INSERT INTO TwmsBlueprintConfig (LayoutId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, GridEnabled, GridSize, UpdatedAt)
-            VALUES (@LayoutId, @ImagePath, @ImageWidth, @ImageHeight, @DrawingData, @BgColor, @GridColor, @GridEnabled, @GridSize, CURRENT_TIMESTAMP)
+            INSERT INTO TwmsBlueprintConfig (LayoutId, ImagePath, ImageWidth, ImageHeight, DrawingData, BgColor, GridColor, LineColor, GridEnabled, GridSize, UpdatedAt)
+            VALUES (@LayoutId, @ImagePath, @ImageWidth, @ImageHeight, @DrawingData, @BgColor, @GridColor, @LineColor, @GridEnabled, @GridSize, CURRENT_TIMESTAMP)
             ON CONFLICT(LayoutId) DO UPDATE SET
                 ImagePath   = @ImagePath,
                 ImageWidth  = @ImageWidth,
@@ -258,6 +258,7 @@ public class LayoutDbService
                 DrawingData = @DrawingData,
                 BgColor     = @BgColor,
                 GridColor   = @GridColor,
+                LineColor   = @LineColor,
                 GridEnabled = @GridEnabled,
                 GridSize    = @GridSize,
                 UpdatedAt   = CURRENT_TIMESTAMP
@@ -368,10 +369,11 @@ public class LayoutDbService
         using var conn = _db.Create();
         await conn.ExecuteAsync("DELETE FROM TwmsPlacementGroupMember WHERE GroupId = @GroupId",
             new { GroupId = groupId });
+        // DEXA layoutGroup.assets CSV에 같은 자산이 중복 기재된 사례 있음 → (GroupId, AssetId) UNIQUE 위반 방지
         if (assetIds.Count > 0)
             await conn.ExecuteAsync(
                 "INSERT INTO TwmsPlacementGroupMember (GroupId, AssetId) VALUES (@GroupId, @AssetId)",
-                assetIds.Select(a => new { GroupId = groupId, AssetId = a }));
+                assetIds.Distinct().Select(a => new { GroupId = groupId, AssetId = a }));
     }
 
     public async Task UpsertPlacementGroupBatchAsync(List<TwmsPlacementGroup> groups)
@@ -418,6 +420,7 @@ public class LayoutDbService
             {
                 BgColor = config.BgColor,
                 GridColor = config.GridColor,
+                LineColor = config.LineColor,
                 ImageWidth = config.ImageWidth,
                 ImageHeight = config.ImageHeight,
             } : null,
@@ -460,6 +463,7 @@ public class LayoutDbService
             {
                 existing.BgColor = data.Config.BgColor;
                 existing.GridColor = data.Config.GridColor;
+                existing.LineColor = data.Config.LineColor;
                 existing.ImageWidth = data.Config.ImageWidth;
                 existing.ImageHeight = data.Config.ImageHeight;
                 await UpsertBlueprintConfigAsync(existing);

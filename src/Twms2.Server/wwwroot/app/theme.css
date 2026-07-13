@@ -159,8 +159,10 @@ body {
   text-decoration: none; padding: 4px 6px 12px; margin-bottom: 2px;
 }
 .dsp-logo-img {
-  max-height: 46px; max-width: 132px; width: auto; height: auto;
-  flex: none; object-fit: contain; display: block;
+  /* 커스텀 로고 업로드 시에도 기본 마크와 동일한 박스(46×46, 좌측 정렬)에 맞춰
+   * 제목/부제 위치가 밀리지 않도록 크기를 고정한다. */
+  width: 46px; height: 46px;
+  flex: none; object-fit: contain; object-position: left center; display: block;
   transition: transform 0.2s ease;
 }
 .dsp-logo-area:hover .dsp-logo-img { transform: scale(1.04); }
@@ -411,11 +413,12 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .lv-tip-head { display: flex; align-items: center; gap: 7px; padding: 8px 13px; font-size: 13.5px; font-weight: 700; letter-spacing: 0.2px; border-bottom: 1px solid var(--c-outline-variant); }
 .lv-tip-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22); }
 .lv-tip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lv-tip-body { padding: 8px 13px 9px; display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; }
-.lv-tip-row { display: contents; }
-.lv-tip-k { color: var(--c-on-surface-variant); white-space: nowrap; }
-.lv-tip-v { font-weight: 600; text-align: right; word-break: break-all; }
-.lv-tip-hint { grid-column: 1 / -1; margin-top: 5px; padding-top: 6px; border-top: 1px dashed var(--c-outline-variant); color: var(--c-on-surface-variant); font-size: 11px; }
+/* 키/값 행: display:contents 그리드는 CSS 미적용 시 글자가 뒤섞여 보여 자립형 flex 행으로 구성 */
+.lv-tip-body { padding: 8px 13px 9px; display: flex; flex-direction: column; gap: 3px; }
+.lv-tip-row { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.lv-tip-k { color: var(--c-on-surface-variant); white-space: nowrap; flex: none; }
+.lv-tip-v { font-weight: 600; text-align: right; overflow-wrap: anywhere; min-width: 0; }
+.lv-tip-hint { margin-top: 5px; padding-top: 6px; border-top: 1px dashed var(--c-outline-variant); color: var(--c-on-surface-variant); font-size: 11px; }
 
 .lv-empty { padding: 32px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }
 .lv-loading { padding: 32px; text-align: center; color: var(--c-on-surface-variant); font-size: 14px; }
@@ -431,8 +434,8 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .lv-ctrl-btn:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
 .lv-ctrl-btn .material-symbols-outlined { font-size: 20px; }
 
-.lv-pop { position: absolute; z-index: 30; min-width: 200px; max-width: 300px; max-height: 60%; overflow-y: auto;
-  background: var(--c-surface); border-radius: 14px; padding: 12px 14px; font-size: 13px;
+.lv-pop { position: absolute; z-index: 30; min-width: 200px; max-width: 300px; max-height: calc(100% - 16px); overflow-y: auto;
+  background: var(--c-surface); border-radius: 14px; padding: 12px 14px; font-size: 13px; line-height: 1.5;
   box-shadow: 6px 6px 14px var(--nm-dark), -6px -6px 14px var(--nm-light); }
 .lv-pop-close { position: absolute; top: 6px; right: 8px; border: none; background: transparent;
   color: var(--c-on-surface-variant); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
@@ -447,3 +450,75 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .lv-pop-row-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lv-pop-row-ip { color: var(--c-on-surface-variant); font-size: 12px; font-family: 'JetBrains Mono', monospace; }
 .lv-pop-empty { color: var(--c-on-surface-variant); padding: 6px; }
+
+/* ============================================================================
+ * 반응형 (모바일 · 좁게 조절한 창)
+ *  데스크톱 우선 레이아웃에 좁은 화면 폴백을 덧붙인다. 페이지 HTML/JS 는 거의
+ *  건드리지 않고 공통 후크(.dsp-grid · .dsp-header · .panel-header · 페이지
+ *  타이틀 헤더)에 미디어 쿼리로 대응한다.
+ *   · 사이드바: ≤1024px 에서 오버레이 드로어(햄버거로 열고 백드롭/링크로 닫음)
+ *   · 그리드: 인라인 패턴별 열수 단계 축소(차트쌍 세로화 / KPI·카드 열수 감소)
+ *   · 헤더·카드·여백 압축, 표 가로 스크롤 유지
+ *  ※ 인라인 grid-template-columns 를 덮어야 하므로 그리드 규칙은 !important 사용.
+ * ==========================================================================*/
+
+/* 드로어 백드롭 (shell.js 가 #dsp-nav-backdrop 를 body 에 주입). 기본 숨김. */
+#dsp-nav-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 55;
+  background: rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+}
+
+/* ── ≤1024px: 사이드바 오버레이 드로어 + 본문/헤더 전폭 ── */
+@media (max-width: 1024px) {
+  .dsp-sidebar { width: min(18rem, 86vw); z-index: 60; }
+  .dsp-main { margin-left: 0 !important; }
+  .dsp-header { width: 100% !important; left: 0; right: 0; padding: 0 14px; gap: 10px; }
+  /* 드로어 열림(=nav-collapsed 아님) 시에만 백드롭 노출 */
+  body:not(.nav-collapsed) #dsp-nav-backdrop { display: block; }
+
+  /* 헤더 내부: 검색이 남는 공간을 차지하도록 */
+  #dsp-hdr-left { flex: 1 1 auto; min-width: 0; }
+  #dsp-search-box { width: 100% !important; max-width: 360px; min-width: 0; }
+
+  /* 차트 2단(12열) 그리드는 세로로 — 자식 span 도 해제 */
+  .dsp-grid[style*="repeat(12"] { grid-template-columns: 1fr !important; }
+  .dsp-grid[style*="repeat(12"] > * { grid-column: auto !important; }
+  /* KPI·카드 다열 그리드는 열수 축소 */
+  .dsp-grid[style*="repeat(6"] { grid-template-columns: repeat(3, 1fr) !important; }
+  .dsp-grid[style*="repeat(5"] { grid-template-columns: repeat(3, 1fr) !important; }
+  .dsp-grid[style*="repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+
+  .dsp-content { padding: 18px; }
+}
+
+/* ── ≤768px: 헤더(제목+액션)·패널헤더 줄바꿈, 자유비율 폼 1열, 여백·카드 압축 ── */
+@media (max-width: 768px) {
+  .dsp-content { padding: 14px; }
+  .dsp-page > .flex.justify-between.items-end { flex-wrap: wrap; gap: 12px; }
+  .panel-header { flex-wrap: wrap; gap: 10px; }
+  /* 자유 비율 폼 그리드(예: 매뉴얼 업로드 1fr 1.4fr auto) → 1열 */
+  .dsp-grid[style*="1.4fr"] { grid-template-columns: 1fr !important; }
+  .nm-card { padding: 18px; border-radius: 22px; }
+}
+
+/* ── ≤600px: DEXA 라벨 숨김(LED만), KPI·카드 2열 ── */
+@media (max-width: 600px) {
+  #dsp-sys-label { display: none; }
+  #dsp-sys-status { padding: 8px 12px !important; }
+  .dsp-grid[style*="repeat(3"],
+  .dsp-grid[style*="repeat(4"],
+  .dsp-grid[style*="repeat(5"],
+  .dsp-grid[style*="repeat(6"] { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+/* ── ≤460px: 헤더 검색 숨김, 모든 다열 KPI·카드 1열 ── */
+@media (max-width: 460px) {
+  #dsp-search-box { display: none !important; }
+  .dsp-content { padding: 12px; }
+  .dsp-grid[style*="repeat(2"],
+  .dsp-grid[style*="repeat(3"],
+  .dsp-grid[style*="repeat(4"],
+  .dsp-grid[style*="repeat(5"],
+  .dsp-grid[style*="repeat(6"] { grid-template-columns: 1fr !important; }
+}

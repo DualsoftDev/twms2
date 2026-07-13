@@ -56,6 +56,29 @@
     .ad-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
     .ad-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+    /* ── 편집 모드 (admin 로그인 시) — .ad-field-value 대신 인셋 입력 위젯 ── */
+    .ad-input, .ad-textarea {
+      width: 100%; background: var(--c-surface-container-low); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px; padding: 10px 12px;
+      font-size: 14px; font-family: inherit;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .ad-input:focus, .ad-textarea:focus { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light), 0 0 0 2px var(--c-primary); }
+    .ad-input.invalid, .ad-input.invalid:focus { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light), 0 0 0 2px var(--health-failed); }
+    .ad-field-err { color: var(--health-failed); font-size: 12px; font-weight: 600; margin-top: 5px; }
+    .ad-input::placeholder, .ad-textarea::placeholder { color: var(--c-outline); }
+    .ad-input:disabled { opacity: 0.45; cursor: not-allowed; }
+    select.ad-input { cursor: pointer; }
+    .ad-textarea { min-height: 120px; resize: vertical; }
+    .ad-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--c-on-surface); user-select: none; }
+    .ad-check input { width: 17px; height: 17px; accent-color: var(--c-primary); cursor: pointer; }
+    .ad-btn-primary { color: var(--c-on-primary); background: var(--c-primary); }
+    .ad-btn-primary:hover { color: var(--c-on-primary); }
+    .ad-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ad-edit-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .ad-edit-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--c-primary); }
+    .ad-edit-badge .material-symbols-outlined { font-size: 16px; }
+
     /* 매뉴얼 */
     .ad-manual-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
     .ad-manual-name { flex: 1; font-size: 13px; color: var(--c-on-surface); }
@@ -119,6 +142,7 @@
     .ad-via-meta .ad-via-ip { font-family: var(--font-mono, monospace); }
 
     @media (max-width: 860px) { .ad-grid2 { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .ad-row2 { grid-template-columns: 1fr; } }
   </style>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />

@@ -97,6 +97,8 @@
     .edit-in.num { min-width: 56px; text-align: right; }
     select.edit-in { cursor: pointer; min-width: 96px; }
     .edit-in::placeholder { color: var(--c-outline); }
+    /* 자산명 Windows 파일명 규칙 위반 (DEXA 백업 경로 보호) */
+    .edit-in.invalid, .edit-in.invalid:focus { border-color: var(--health-failed); background: color-mix(in srgb, var(--health-failed) 8%, transparent); }
 
     /* 수정된 행 강조 */
     .nm-table tr.row-mod td { background: rgba(255, 193, 7, 0.12); }

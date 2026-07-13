@@ -123,6 +123,21 @@
     .ac-map-asset { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-on-surface); padding: 3px 0 3px 22px; cursor: pointer; }
     .ac-map-ico { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
     .ac-map-ip { color: var(--c-on-surface-variant); font-size: 12px; margin-left: 4px; }
+    /* 스케줄 빌더 (cron 대신 쉬운 주기 선택 UI) */
+    .ac-seg { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ac-seg-btn, .ac-dow-btn { border: none; cursor: pointer; font-size: 13px; font-weight: 700; font-family: inherit; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light); transition: all 0.15s ease; }
+    .ac-seg-btn { padding: 7px 13px; border-radius: 10px; }
+    .ac-dow-btn { width: 36px; height: 32px; border-radius: 10px; }
+    .ac-seg-btn:hover, .ac-dow-btn:hover { color: var(--c-primary); }
+    .ac-seg-btn.on, .ac-dow-btn.on { color: var(--c-primary); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-dow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+    .ac-sched-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--c-on-surface-variant); flex-wrap: wrap; }
+    .ac-sched-row .ac-input { width: auto; }
+    .ac-sched-preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--c-surface-container-low); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-sched-preview .material-symbols-outlined { font-size: 20px; color: var(--c-primary); flex-shrink: 0; }
+    .ac-sched-preview b { color: var(--c-on-surface); }
+    .ac-sched-preview code { display: block; font-size: 11px; color: var(--c-outline); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+    .ac-sched-preview.err .material-symbols-outlined, .ac-sched-preview.err b { color: var(--health-failed); }
 
     /* ── 이식: 레이아웃 관리(layout-management) 전용 ── */
     .lm-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 12px; cursor: pointer; font-size: 13px; font-weight: 700; border: none; text-decoration: none; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light); transition: all 0.15s ease; }
@@ -198,6 +213,132 @@
     .db-alert-success { color: var(--health-backedup); }
     .db-select { background: var(--c-surface); color: var(--c-on-surface); border: none; outline: none; padding: 9px 12px; border-radius: 10px; font-size: 13px; font-family: inherit; min-width: 200px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
     .db-divider { height: 1px; background: var(--c-outline-variant); opacity: 0.4; margin: 18px 0; }
+    /* 좁은 화면: 임베드한 DB 관리의 JS 표(래퍼 없음)가 넘치면 가로 스크롤 */
+    #migrations-host, #aug-preview-host, #batch-table-host { overflow-x: auto; }
+
+    /* ── 이식: 자산 관리(asset-table) 전용 — hist-* 톤 + 인라인 편집 + 배치 패널 ── */
+    .hist-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .hist-tab {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 18px; border-radius: 14px; cursor: pointer;
+      font-weight: 700; font-size: 14px; color: var(--c-on-surface-variant);
+      background: var(--c-surface); border: none;
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.2s ease;
+    }
+    .hist-tab:hover { color: var(--c-primary); }
+    .hist-tab.active { color: var(--c-primary); box-shadow: inset 4px 4px 8px var(--nm-dark), inset -4px -4px 8px var(--nm-light); }
+    .hist-tab .material-symbols-outlined { font-size: 20px; }
+    .hist-tab img { width: 18px; height: 18px; object-fit: contain; }
+    .hist-tab .tab-mod { width: 7px; height: 7px; border-radius: 50%; background: var(--health-inprogress); display: inline-block; margin-left: 2px; }
+    .hist-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .hist-spacer { flex: 1 1 auto; }
+    .hist-input {
+      background: var(--c-surface); color: var(--c-on-surface);
+      border: none; outline: none; border-radius: 10px;
+      padding: 8px 12px; font-size: 13px; font-family: inherit;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .hist-input::placeholder { color: var(--c-outline); }
+    .hist-search { display: inline-flex; align-items: center; gap: 8px; padding-left: 12px; }
+    .hist-search .material-symbols-outlined { color: var(--c-outline); font-size: 20px; }
+    .hist-search input { background: transparent; border: none; outline: none; color: var(--c-on-surface); font-size: 13px; width: 200px; }
+    .hist-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 12px; cursor: pointer;
+      font-size: 13px; font-weight: 700; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 4px 4px 8px var(--nm-dark), -4px -4px 8px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .hist-btn:hover:not(:disabled) { color: var(--c-primary); }
+    .hist-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .hist-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .hist-btn .material-symbols-outlined { font-size: 18px; }
+    .hist-btn-primary { color: var(--c-primary); }
+    .hist-count { font-size: 13px; color: var(--c-on-surface-variant); margin-bottom: 10px; font-weight: 600; }
+    .hist-table-wrap {
+      border-radius: 16px; padding: 6px 12px; overflow: auto; max-height: calc(100vh - 360px);
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+      background: var(--c-surface-container-low);
+    }
+    .hist-table-wrap .nm-table th {
+      white-space: nowrap; cursor: pointer; user-select: none;
+      position: sticky; top: 0; z-index: 2;
+      background: var(--c-surface-container-low);
+    }
+    .hist-table-wrap .nm-table th .sort-arrow { font-size: 12px; opacity: 0.6; }
+    .hist-table-wrap .nm-table td { white-space: nowrap; vertical-align: middle; }
+    .edit-in {
+      background: transparent; color: var(--c-on-surface);
+      border: 1px solid transparent; border-radius: 7px; outline: none;
+      padding: 4px 6px; font-size: 12px; font-family: inherit; width: 100%;
+      min-width: 70px; transition: border-color 0.12s, background 0.12s;
+    }
+    .edit-in:hover { border-color: var(--c-outline-variant); }
+    .edit-in:focus { border-color: var(--c-primary); background: var(--c-surface); }
+    .edit-in.num { min-width: 56px; text-align: right; }
+    select.edit-in { cursor: pointer; min-width: 96px; }
+    .edit-in::placeholder { color: var(--c-outline); }
+    /* 자산명 Windows 파일명 규칙 위반 (DEXA 백업 경로 보호) */
+    .edit-in.invalid, .edit-in.invalid:focus { border-color: var(--health-failed); background: color-mix(in srgb, var(--health-failed) 8%, transparent); }
+    .nm-table tr.row-mod td { background: rgba(255, 193, 7, 0.12); }
+    .dark .nm-table tr.row-mod td { background: rgba(255, 193, 7, 0.08); }
+    .cell-na { display: block; text-align: center; opacity: 0.3; user-select: none; }
+    td.cell-na-bg { background: rgba(0, 0, 0, 0.05); }
+    .dark td.cell-na-bg { background: rgba(255, 255, 255, 0.04); }
+    .nm-table td.col-id, .nm-table th.col-id { width: 44px; color: var(--c-on-surface-variant); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .nm-table td.col-sel, .nm-table th.col-sel { width: 34px; text-align: center; cursor: default; }
+    .nm-table td.col-type, .nm-table th.col-type { width: 84px; }
+    .type-cell { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+    .type-cell img { width: 16px; height: 16px; object-fit: contain; }
+    .robot-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--c-primary); }
+    .hist-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--c-on-surface-variant); }
+    .hist-iconbtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+      background: var(--c-surface); color: var(--c-on-surface-variant);
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: all 0.15s ease; text-decoration: none;
+    }
+    .hist-iconbtn:hover:not(:disabled) { color: var(--c-primary); }
+    .hist-iconbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .hist-iconbtn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .hist-iconbtn .material-symbols-outlined { font-size: 18px; }
+    .hist-empty { padding: 20px; color: var(--c-on-surface-variant); font-size: 14px; }
+    .hist-alert {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-radius: 12px; margin-bottom: 14px; font-size: 13px; font-weight: 600;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .hist-alert .material-symbols-outlined { font-size: 20px; }
+    .hist-alert.ok { color: var(--health-backedup); }
+    .hist-alert.warn { color: var(--health-inprogress); }
+    .hist-alert.err { color: var(--health-failed); }
+    .hist-alert.info { color: var(--c-primary); }
+    .hist-alert .close { margin-left: auto; cursor: pointer; opacity: 0.6; }
+    .hist-alert .close:hover { opacity: 1; }
+    .hist-progress { height: 8px; border-radius: 9999px; background: var(--c-surface-container-low); overflow: hidden; margin-bottom: 12px;
+      box-shadow: inset 2px 2px 4px var(--nm-dark), inset -2px -2px 4px var(--nm-light); }
+    .hist-progress > div { height: 100%; background: var(--c-primary); border-radius: 9999px; transition: width 0.2s; }
+    .batch-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 60; display: none; }
+    .batch-overlay.open { display: block; }
+    .batch-panel {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 92vw; z-index: 61;
+      background: var(--c-surface); transform: translateX(100%); transition: transform 0.25s ease;
+      display: flex; flex-direction: column; box-shadow: -8px 0 24px rgba(0,0,0,0.25);
+    }
+    .batch-panel.open { transform: translateX(0); }
+    .batch-head { display: flex; align-items: center; gap: 8px; padding: 18px 20px; border-bottom: 1px solid var(--c-outline-variant); }
+    .batch-head .panel-title { font-size: 16px; }
+    .batch-head .close { margin-left: auto; cursor: pointer; color: var(--c-on-surface-variant); }
+    .batch-body { padding: 18px 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+    .batch-foot { padding: 14px 20px; border-top: 1px solid var(--c-outline-variant); display: flex; gap: 10px; justify-content: flex-end; }
+    .batch-field { display: flex; align-items: center; gap: 10px; }
+    .batch-field input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--c-primary); cursor: pointer; flex: 0 0 auto; }
+    .batch-field .bf-input { flex: 1; }
+    .batch-section { font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); margin-top: 4px; }
+    .batch-note { font-size: 12px; color: var(--c-on-surface-variant); line-height: 1.5; }
 
     /* 탭 그룹 구분: 기본 / 고급 */
     .set-tab-sep { width: 1px; align-self: stretch; background: var(--c-outline-variant); opacity: 0.5; margin: 4px 6px; }
@@ -216,13 +357,14 @@
     <div class="flex justify-between items-end mb-element-gap">
       <div>
         <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">종합설비관리 설정</h2>
-        <p class="text-on-surface-variant" style="margin:4px 0 0;">라인 · 매뉴얼 · 일반 환경 설정</p>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">자산 · 라인 · 매뉴얼 · 일반 환경 설정</p>
       </div>
     </div>
 
     <!-- 탭: 기본(라인/매뉴얼/일반) + 고급(관리 — 직접 이식, 최상위 컨텍스트라 쿠키 정상 전송) -->
     <div class="set-tabs" id="set-tabs">
-      <button class="set-tab active" data-tab="lines"><span class="material-symbols-outlined">linear_scale</span>라인 관리</button>
+      <button class="set-tab active" data-tab="assets"><span class="material-symbols-outlined">table_edit</span>자산 관리</button>
+      <button class="set-tab" data-tab="lines"><span class="material-symbols-outlined">linear_scale</span>라인 관리</button>
       <button class="set-tab" data-tab="manuals"><span class="material-symbols-outlined">menu_book</span>매뉴얼</button>
       <button class="set-tab" data-tab="general"><span class="material-symbols-outlined">settings</span>일반</button>
       <span class="set-tab-sep"></span>
@@ -232,8 +374,44 @@
       <button class="set-tab" data-tab="database"><span class="material-symbols-outlined">database</span>DB 관리</button>
     </div>
 
+    <!-- ── 자산 관리 (asset-table.html 직접 이식 — 동일 ID 로 asset-table.js 재사용) ── -->
+    <section class="set-panel active" data-panel="assets">
+      <div class="hist-filter" style="margin-bottom:14px;">
+        <span class="hist-count" id="t-summary" style="margin:0;"></span>
+        <span class="hist-spacer"></span>
+        <button class="hist-btn" id="t-batch"><span class="material-symbols-outlined">edit_note</span>일괄 편집</button>
+        <button class="hist-btn" id="t-csv"><span class="material-symbols-outlined">file_download</span>CSV 내보내기</button>
+        <button class="hist-btn" id="t-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+        <button class="hist-btn hist-btn-primary" id="t-save"><span class="material-symbols-outlined">save</span>저장</button>
+      </div>
+
+      <!-- 진행/결과 알림 -->
+      <div class="hist-progress" id="t-progress" style="display:none;"><div style="width:0%"></div></div>
+      <div class="hist-alert info" id="t-alert" style="display:none;">
+        <span class="material-symbols-outlined" id="t-alert-icon">info</span>
+        <span id="t-alert-msg"></span>
+        <span class="material-symbols-outlined close" id="t-alert-close">close</span>
+      </div>
+
+      <!-- 탭 (전체 + 유형별) -->
+      <div class="hist-tabs" id="t-tabs"></div>
+
+      <div class="nm-card">
+        <div class="hist-filter">
+          <div class="nm-inset hist-search" style="border-radius:10px;">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="t-search" placeholder="자산명 / IP / 벤더 / 사양 검색" />
+          </div>
+          <div class="hist-spacer"></div>
+        </div>
+        <div class="hist-count" id="t-count"></div>
+        <div class="hist-table-wrap"><table class="nm-table" id="t-table"></table></div>
+        <div class="hist-pager" id="t-pager"></div>
+      </div>
+    </section>
+
     <!-- ── 라인 관리 ── -->
-    <section class="set-panel active" data-panel="lines">
+    <section class="set-panel" data-panel="lines">
       <div class="nm-card">
         <div class="panel-header">
           <span class="panel-title"><span class="material-symbols-outlined">linear_scale</span>라인 관리</span>
@@ -284,7 +462,8 @@
         <div class="nm-card">
           <h3 class="set-section-title"><span class="material-symbols-outlined">image</span>사이드바 로고</h3>
           <p class="set-hint">사이드바 상단 <b>왼쪽 심볼(마크)</b> 이미지입니다. PNG, JPG, SVG, GIF, WEBP 지원 · 최대 2MB · 권장: 정사각형에 가까운 심볼<br>
-            <span style="opacity:0.8;">※ PNG·JPG 는 업로드 시 SVG 로 자동 변환되어 저장됩니다. 삭제하면 기본 TWMS 마크로 복원됩니다.</span></p>
+            <span style="opacity:0.8;">※ 업로드한 이미지는 기본 마크와 동일한 위치·크기(46×46 박스)에 비율을 유지한 채 맞춰 표시됩니다.<br>
+            ※ PNG·JPG 는 업로드 시 SVG 로 자동 변환되어 저장됩니다. 삭제하면 기본 TWMS 마크로 복원됩니다.</span></p>
 
           <div id="logo-preview-host" style="margin-bottom:14px;"></div>
 
@@ -383,7 +562,7 @@
       </div>
       <div class="nm-card mb-element-gap">
         <h3 class="db-section-title"><span class="material-symbols-outlined">file_upload</span>DEXA 데이터 가져오기</h3>
-        <p class="db-hint">DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 가져옵니다. 기존 라인·그룹 데이터는 전체 교체됩니다.</p>
+        <p class="db-hint">DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 분석합니다. 가져오기를 눌러도 바로 저장되지 않으며, 아래 <b>'aug 데이터 이전하기'</b>에서 <b>적용</b>을 눌러야 DB에 반영됩니다.</p>
         <div class="db-dropzone">
           <button class="db-btn" id="import-pick-btn" type="button"><span class="material-symbols-outlined">folder_open</span>파일 선택</button>
           <span id="import-file-name" class="text-on-surface-variant" style="font-size:13px;">선택된 파일 없음</span>
@@ -391,6 +570,19 @@
           <button class="db-btn db-btn-primary" id="import-run-btn" disabled><span class="material-symbols-outlined">download</span><span id="import-run-label">가져오기</span></button>
         </div>
         <div id="import-result-host"></div>
+      </div>
+      <!-- aug 데이터 이전하기 (실제 커밋) — 분석 후에만 표시. admin-database.js openAfterImport() 필수 요소 -->
+      <div class="nm-card mb-element-gap" id="aug-card" style="display:none;">
+        <h3 class="db-section-title"><span class="material-symbols-outlined">sync_alt</span>aug 데이터 이전하기</h3>
+        <p class="db-hint">아래 내용이 TWM2 DB에 반영됩니다. <b>적용</b>을 눌러야 실제로 저장됩니다. 기존 자산의 확장·연결정보는 덮어쓰며, 라인·그룹은 전체 교체됩니다.</p>
+        <div id="aug-preview-host"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+          <button class="db-btn db-btn-primary" id="aug-apply-btn" disabled>
+            <span class="material-symbols-outlined">check</span><span id="aug-apply-label">적용</span>
+          </button>
+          <button class="db-btn" id="aug-close-btn" type="button">닫기</button>
+        </div>
+        <div id="aug-result-host"></div>
       </div>
       <div class="nm-card mb-element-gap" id="batch-card" style="display:none;">
         <h3 class="db-section-title"><span class="material-symbols-outlined">map</span>배치 가져오기</h3>
@@ -402,7 +594,6 @@
         <div id="batch-table-host"></div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
           <button class="db-btn db-btn-primary" id="batch-run-btn" disabled><span class="material-symbols-outlined">play_arrow</span><span id="batch-run-label">배치 가져오기</span></button>
-          <button class="db-btn" id="batch-close-btn" type="button">닫기</button>
         </div>
         <div id="batch-result-host"></div>
       </div>
@@ -420,9 +611,8 @@
       <h3>트리거 추가</h3>
       <div class="ac-field"><label for="add-name">이름</label>
         <input type="text" class="ac-input" id="add-name" placeholder="예: 야간 정기 백업" /></div>
-      <div class="ac-field"><label for="add-cron">Cron 표현식</label>
-        <input type="text" class="ac-input" id="add-cron" placeholder="0 0 2 * * ?" />
-        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드). 예) 매일 02:00 → 0 0 2 * * ?</div></div>
+      <div class="ac-field"><label>실행 주기</label>
+        <div id="add-sched"></div></div>
       <div class="ac-field"><label for="add-desc">설명 (선택)</label>
         <input type="text" class="ac-input" id="add-desc" placeholder="설명" /></div>
       <div class="ac-modal-actions">
@@ -436,8 +626,7 @@
     <div class="ac-modal">
       <h3>스케줄 수정</h3>
       <div class="ac-field"><label id="cron-trigger-label">트리거</label>
-        <input type="text" class="ac-input" id="cron-value" placeholder="0 0 2 * * ?" />
-        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드).</div></div>
+        <div id="cron-sched"></div></div>
       <div class="ac-modal-actions">
         <button class="ac-btn" data-close="cron-modal">취소</button>
         <button class="ac-btn ac-btn-primary" id="cron-save"><span class="material-symbols-outlined">save</span>저장</button>
@@ -496,6 +685,40 @@
   </div>
   <input type="file" id="lm-json-import" accept=".json,application/json" style="display:none;" />
 
+  <!-- 자산 관리: 배치 편집 패널 (asset-table.html AssetBatchEditDialog 이식 — position:fixed) -->
+  <div class="batch-overlay" id="batch-overlay"></div>
+  <aside class="batch-panel" id="batch-panel">
+    <div class="batch-head">
+      <span class="material-symbols-outlined" style="color:var(--c-primary);">edit_note</span>
+      <span class="panel-title">일괄 편집</span>
+      <span class="material-symbols-outlined close" id="batch-close">close</span>
+    </div>
+    <div class="batch-body">
+      <p class="batch-note" id="batch-note"></p>
+
+      <label class="batch-field"><input type="checkbox" id="b-apply-agent" />
+        <input class="hist-input bf-input" id="b-agent" placeholder="에이전트 선호도 (Agent1;Agent2)" disabled /></label>
+      <label class="batch-field"><input type="checkbox" id="b-apply-name" />
+        <input class="hist-input bf-input" id="b-name" placeholder="자산명" disabled /></label>
+      <label class="batch-field"><input type="checkbox" id="b-apply-ip" />
+        <input class="hist-input bf-input" id="b-ip" placeholder="IP 주소" disabled /></label>
+      <label class="batch-field"><input type="checkbox" id="b-apply-desc" />
+        <input class="hist-input bf-input" id="b-desc" placeholder="설명" disabled /></label>
+
+      <div class="batch-section">PLC/서보 핑 테스트 설정</div>
+      <label class="batch-field"><input type="checkbox" id="b-apply-via" />
+        <input class="hist-input bf-input" id="b-via" placeholder="경유 IP (비우면 클리어)" disabled /></label>
+      <label class="batch-field"><input type="checkbox" id="b-apply-base" />
+        <input class="hist-input bf-input num" id="b-base" type="number" min="0" placeholder="Base 번호" disabled /></label>
+      <label class="batch-field"><input type="checkbox" id="b-apply-slot" />
+        <input class="hist-input bf-input num" id="b-slot" type="number" min="0" placeholder="Slot 번호" disabled /></label>
+    </div>
+    <div class="batch-foot">
+      <button class="hist-btn" id="batch-cancel">취소</button>
+      <button class="hist-btn hist-btn-primary" id="batch-apply"><span class="material-symbols-outlined">done_all</span>적용</button>
+    </div>
+  </aside>
+
   <script src="/app/shell.js"></script>
   <!-- 로고 업로드 시 PNG/JPG → SVG 변환 (Blazor SettingsGeneral 와 동일한 logoConverter) -->
   <script src="/js/imagetracer.min.js"></script>
@@ -506,5 +729,7 @@
   <script src="/app/admin-config.js"></script>
   <script src="/app/layout-management.js"></script>
   <script src="/app/admin-database.js"></script>
+  <!-- 자산 관리 탭: /assets/table 편집기와 동일 ID 마크업이라 스크립트 그대로 재사용 -->
+  <script src="/app/asset-table.js"></script>
 </body>
 </html>

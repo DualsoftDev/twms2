@@ -63,6 +63,7 @@ public class LayoutEditController : ControllerBase
                 imageHeight = config.ImageHeight,
                 bgColor     = config.BgColor,
                 gridColor   = config.GridColor,
+                lineColor   = config.LineColor,
                 gridEnabled = config.GridEnabled,
                 gridSize    = config.GridSize,
             },
@@ -98,15 +99,16 @@ public class LayoutEditController : ControllerBase
 
     // ──────────────── 도면 설정 (배경색 / 그리드) ────────────────
 
-    public record ConfigDto(string? BgColor, string? GridColor, bool GridEnabled, int GridSize);
+    public record ConfigDto(string? BgColor, string? GridColor, string? LineColor, bool GridEnabled, int GridSize);
 
     [HttpPut("{id:int}/config")]
     public async Task<IActionResult> SaveConfig(int id, [FromBody] ConfigDto dto)
     {
         var config = await _layoutDb.GetBlueprintConfigAsync(id) ?? new TwmsBlueprintConfig();
         config.LayoutId = id;
-        config.BgColor = string.IsNullOrWhiteSpace(dto.BgColor) ? "#1a1a2e" : dto.BgColor;
+        config.BgColor = string.IsNullOrWhiteSpace(dto.BgColor) ? "#ffffff" : dto.BgColor;
         config.GridColor = string.IsNullOrWhiteSpace(dto.GridColor) ? "#e0e0e0" : dto.GridColor;
+        config.LineColor = string.IsNullOrWhiteSpace(dto.LineColor) ? null : dto.LineColor; // null=렌더러 기본값
         config.GridEnabled = dto.GridEnabled;
         config.GridSize = dto.GridSize is >= 5 and <= 100 ? dto.GridSize : 20;
         await _layoutDb.UpsertBlueprintConfigAsync(config);

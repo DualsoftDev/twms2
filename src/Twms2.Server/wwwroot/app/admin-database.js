@@ -117,8 +117,19 @@
         $('import-file-name').textContent = '선택된 파일 없음';
       }
     } catch (e) {
-      renderImportError('가져오기 중 오류가 발생했습니다.');
-      toast('가져오기 중 오류가 발생했습니다.');
+      console.error('[db-import]', e); // 네트워크 오류 외에 렌더링 단계 JS 예외도 여기로 떨어진다
+      // fetch 자체가 실패한 경우: 네트워크 문제 또는 브라우저가 파일을 읽지 못한 경우.
+      // 운영 중인 DEXA.sqlite3(다른 프로세스가 계속 쓰는 파일)를 직접 선택하면
+      // 선택~업로드 사이에 파일이 변경되어 브라우저가 전송을 거부한다(ERR_UPLOAD_FILE_CHANGED).
+      let msg = '가져오기 중 오류가 발생했습니다. (네트워크/서버 연결 확인)';
+      try {
+        if (_pendingFile) await _pendingFile.slice(0, 1).arrayBuffer();
+      } catch (readErr) {
+        msg = '선택한 파일이 변경되었거나 다른 프로그램이 사용 중이라 읽을 수 없습니다. '
+            + '운영 중인 DEXA.sqlite3는 파일을 복사한 뒤 복사본을 선택해 업로드하세요.';
+      }
+      renderImportError(msg);
+      toast(msg);
     } finally {
       _importing = false;
       $('import-run-label').textContent = '가져오기';

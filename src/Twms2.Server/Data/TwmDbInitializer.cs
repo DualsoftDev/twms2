@@ -283,6 +283,10 @@ public class TwmDbInitializer
               AND Name LIKE '%층'
               AND CAST(REPLACE(Name, '층', '') AS INTEGER) != 0;
             """),
+
+        (30, "LineColor 컬럼 추가 (라인 영역 카드 배경색)", """
+            ALTER TABLE TwmsBlueprintConfig ADD COLUMN LineColor TEXT;
+            """),
     ];
 
     public async Task InitializeAsync()

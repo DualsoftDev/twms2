@@ -79,26 +79,177 @@
       b.addEventListener('click', () => restartAgent(parseInt(b.getAttribute('data-id'), 10))));
   }
 
-  /* ════════════════ 트리거 목록 ════════════════ */
-  // ServerConfig.razor 의 CronToReadable 이식 (Quartz 6필드: 초 분 시 일 월 요일)
-  function cronToReadable(cron) {
-    if (!cron || !cron.trim()) return cron || '';
-    const parts = cron.trim().split(/\s+/);
-    if (parts.length < 6) return cron;
-    const min = parts[1], hour = parts[2], dom = parts[3], dow = parts[5];
-    const m = parseInt(min, 10);
-    if (!Number.isInteger(m)) return cron;
-    const p2 = (n) => String(n).padStart(2, '0');
-    if (hour === '*' && dom === '*' && dow === '?') return `매시간 :${p2(m)}`;
-    const h = parseInt(hour, 10);
-    if (!Number.isInteger(h)) return cron;
-    if (dom === '*' && dow === '?') return `매일 ${p2(h)}:${p2(m)}`;
-    if (dom === '?' && dow !== '*' && dow !== '?') {
-      const day = { MON: '월', TUE: '화', WED: '수', THU: '목', FRI: '금', SAT: '토', SUN: '일' }[dow.toUpperCase()] || dow;
-      return `매주 ${day} ${p2(h)}:${p2(m)}`;
+  /* ════════════════ 스케줄(cron) 해석 ════════════════ */
+  // Quartz 6필드(초 분 시 일 월 요일, +선택 연도)를 빌더 상태로 역파싱. 못 읽는 형식이면 null.
+  const DOW = [['SUN', '일'], ['MON', '월'], ['TUE', '화'], ['WED', '수'], ['THU', '목'], ['FRI', '금'], ['SAT', '토']];
+  const DOW_KO = {}; const DOW_NUM = {};
+  DOW.forEach(([q, ko], i) => { DOW_KO[q] = ko; DOW_NUM[String(i + 1)] = q; }); // Quartz 요일 숫자: 1=일 … 7=토
+
+  function parseDowList(s) {
+    const out = [];
+    for (const tok of String(s).toUpperCase().split(',')) {
+      const t = tok.trim();
+      const q = DOW_KO[t] ? t : DOW_NUM[t];
+      if (!q) return null;
+      if (out.indexOf(q) < 0) out.push(q);
     }
-    return cron;
+    if (!out.length) return null;
+    const order = DOW.map(d => d[0]);
+    return out.sort((a, b) => order.indexOf(a) - order.indexOf(b));
   }
+
+  function cronParse(cron) {
+    if (!cron || !cron.trim()) return null;
+    const p = cron.trim().split(/\s+/);
+    if (p.length !== 6 && !(p.length === 7 && p[6] === '*')) return null;
+    const [sec, min, hour, dom, mon, dow] = p;
+    if (sec !== '0' || !/^\d+$/.test(min) || mon !== '*') return null;
+    const m = parseInt(min, 10);
+    if (m > 59) return null;
+    const p2 = (n) => String(n).padStart(2, '0');
+    const anyDom = dom === '*' || dom === '?';
+    const anyDow = dow === '*' || dow === '?';
+    if (hour === '*') return (anyDom && anyDow) ? { mode: 'hourly', minute: m } : null;
+    if (!/^\d+$/.test(hour) || parseInt(hour, 10) > 23) return null;
+    const time = `${p2(parseInt(hour, 10))}:${p2(m)}`;
+    if (anyDom && anyDow) return { mode: 'daily', time };
+    if (anyDom) {
+      const days = parseDowList(dow);
+      return days ? { mode: 'weekly', days, time } : null;
+    }
+    if (anyDow && /^\d+$/.test(dom) && +dom >= 1 && +dom <= 31) return { mode: 'monthly', dom: +dom, time };
+    return null;
+  }
+
+  function schedSummary(p) {
+    if (!p) return null;
+    switch (p.mode) {
+      case 'hourly': return `매시 ${String(p.minute).padStart(2, '0')}분`;
+      case 'daily': return `매일 ${p.time}`;
+      case 'weekly': return `매주 ${p.days.map(q => DOW_KO[q]).join('·')} ${p.time}`;
+      case 'monthly': return `매월 ${p.dom}일 ${p.time}`;
+      default: return null;
+    }
+  }
+
+  function cronToReadable(cron) {
+    return schedSummary(cronParse(cron)) || cron || '';
+  }
+
+  /* ════════════════ 스케줄 빌더 (cron 대신 쉬운 주기 선택 UI) ════════════════ */
+  const SCHED_MODES = [['hourly', '매시간'], ['daily', '매일'], ['weekly', '매주'], ['monthly', '매월'], ['custom', '직접 입력']];
+
+  function createSchedBuilder(hostId) {
+    const host = $(hostId);
+    const st = { mode: 'daily', minute: 0, time: '02:00', days: new Set(['MON']), dom: 1, raw: '' };
+
+    function stateCron() {
+      const t = /^(\d{1,2}):(\d{2})/.exec(st.time || '');
+      const hh = t ? parseInt(t[1], 10) : null;
+      const mm = t ? parseInt(t[2], 10) : null;
+      switch (st.mode) {
+        case 'hourly': return { cron: `0 ${st.minute} * * * ?` };
+        case 'daily':
+          if (!t) return { err: '실행 시각을 선택해주세요.' };
+          return { cron: `0 ${mm} ${hh} * * ?` };
+        case 'weekly': {
+          if (!st.days.size) return { err: '요일을 하나 이상 선택해주세요.' };
+          if (!t) return { err: '실행 시각을 선택해주세요.' };
+          const days = DOW.map(d => d[0]).filter(q => st.days.has(q)).join(',');
+          return { cron: `0 ${mm} ${hh} ? * ${days}` };
+        }
+        case 'monthly':
+          if (!t) return { err: '실행 시각을 선택해주세요.' };
+          return { cron: `0 ${mm} ${hh} ${st.dom} * ?` };
+        default: {
+          const raw = st.raw.trim();
+          if (!raw) return { err: 'Cron 표현식을 입력해주세요.' };
+          const n = raw.split(/\s+/).length;
+          if (n < 6 || n > 7) return { err: 'Quartz cron은 6~7개 필드여야 합니다. (초 분 시 일 월 요일)' };
+          return { cron: raw };
+        }
+      }
+    }
+
+    function preview() {
+      const box = host.querySelector('.ac-sched-preview');
+      const r = stateCron();
+      box.classList.toggle('err', !!r.err);
+      box.querySelector('b').textContent = r.err || schedSummary(cronParse(r.cron)) || '사용자 정의 스케줄';
+      box.querySelector('code').textContent = r.cron || '';
+    }
+
+    function render() {
+      const seg = SCHED_MODES.map(([k, label]) =>
+        `<button type="button" class="ac-seg-btn${st.mode === k ? ' on' : ''}" data-mode="${k}">${label}</button>`).join('');
+      let body = '';
+      if (st.mode === 'hourly') {
+        const opts = Array.from({ length: 60 }, (_, i) =>
+          `<option value="${i}"${st.minute === i ? ' selected' : ''}>${String(i).padStart(2, '0')}</option>`).join('');
+        body = `<div class="ac-sched-row">매시 <select class="ac-input" data-f="minute">${opts}</select> 분에 실행</div>`;
+      } else if (st.mode === 'daily') {
+        body = `<div class="ac-sched-row">매일 <input type="time" class="ac-input" data-f="time" value="${st.time}" /> 에 실행</div>`;
+      } else if (st.mode === 'weekly') {
+        const chips = DOW.map(([q, ko]) =>
+          `<button type="button" class="ac-dow-btn${st.days.has(q) ? ' on' : ''}" data-day="${q}">${ko}</button>`).join('');
+        body = `<div class="ac-dow">${chips}</div>
+          <div class="ac-sched-row">선택한 요일 <input type="time" class="ac-input" data-f="time" value="${st.time}" /> 에 실행</div>`;
+      } else if (st.mode === 'monthly') {
+        const opts = Array.from({ length: 31 }, (_, i) =>
+          `<option value="${i + 1}"${st.dom === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('');
+        body = `<div class="ac-sched-row">매월 <select class="ac-input" data-f="dom">${opts}</select> 일 <input type="time" class="ac-input" data-f="time" value="${st.time}" /> 에 실행</div>
+          <div class="ac-hint">29~31일은 해당 일자가 없는 달에는 실행되지 않습니다.</div>`;
+      } else {
+        body = `<div class="ac-sched-row"><input type="text" class="ac-input" style="width:100%;font-family:'JetBrains Mono',monospace;" data-f="raw" value="${esc(st.raw)}" placeholder="0 0 2 * * ?" /></div>
+          <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드). 예) 매일 02:00 → 0 0 2 * * ?</div>`;
+      }
+      host.innerHTML = `<div class="ac-seg">${seg}</div>${body}
+        <div class="ac-sched-preview"><span class="material-symbols-outlined">schedule</span><div><b></b><code></code></div></div>`;
+
+      host.querySelectorAll('[data-mode]').forEach(b =>
+        b.addEventListener('click', () => { st.mode = b.getAttribute('data-mode'); render(); }));
+      host.querySelectorAll('[data-day]').forEach(b =>
+        b.addEventListener('click', () => {
+          const q = b.getAttribute('data-day');
+          if (st.days.has(q)) st.days.delete(q); else st.days.add(q);
+          b.classList.toggle('on', st.days.has(q));
+          preview();
+        }));
+      host.querySelectorAll('[data-f]').forEach(el =>
+        el.addEventListener('input', () => {
+          const f = el.getAttribute('data-f');
+          if (f === 'minute') st.minute = parseInt(el.value, 10) || 0;
+          else if (f === 'dom') st.dom = parseInt(el.value, 10) || 1;
+          else if (f === 'time') st.time = el.value;
+          else st.raw = el.value;
+          preview();
+        }));
+      preview();
+    }
+
+    // 기존 cron 을 UI 상태로 복원. 해석 불가한 표현식은 '직접 입력' 모드에 원문 유지.
+    function setCron(cron) {
+      const p = cronParse(cron);
+      if (p) {
+        st.mode = p.mode;
+        if (p.minute != null) st.minute = p.minute;
+        if (p.time) st.time = p.time;
+        if (p.days) st.days = new Set(p.days);
+        if (p.dom) st.dom = p.dom;
+      } else {
+        st.mode = cron && cron.trim() ? 'custom' : 'daily';
+      }
+      st.raw = (cron || '').trim();
+      render();
+    }
+
+    return { setCron, get: stateCron };
+  }
+
+  let addSched = null;   // 트리거 추가 모달의 빌더
+  let editSched = null;  // 스케줄 수정 모달의 빌더
+
+  /* ════════════════ 트리거 목록 ════════════════ */
 
   function renderTriggers() {
     const host = $('triggers-host');
@@ -185,10 +336,11 @@
 
   async function addTrigger() {
     const name = $('add-name').value.trim();
-    const cron = $('add-cron').value.trim();
     const desc = $('add-desc').value.trim();
     if (!name) { toast('트리거 이름을 입력해주세요.'); return; }
-    if (!cron) { toast('Cron 표현식을 입력해주세요.'); return; }
+    const sched = addSched.get();
+    if (sched.err) { toast(sched.err); return; }
+    const cron = sched.cron;
     const btn = $('add-save'); btn.disabled = true;
     try {
       const r = await fetch('/api/admin/config/triggers', {
@@ -204,9 +356,10 @@
 
   async function saveCron() {
     const id = S.cronEditId;
-    const cron = $('cron-value').value.trim();
     if (id == null) return;
-    if (!cron) { toast('Cron 표현식을 입력해주세요.'); return; }
+    const sched = editSched.get();
+    if (sched.err) { toast(sched.err); return; }
+    const cron = sched.cron;
     const btn = $('cron-save'); btn.disabled = true;
     try {
       const r = await fetch(`/api/admin/config/triggers/${id}/cron`, {
@@ -327,8 +480,8 @@
 
   function openAddModal() {
     $('add-name').value = '';
-    $('add-cron').value = '';
     $('add-desc').value = '';
+    addSched.setCron('0 0 2 * * ?'); // 기본값: 매일 02:00
     openModal('add-modal');
     $('add-name').focus();
   }
@@ -337,14 +490,15 @@
     const t = S.triggers.find(x => x.id === id);
     if (!t) return;
     S.cronEditId = id;
-    $('cron-trigger-label').textContent = `${t.name} — Cron 표현식`;
-    $('cron-value').value = t.cronExpression || '';
+    $('cron-trigger-label').textContent = `${t.name} — 실행 주기`;
+    editSched.setCron(t.cronExpression || '0 0 2 * * ?');
     openModal('cron-modal');
-    $('cron-value').focus();
   }
 
   /* ── 이벤트 바인딩 ── */
   function bind() {
+    addSched = createSchedBuilder('add-sched');
+    editSched = createSchedBuilder('cron-sched');
     $('show-offline').addEventListener('change', (e) => { S.showOffline = e.target.checked; renderAgents(); });
     $('agents-refresh').addEventListener('click', load);
     $('triggers-refresh').addEventListener('click', load);

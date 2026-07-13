@@ -126,6 +126,22 @@
     .ac-map-asset { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-on-surface); padding: 3px 0 3px 22px; cursor: pointer; }
     .ac-map-ico { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
     .ac-map-ip { color: var(--c-on-surface-variant); font-size: 12px; margin-left: 4px; }
+
+    /* 스케줄 빌더 (cron 대신 쉬운 주기 선택 UI) */
+    .ac-seg { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ac-seg-btn, .ac-dow-btn { border: none; cursor: pointer; font-size: 13px; font-weight: 700; font-family: inherit; background: var(--c-surface); color: var(--c-on-surface-variant); box-shadow: 3px 3px 6px var(--nm-dark), -3px -3px 6px var(--nm-light); transition: all 0.15s ease; }
+    .ac-seg-btn { padding: 7px 13px; border-radius: 10px; }
+    .ac-dow-btn { width: 36px; height: 32px; border-radius: 10px; }
+    .ac-seg-btn:hover, .ac-dow-btn:hover { color: var(--c-primary); }
+    .ac-seg-btn.on, .ac-dow-btn.on { color: var(--c-primary); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-dow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+    .ac-sched-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--c-on-surface-variant); flex-wrap: wrap; }
+    .ac-sched-row .ac-input { width: auto; }
+    .ac-sched-preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--c-surface-container-low); box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-sched-preview .material-symbols-outlined { font-size: 20px; color: var(--c-primary); flex-shrink: 0; }
+    .ac-sched-preview b { color: var(--c-on-surface); }
+    .ac-sched-preview code { display: block; font-size: 11px; color: var(--c-outline); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+    .ac-sched-preview.err .material-symbols-outlined, .ac-sched-preview.err b { color: var(--health-failed); }
   </style>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -181,9 +197,8 @@
         <input type="text" class="ac-input" id="add-name" placeholder="예: 야간 정기 백업" />
       </div>
       <div class="ac-field">
-        <label for="add-cron">Cron 표현식</label>
-        <input type="text" class="ac-input" id="add-cron" placeholder="0 0 2 * * ?" />
-        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드). 예) 매일 02:00 → 0 0 2 * * ?</div>
+        <label>실행 주기</label>
+        <div id="add-sched"></div>
       </div>
       <div class="ac-field">
         <label for="add-desc">설명 (선택)</label>
@@ -202,8 +217,7 @@
       <h3>스케줄 수정</h3>
       <div class="ac-field">
         <label id="cron-trigger-label">트리거</label>
-        <input type="text" class="ac-input" id="cron-value" placeholder="0 0 2 * * ?" />
-        <div class="ac-hint">초 분 시 일 월 요일 (Quartz 6필드).</div>
+        <div id="cron-sched"></div>
       </div>
       <div class="ac-modal-actions">
         <button class="ac-btn" data-close="cron-modal">취소</button>

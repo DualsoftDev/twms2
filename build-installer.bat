@@ -10,29 +10,27 @@ echo.
 set "ROOT=%~dp0"
 set "SRC=%ROOT%src"
 set "SERVER_PROJ=%SRC%\Twms2.Server\Twms2.Server.csproj"
-set "PUBLISH_DIR=%SRC%\Twms2.Server\bin\Release\net10.0\win-x64\publish"
-set "DEEP_PINGER_DLL=%SRC%\Twms2.Server\bin\Release\net10.0\DeepPinger.dll"
+rem  TFM 은 net10.0-windows (Twms2.Server.csproj 참조). publish 출력 경로도 이에 맞춘다.
+set "PUBLISH_DIR=%SRC%\Twms2.Server\bin\Release\net10.0-windows\win-x64\publish"
+rem  DeepPinger 는 미리 빌드된 네이티브 DLL(src\libs\DeepPinger.dll)을 사용한다.
+rem  Twms2.Server.csproj 의 CopyDeepPinger 타깃이 빌드 출력에 복사하지만,
+rem  self-contained publish 폴더에는 자동 포함되지 않으므로 여기서 별도로 복사한다.
+set "DEEP_PINGER_DLL=%SRC%\libs\DeepPinger.dll"
 set "ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 set "ISS_SCRIPT=%ROOT%installer\twms2.0-setup.iss"
-
-rem ---- MSBuild 경로 자동 탐색 (vswhere) ----
-set "VSWHERE=C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-set "MSBUILD="
-"!VSWHERE!" -latest -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" -products * > "%TEMP%\msbuild_path.txt" 2>nul
-set /p MSBUILD=<"%TEMP%\msbuild_path.txt"
-del "%TEMP%\msbuild_path.txt" 2>nul
-if not defined MSBUILD (
-    echo [오류] MSBuild를 찾을 수 없습니다. Visual Studio 또는 Build Tools를 설치해 주세요.
-    pause
-    exit /b 1
-)
-echo MSBuild: !MSBUILD!
 
 rem ---- 사전 조건 확인 ----
 if not exist "!ISCC!" (
     echo [오류] InnoSetup 6이 설치되어 있지 않습니다.
     echo        https://jrsoftware.org/isinfo.php 에서 설치해 주세요.
     echo        경로: !ISCC!
+    pause
+    exit /b 1
+)
+
+if not exist "%DEEP_PINGER_DLL%" (
+    echo [오류] DeepPinger.dll 을 찾을 수 없습니다: %DEEP_PINGER_DLL%
+    echo        src\libs\DeepPinger.dll 이 저장소에 포함되어 있어야 합니다.
     pause
     exit /b 1
 )
@@ -68,25 +66,14 @@ exit /b 1
 echo.
 
 rem ---- Step 1: 이전 publish 출력 정리 ----
-echo [1/5] 이전 publish 출력 정리 중...
+echo [1/4] 이전 publish 출력 정리 중...
 if exist "%PUBLISH_DIR%" rmdir /s /q "%PUBLISH_DIR%"
 echo       완료.
 echo.
 
-rem ---- Step 2: DeepPinger (Release|x64) 빌드 ----
-echo [2/5] DeepPinger 빌드 중 (Release x64, Static MFC)...
-"!MSBUILD!" "%SRC%\DeepPinger\DeepPinger.vcxproj" /p:Configuration=Release /p:Platform=x64 /p:SolutionDir="%SRC%\\" /t:Build /v:minimal
-if errorlevel 1 (
-    echo [오류] DeepPinger 빌드 실패!
-    pause
-    exit /b 1
-)
-echo       완료.
-echo.
-
-rem ---- Step 3: Twms2.Server Publish (self-contained) ----
-echo [3/5] Twms2.Server 퍼블리시 중 (self-contained, win-x64)...
-dotnet publish "%SERVER_PROJ%" -c Release -r win-x64 --self-contained -o "%PUBLISH_DIR%" /p:SkipDeepPinger=true
+rem ---- Step 2: Twms2.Server Publish (self-contained) ----
+echo [2/4] Twms2.Server 퍼블리시 중 (self-contained, win-x64)...
+dotnet publish "%SERVER_PROJ%" -c Release -r win-x64 --self-contained -o "%PUBLISH_DIR%"
 if errorlevel 1 (
     echo [오류] dotnet publish 실패!
     pause
@@ -95,19 +82,19 @@ if errorlevel 1 (
 echo       완료.
 echo.
 
-rem ---- Step 4: DeepPinger.dll 복사 ----
-echo [4/5] DeepPinger.dll을 publish 출력에 복사 중...
-if exist "%DEEP_PINGER_DLL%" (
-    copy /y "%DEEP_PINGER_DLL%" "%PUBLISH_DIR%\"
-    echo       DeepPinger.dll 복사 완료.
-) else (
-    echo [경고] DeepPinger.dll을 찾을 수 없습니다: %DEEP_PINGER_DLL%
-    echo        인스톨러에 DeepPinger.dll이 포함되지 않습니다.
+rem ---- Step 3: DeepPinger.dll 복사 ----
+echo [3/4] DeepPinger.dll을 publish 출력에 복사 중...
+copy /y "%DEEP_PINGER_DLL%" "%PUBLISH_DIR%\"
+if errorlevel 1 (
+    echo [오류] DeepPinger.dll 복사 실패!
+    pause
+    exit /b 1
 )
+echo       DeepPinger.dll 복사 완료.
 echo.
 
-rem ---- Step 5: InnoSetup 컴파일 ----
-echo [5/5] InnoSetup 인스톨러 컴파일 중...
+rem ---- Step 4: InnoSetup 컴파일 ----
+echo [4/4] InnoSetup 인스톨러 컴파일 중...
 "%ISCC%" "%ISS_SCRIPT%" /DPublishDir="%PUBLISH_DIR%"
 if errorlevel 1 (
     echo [오류] InnoSetup 컴파일 실패!

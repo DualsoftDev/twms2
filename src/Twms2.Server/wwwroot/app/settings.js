@@ -11,7 +11,7 @@
   const $ = (id) => document.getElementById(id);
 
   let _state = { general: {}, lines: [], manuals: [] };
-  let _activeTab = 'lines';
+  let _activeTab = 'assets';
   let _pendingFile = null; // 선택된 매뉴얼 PDF
   let _pendingLogo = null; // 선택된 로고 이미지
 
@@ -333,6 +333,9 @@
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: 'settings' });
     bind();
+    // 딥링크: /settings?tab=assets 등으로 특정 탭 직접 진입
+    const urlTab = new URLSearchParams(location.search).get('tab');
+    if (urlTab && document.querySelector(`.set-panel[data-panel="${urlTab}"]`)) switchTab(urlTab);
     await load();
     setInterval(load, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
