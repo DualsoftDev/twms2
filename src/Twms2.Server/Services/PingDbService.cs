@@ -139,6 +139,20 @@ public class PingDbService
 
     // ──────────────── TwmsPingLog 조회 ────────────────
 
+    /// <summary>자산의 마지막 온라인↔오프라인 상태 전환 기록 (없으면 null).</summary>
+    public async Task<TwmPingLog?> GetLastPingChangeAsync(int dexaAssetId)
+    {
+        using var conn = _db.Create();
+        return await conn.QueryFirstOrDefaultAsync<TwmPingLog>(
+            """
+            SELECT Id, DexaAssetId, Reachable, CheckedAt
+            FROM TwmsPingLog
+            WHERE DexaAssetId = @Id
+            ORDER BY Id DESC
+            LIMIT 1
+            """, new { Id = dexaAssetId });
+    }
+
     public async Task<List<TwmPingLog>> GetPingLogsAsync(DateTime start, DateTime end)
     {
         using var conn = _db.Create();

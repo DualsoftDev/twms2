@@ -103,6 +103,11 @@
     }
     .ad-iconbtn:hover { color: var(--c-primary); }
     .ad-iconbtn .material-symbols-outlined { font-size: 18px; }
+    .ad-iconbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .ad-iconbtn:disabled:hover { color: var(--c-on-surface-variant); }
+
+    /* 백업 이력 페이저 (history.html .hist-pager 와 동일 톤) */
+    .ad-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; font-size: 13px; color: var(--c-on-surface-variant); }
 
     .ad-links { display: flex; flex-wrap: wrap; gap: 8px; }
     .ad-empty { padding: 16px; color: var(--c-on-surface-variant); font-size: 13px; }

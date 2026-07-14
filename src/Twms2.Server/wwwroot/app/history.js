@@ -265,7 +265,8 @@
       tds.push(`<td>${a.stationNumber ?? '-'}</td>`);
       if (showModelVer()) tds.push(`<td>${esc(a.modelVersion || '-')}</td>`);
       if (showRobot()) tds.push(`<td>${a.isRobotPlc ? '<span class="material-symbols-outlined" style="color:var(--health-backedup);font-size:18px;">check</span>' : '-'}</td>`);
-      const off = a.agentOnline ? '' : ' (오프라인)';
+      // agentName 없음 = 에이전트 미지정(자동 선택) → 오프라인 표기 제외
+      const off = (a.agentOnline || !a.agentName) ? '' : ' (오프라인)';
       tds.push(`<td><span class="chip ${h.chip}">${esc(a.healthLabel || h.label)}</span>${off ? `<span style="font-size:10px;color:var(--c-on-surface-variant);">${off}</span>` : ''}</td>`);
       tds.push(`<td>${fmtShort(a.lastBackupTime)}</td>`);
       return `<tr>${tds.join('')}</tr>`;

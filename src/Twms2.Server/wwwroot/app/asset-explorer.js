@@ -135,9 +135,12 @@
         : `<span class="material-symbols-outlined">devices</span>`;
       const dotCls = a.pingReachable == null ? 'unknown' : (a.pingReachable ? 'on' : 'off');
       const dotTitle = a.pingReachable == null ? 'Ping 미확인' : (a.pingReachable ? '온라인' : '오프라인');
+      // agentName 없음 = 에이전트 미지정 → DEXA 가 백업 시 자동 선택
       const agentIcon = a.agentOnline
         ? `<span class="material-symbols-outlined" title="에이전트 온라인" style="font-size:18px;color:var(--health-backedup);">cloud</span>`
-        : `<span class="material-symbols-outlined" title="에이전트 오프라인" style="font-size:18px;color:var(--c-on-surface-variant);">cloud_off</span>`;
+        : a.agentName
+          ? `<span class="material-symbols-outlined" title="에이전트 오프라인" style="font-size:18px;color:var(--c-on-surface-variant);">cloud_off</span>`
+          : `<span class="material-symbols-outlined" title="에이전트 자동 (미지정)" style="font-size:18px;color:var(--c-on-surface-variant);">cloud_sync</span>`;
       const time = fmtShort(a.lastBackupTime);
       const sub = [esc(a.typeName || ''), a.ip ? esc(a.ip) : ''].filter(Boolean).join(' · ');
       return `<a class="ax-asset-card ${h.border}" href="/assets/${a.assetId}">

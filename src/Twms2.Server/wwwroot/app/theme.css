@@ -345,8 +345,8 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .timeline { position: relative; }
 .timeline-ruler { position: relative; height: 16px; margin-bottom: 4px; }
 .timeline-tick { position: absolute; transform: translateX(-50%); font-size: 10px; color: var(--c-on-surface-variant); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-/* 레인이 많아 트랙이 길어지면 안쪽 스크롤 — 상한은 하단 그립 드래그로 조절(--dash-tl-h, localStorage) */
-.timeline-scrollbox { max-height: var(--dash-tl-h, 320px); overflow-y: auto; overscroll-behavior: contain; border-radius: 10px; }
+/* 레인이 많아 트랙이 길어지면 안쪽 스크롤 — 상한은 하단 그립 드래그로 조절(--dash-tl-h, localStorage). 기본은 최소 높이(120px). */
+.timeline-scrollbox { max-height: var(--dash-tl-h, 120px); overflow-y: auto; overscroll-behavior: contain; border-radius: 10px; }
 .timeline-track { position: relative; border-radius: 10px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); background: var(--c-surface-container-high); }
 .timeline-now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--c-primary); z-index: 5; }
 .timeline-bar { position: absolute; border-radius: 4px; display: block; }
