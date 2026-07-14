@@ -20,7 +20,12 @@
   // 서버가 내려준 yyyy-MM-dd 를 'xxxx년 xx월 xx일' 표기로 변환 (형식이 다르면 원본 그대로)
   const fmtKDate = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? `${m[1]}년 ${m[2]}월 ${m[3]}일` : (s || ''); };
   const lastStats = { type: [], line: [] }; // 토글 시 재조회 없이 다시 그리기 위한 캐시
-  const chartMode = (kind) => (localStorage.getItem('twms-dash-chart-' + kind) === 'donut') ? 'donut' : 'bar';
+  // 기본값: 자산별(type)=막대, 라인별(line)=도넛. 사용자가 토글하면 localStorage 값이 우선.
+  const chartMode = (kind) => {
+    const saved = localStorage.getItem('twms-dash-chart-' + kind);
+    if (saved === 'donut' || saved === 'bar') return saved;
+    return kind === 'line' ? 'donut' : 'bar';
+  };
   const segDef = [
     ['backedUp', 'backedup'], ['unchanged', 'unchanged'], ['failed', 'failed'],
     ['inProgress', 'inprogress'], ['unknown', 'unknown'],
@@ -373,7 +378,7 @@
       cssVar: '--dash-tl-h', min: 120, max: 1200,
       measure: () => {
         const box = host && host.querySelector('.timeline-scrollbox');
-        return box ? box.getBoundingClientRect().height : 320;
+        return box ? box.getBoundingClientRect().height : 120;
       },
     });
   }

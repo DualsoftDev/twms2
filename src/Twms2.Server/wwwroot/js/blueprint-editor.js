@@ -27,7 +27,7 @@ window.blueprintEditor = (() => {
         const inst = {
             container, svg, dotNetRef, handlers: [],
             snap: { neighbor: true, grid: false, gridSize: 20, threshold: 8 },
-            dragging: false, _guides: [],
+            dragging: false, spacePan: false, _guides: [],
         };
         _inst[containerId] = inst;
 
@@ -54,6 +54,7 @@ window.blueprintEditor = (() => {
 
             if (deleteBtn) {
                 const handler = (e) => {
+                    if (inst.spacePan) return; // Space 팬 중에는 삭제 대신 팬
                     e.preventDefault();
                     e.stopPropagation();
                     // 드래그 중에는 삭제 무시
@@ -76,6 +77,7 @@ window.blueprintEditor = (() => {
 
         const onDown = (e) => {
             if (e.button !== 0) return; // 좌클릭만 허용
+            if (inst.spacePan) return;  // Space 팬 중 — 이벤트를 blueprint-zoom 팬에 넘김
             if (e.target.closest('.bp-delete-btn')) return;
             e.preventDefault();
             e.stopPropagation();
@@ -336,12 +338,23 @@ window.blueprintEditor = (() => {
         inst._guides.length = 0;
     }
 
-    // ── 키보드 (Ctrl+Z/Y — 호스트 shim/컴포넌트의 OnKeyAction 으로 전달) ──
+    // ── 키보드 (Ctrl+Z/Y — 호스트 shim/컴포넌트의 OnKeyAction 으로 전달, Space 홀드 — 임시 팬) ──
     function bindKeyboard(inst) {
-        const handler = (e) => {
+        const keydown = (e) => {
             const tag = e.target.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
             const ctrl = e.ctrlKey || e.metaKey;
+
+            // Space 홀드 → 영역 위에서도 드래그가 팬으로 동작 (자산 배치 탭과 동일)
+            if (e.code === 'Space' && !ctrl) {
+                if (!inst.spacePan) {
+                    inst.spacePan = true;
+                    inst.container.classList.add('bp-space-pan');
+                }
+                e.preventDefault();
+                return;
+            }
+
             if (!ctrl || !inst.dotNetRef) return;
             const key = e.key.toLowerCase();
             let action = null;
@@ -352,8 +365,16 @@ window.blueprintEditor = (() => {
             // OnKeyAction 미구현 호스트(레거시 Blazor)는 조용히 무시
             try { Promise.resolve(inst.dotNetRef.invokeMethodAsync('OnKeyAction', action)).catch(() => { }); } catch { }
         };
-        document.addEventListener('keydown', handler);
-        inst.handlers.push({ el: document, type: 'keydown', fn: handler });
+        const keyup = (e) => {
+            if (e.code === 'Space' && inst.spacePan) {
+                inst.spacePan = false;
+                inst.container.classList.remove('bp-space-pan');
+            }
+        };
+        document.addEventListener('keydown', keydown);
+        document.addEventListener('keyup', keyup);
+        inst.handlers.push({ el: document, type: 'keydown', fn: keydown });
+        inst.handlers.push({ el: document, type: 'keyup', fn: keyup });
     }
 
     function getPositions(containerId) {
@@ -384,6 +405,7 @@ window.blueprintEditor = (() => {
         if (!inst) return;
 
         clearGuides(inst);
+        inst.container.classList.remove('bp-space-pan');
         inst.handlers.forEach(({ el, type, fn }) => {
             el.removeEventListener(type, fn);
         });

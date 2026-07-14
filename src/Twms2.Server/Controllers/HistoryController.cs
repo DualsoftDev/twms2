@@ -84,6 +84,7 @@ public class HistoryController : ControllerBase
                 health = HealthKey(a.Health),
                 healthLabel = LayoutHelpers.GetHealthLabel(a.Health),
                 agentOnline = a.AgentOnline,
+                agentName = a.AgentName,
                 lastBackupTime = a.LastBackupTime,
                 pingReachable = a.LatestPing?.Reachable,
                 pingRoundtripMs = a.LatestPing?.RoundtripMs,

@@ -444,11 +444,32 @@
       } finally { btn.disabled = false; }
     }
 
+    // 배치된 라인 영역 전체가 보이도록 뷰 맞춤 (자산 배치 탭의 '전체 보기'와 동일 UX)
+    function fitAll() {
+      if (!inited) return;
+      if (!rects.length) { window.blueprintZoom.reset('bp-editor-container'); return; }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const r of rects) {
+        minX = Math.min(minX, r.x); minY = Math.min(minY, r.y);
+        maxX = Math.max(maxX, r.x + r.width); maxY = Math.max(maxY, r.y + r.height);
+      }
+      const pad = 40;
+      minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+      let vbW = Math.max(maxX - minX, (maxY - minY) * (1000 / 600));
+      vbW = clamp(vbW, 200, 2000);
+      const vbH = vbW * (600 / 1000);
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+      window.blueprintZoom.setViewBox('bp-editor-container', { x: cx - vbW / 2, y: cy - vbH / 2, w: vbW, h: vbH });
+    }
+
     function activate() {
       $('bp-editor-svg').setAttribute('viewBox', '0 0 1000 600');
       renderSvg(); renderPanel(); updateToolbar();
       if (!inited) {
-        window.blueprintZoom.init('bp-editor-container', { clampMargin: 1.0 });
+        window.blueprintZoom.init('bp-editor-container', {
+          clampMargin: 1.0,
+          onZoom: z => { const el = $('bp-zoom'); if (el) el.textContent = Math.round(z * 100) + '%'; },
+        });
         inited = true;
       }
     }
@@ -467,6 +488,7 @@
       $('bp-zoom-in').addEventListener('click', () => window.blueprintZoom.zoomIn('bp-editor-container'));
       $('bp-zoom-out').addEventListener('click', () => window.blueprintZoom.zoomOut('bp-editor-container'));
       $('bp-zoom-reset').addEventListener('click', () => window.blueprintZoom.reset('bp-editor-container'));
+      $('bp-zoom-fit').addEventListener('click', fitAll);
       $('bp-undo').addEventListener('click', doUndo);
       $('bp-redo').addEventListener('click', doRedo);
       $('bp-save').addEventListener('click', save);

@@ -23,17 +23,20 @@ public class AssetsController : ControllerBase
     private readonly AssetStatusService _status;
     private readonly DexaReadService _dexaRead;
     private readonly ManualDbService _manualDb;
+    private readonly PingDbService _pingDb;
 
     public AssetsController(
         AssetService assets,
         AssetStatusService status,
         DexaReadService dexaRead,
-        ManualDbService manualDb)
+        ManualDbService manualDb,
+        PingDbService pingDb)
     {
         _assets = assets;
         _status = status;
         _dexaRead = dexaRead;
         _manualDb = manualDb;
+        _pingDb = pingDb;
     }
 
     /// <summary>
@@ -62,6 +65,7 @@ public class AssetsController : ControllerBase
                 health = HealthKey(a.Health),
                 healthLabel = LayoutHelpers.GetHealthLabel(a.Health),
                 agentOnline = a.AgentOnline,
+                agentName = a.AgentName,
                 lastBackupTime = a.LastBackupTime,
                 pingReachable = a.LatestPing?.Reachable,
             })
@@ -121,6 +125,9 @@ public class AssetsController : ControllerBase
         var matchedTask = _manualDb.GetManualsByKeywordMatchAsync(asset.AugSpec ?? "");
         var allManualsTask = _manualDb.GetAllManualsAsync();
         await Task.WhenAll(matchedTask, allManualsTask);
+
+        // 마지막 온라인↔오프라인 상태 전환 (TwmsPingLog 는 전환 발생 시에만 기록됨)
+        var lastPingChange = await _pingDb.GetLastPingChangeAsync(id);
 
         // 이 자산의 백업 이력 (FillLastSuccessVersions 적용)
         var assetActions = allActionsTask.Result.Where(a => a.AssetId == id).ToList();
@@ -190,6 +197,9 @@ public class AssetsController : ControllerBase
             pingReachable = statusInfo?.LatestPing?.Reachable,
             pingRoundtripMs = statusInfo?.LatestPing?.RoundtripMs,
             pingCheckedAt = statusInfo?.LatestPing?.CheckedAt,
+            // 마지막 온라인/오프라인 전환 — 전환된 상태와 그 시각
+            pingChangedReachable = lastPingChange?.Reachable,
+            pingChangedAt = lastPingChange?.CheckedAt,
 
             // ── 백업 정보 ──
             latestVersion,

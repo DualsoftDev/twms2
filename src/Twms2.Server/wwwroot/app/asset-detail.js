@@ -56,6 +56,8 @@
   let LAST = null;
   // 편집 모드 상태 — on 인 동안 30초 폴링이 화면을 덮어쓰지 않도록 가드.
   const EDIT = { on: false, row: null, orig: null, lines: [], agents: [], saving: false };
+  // 백업 이력 페이징 (클라이언트 측 — 폴링 재렌더에도 현재 페이지 유지)
+  const BK = { page: 0, size: 10 };
 
   function readId() {
     // /assets/123 또는 /qr/123 → 123
@@ -204,8 +206,13 @@
   }
 
   function backupTable(d) {
-    const rows = d.backupHistory || [];
-    if (rows.length === 0) return `<div class="ad-empty">백업 이력이 없습니다.</div>`;
+    const all = d.backupHistory || [];
+    if (all.length === 0) return `<div class="ad-empty">백업 이력이 없습니다.</div>`;
+    // 페이지 클램프 (폴링으로 건수가 줄어도 유효 범위 유지)
+    const pages = Math.max(1, Math.ceil(all.length / BK.size));
+    if (BK.page >= pages) BK.page = pages - 1;
+    if (BK.page < 0) BK.page = 0;
+    const rows = all.slice(BK.page * BK.size, (BK.page + 1) * BK.size);
     const body = rows.map(a => {
       const r = RESULT[a.result] || RESULT.unchanged;
       let verCell = a.version == null ? '-' : esc(a.version);
@@ -232,10 +239,16 @@
         <td>${log}</td>
       </tr>`;
     }).join('');
+    // 페이저 — 버튼 핸들러는 ad-root 위임(data-bkpage)으로 처리 (재렌더에도 유지)
+    const pager = pages > 1 ? `<div class="ad-pager">
+      <button class="ad-iconbtn" data-bkpage="prev" title="이전 페이지"${BK.page <= 0 ? ' disabled' : ''}><span class="material-symbols-outlined">chevron_left</span></button>
+      <span>${BK.page + 1} / ${pages} <span style="opacity:0.6;">(${all.length}건)</span></span>
+      <button class="ad-iconbtn" data-bkpage="next" title="다음 페이지"${BK.page >= pages - 1 ? ' disabled' : ''}><span class="material-symbols-outlined">chevron_right</span></button>
+    </div>` : '';
     return `<div class="ad-table-wrap"><table class="nm-table">
       <thead><tr><th>버전</th><th>작업 시작</th><th>작업 종료</th><th>결과</th><th>다운로드</th><th>리포트</th><th>로그</th></tr></thead>
       <tbody>${body}</tbody>
-    </table></div>`;
+    </table></div>${pager}`;
   }
 
   function render(d) {
@@ -255,14 +268,21 @@
         ? `<span class="chip chip-success" title="${fmtTime(d.pingCheckedAt)}"><span class="material-symbols-outlined">wifi</span>온라인</span>`
         : `<span class="chip chip-error" title="${fmtTime(d.pingCheckedAt)}"><span class="material-symbols-outlined">wifi_off</span>오프라인</span>`;
     }
+    // 에이전트 미지정 자산은 DEXA가 백업 시 온라인 에이전트 중 성능점수로 자동 선택 (QueryPickAgentAsync)
     const agentChip = d.agentOnline
       ? `<span class="chip chip-success"><span class="material-symbols-outlined">cloud</span>에이전트${d.agentName ? ' · ' + esc(d.agentName) : ''}</span>`
-      : `<span class="chip chip-default"><span class="material-symbols-outlined">cloud_off</span>에이전트 오프라인</span>`;
+      : (d.agent && String(d.agent).trim())
+        ? `<span class="chip chip-default"><span class="material-symbols-outlined">cloud_off</span>에이전트 오프라인</span>`
+        : `<span class="chip chip-default" title="에이전트 미지정 — 백업 시 온라인 에이전트 중 자동 선택"><span class="material-symbols-outlined">cloud_sync</span>에이전트 자동</span>`;
 
-    // 배지(마지막 변경 / 최신 버전) + 다운로드/백업정보 버튼
+    // 배지(마지막 변경 / 온·오프라인 전환 / 최신 버전) + 다운로드/백업정보 버튼
     const badges = [];
     if (d.lastBackupChangedTime)
-      badges.push(`<span class="chip chip-ghost"><span class="material-symbols-outlined">schedule</span>${fmtMinute(d.lastBackupChangedTime)}</span>`);
+      badges.push(`<span class="chip chip-ghost" title="마지막 백업 변경 시각"><span class="material-symbols-outlined">schedule</span>${fmtMinute(d.lastBackupChangedTime)}</span>`);
+    if (d.pingChangedAt) {
+      const on = d.pingChangedReachable === true;
+      badges.push(`<span class="chip chip-ghost" title="마지막 온라인/오프라인 상태 전환 시각"><span class="material-symbols-outlined">${on ? 'wifi' : 'wifi_off'}</span>${on ? '온라인' : '오프라인'} 전환 ${fmtMinute(d.pingChangedAt)}</span>`);
+    }
     if (d.latestVersion != null)
       badges.push(`<span class="chip chip-ghost" style="border-color:var(--health-unchanged);color:var(--health-unchanged);">v${d.latestVersion}</span>`);
 
@@ -326,7 +346,7 @@
       <div class="ad-divider"></div>
 
       <div class="ad-section-title"><span class="material-symbols-outlined">history</span>백업 이력</div>
-      ${backupTable(d)}
+      <div id="ad-backup-block">${backupTable(d)}</div>
 
       <div class="ad-divider"></div>
 
@@ -712,10 +732,16 @@
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeViaModal(); closeLogModal(); } });
 
-    // 백업 이력 "로그" 버튼 — render() 가 폴링마다 테이블을 재생성하므로 ad-root 에 위임
+    // 백업 이력 "로그"/페이저 버튼 — render() 가 폴링마다 테이블을 재생성하므로 ad-root 에 위임
     $('ad-root').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-log]');
-      if (btn) openLogModal(+btn.getAttribute('data-log'));
+      if (btn) { openLogModal(+btn.getAttribute('data-log')); return; }
+      const pg = e.target.closest('[data-bkpage]');
+      if (pg && !pg.disabled && LAST && !EDIT.on) {
+        BK.page += pg.getAttribute('data-bkpage') === 'next' ? 1 : -1;
+        const block = $('ad-backup-block');
+        if (block) block.innerHTML = backupTable(LAST);
+      }
     });
     // 로그 다이얼로그 닫기: 배경 클릭 / 닫기 버튼
     const logModal = $('ad-log-modal');

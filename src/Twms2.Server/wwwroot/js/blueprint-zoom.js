@@ -33,10 +33,12 @@ window.blueprintZoom = (() => {
             vbStart: null,
             clampMargin: (opts && opts.clampMargin) || 0.3,  // 기본 30%, 에디터용으로 확대 가능
             pan: !(opts && opts.pan === false),              // 드래그 팬 (기본 on; 대시보드 도면 등에서 off)
+            onZoom: (opts && opts.onZoom) || null,           // 줌 배율 변경 콜백 (툴바 % 표시용)
         };
         instances[containerId] = inst;
 
         applyViewBox(inst);
+        notifyZoom(inst);
 
         // ── wheel zoom ──
         inst._onWheel = (e) => {
@@ -119,7 +121,12 @@ window.blueprintZoom = (() => {
         inst.zoom = newZoom;
 
         applyViewBox(inst);
+        notifyZoom(inst);
         inst.svg.style.cursor = (inst.pan && newZoom > 1.01) ? 'grab' : '';
+    }
+
+    function notifyZoom(inst) {
+        if (inst.onZoom) try { inst.onZoom(inst.zoom); } catch { }
     }
 
     function clampX(inst, x, w) {
@@ -156,6 +163,7 @@ window.blueprintZoom = (() => {
         inst.vb = { ...inst.base };
         inst.zoom = 1;
         applyViewBox(inst);
+        notifyZoom(inst);
         inst.svg.style.cursor = '';
     }
 
@@ -185,6 +193,7 @@ window.blueprintZoom = (() => {
         inst.vb = { x: vb.x, y: vb.y, w: vb.w, h: vb.h };
         inst.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, inst.base.w / vb.w));
         applyViewBox(inst);
+        notifyZoom(inst);
         inst.svg.style.cursor = (inst.pan && inst.zoom > 1.01) ? 'grab' : '';
     }
 

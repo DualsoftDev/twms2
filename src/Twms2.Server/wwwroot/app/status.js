@@ -119,9 +119,12 @@
 
     const body = rows.map(r => {
       const h = HEALTH[r.health] || HEALTH.unknown;
-      const off = r.agentOnline ? '' : ` <span style="font-size:10px;color:var(--c-on-surface-variant);">(오프라인)</span>`;
+      // agentName 없음 = 에이전트 미지정 → 오프라인이 아니라 "자동" (DEXA 가 백업 시 자동 선택)
+      const off = (r.agentOnline || !r.agentName) ? '' : ` <span style="font-size:10px;color:var(--c-on-surface-variant);">(오프라인)</span>`;
       const statusChip = `<span class="chip ${h.chip}"><span class="material-symbols-outlined" style="font-size:14px;margin-right:3px;">${h.icon}</span>${esc(r.healthLabel || h.label)}</span>${off}`;
-      const agent = `<span class="st-inline"><span class="st-dot ${r.agentOnline ? 'online' : 'offline'}"></span>${esc(r.agentName || '-')}</span>`;
+      const agent = r.agentName
+        ? `<span class="st-inline"><span class="st-dot ${r.agentOnline ? 'online' : 'offline'}"></span>${esc(r.agentName)}</span>`
+        : `<span class="st-inline" title="에이전트 미지정 — 백업 시 자동 선택">자동</span>`;
       return `<tr data-id="${r.assetId}"${r.assetId === S.selectedId ? ' class="selected"' : ''}>
         <td>${statusChip}</td>
         <td>${esc(r.name)}</td>
@@ -200,7 +203,9 @@
 
     fields.push(field('타입', esc(r.assetTypeName || '-')));
     fields.push(field('IP', esc(r.ip || '-')));
-    fields.push(field('에이전트', `<span class="st-inline"><span class="st-dot ${r.agentOnline ? 'online' : 'offline'}"></span>${esc(r.agentName || '-')} (${r.agentOnline ? '온라인' : '오프라인'})</span>`));
+    fields.push(field('에이전트', r.agentName
+      ? `<span class="st-inline"><span class="st-dot ${r.agentOnline ? 'online' : 'offline'}"></span>${esc(r.agentName)} (${r.agentOnline ? '온라인' : '오프라인'})</span>`
+      : `<span class="st-inline" title="에이전트 미지정 — 백업 시 자동 선택">자동</span>`));
     fields.push(field('마지막 백업', r.lastBackupTime ? esc(fmtDateTime(r.lastBackupTime)) : '없음'));
     fields.push(field('상태', `<span class="chip ${h.chip}"><span class="material-symbols-outlined" style="font-size:14px;margin-right:3px;">${h.icon}</span>${esc(r.healthLabel || h.label)}</span>`));
     if (r.ping) {
