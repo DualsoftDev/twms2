@@ -287,6 +287,13 @@ public class TwmDbInitializer
         (30, "LineColor 컬럼 추가 (라인 영역 카드 배경색)", """
             ALTER TABLE TwmsBlueprintConfig ADD COLUMN LineColor TEXT;
             """),
+
+        // V31: 핑 이력 기간조회 인덱스 — /api/history/pings 의 CheckedAt 범위 조건이
+        // 기존 (DexaAssetId, CheckedAt) 복합 인덱스를 못 타 풀스캔되던 것 해소
+        (31, "IX_TwmsPingLog_CheckedAt 인덱스 추가", """
+            CREATE INDEX IF NOT EXISTS IX_TwmsPingLog_CheckedAt
+                ON TwmsPingLog(CheckedAt);
+            """),
     ];
 
     public async Task InitializeAsync()

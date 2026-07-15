@@ -1199,7 +1199,7 @@
     // 초기 로드 + 폴링
     refresh();
     if (opts.poll) {
-      inst.pollTimer = setInterval(refresh, opts.poll);
+      inst.pollTimer = setInterval(() => { if (!document.hidden) refresh(); }, opts.poll);
       document.addEventListener('visibilitychange', onVis);
     }
 

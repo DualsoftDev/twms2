@@ -436,10 +436,11 @@
     bindBpEdit();
     bindAttnMenu();
     await load();
-    setInterval(load, 30000);
+    // 숨김 탭에서는 폴링 정지 — 다시 보이면 아래 visibilitychange 가 즉시 갱신
+    setInterval(() => { if (!document.hidden) load(); }, 30000);
     // 자정이 지나 날짜가 바뀌면 카드 날짜를 즉시 갱신하고 데이터를 새로 받는다.
     setInterval(() => {
-      if (lastServerDay && localDay() !== lastServerDay) load();
+      if (!document.hidden && lastServerDay && localDay() !== lastServerDay) load();
     }, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
   });

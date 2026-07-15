@@ -30,9 +30,11 @@ public class HistoryController : ControllerBase
 
     /// <summary>
     /// 탭1(자산 정보) + 탭2(백업 이력) 스냅샷. 통신 이력은 기간이 필요하므로 /api/history/pings 로 분리.
+    /// 백업 이력은 ?start=&amp;end=(yyyy-MM-dd, end 포함) 지정 시 해당 기간만 반환 — 30초 폴링 응답 크기 절감.
+    /// 미지정 시 기존과 동일하게 전체 반환.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> Get()
+    public async Task<IActionResult> Get([FromQuery] string? start, [FromQuery] string? end)
     {
         var assetsTask = _dexaRead.GetViewAssetsAsync();
         var actionsTask = _dexaRead.GetAllActionsAsync();
@@ -44,7 +46,15 @@ public class HistoryController : ControllerBase
         var statuses = statusTask.Result;
 
         // 실패 액션에 직전 성공 버전 채움 (Razor.FillLastSuccessVersions 이식)
+        // 기간 필터보다 먼저 수행 — 직전 성공이 기간 밖에 있어도 정확히 계산되도록.
         FillLastSuccessVersions(allActions);
+
+        // 기간 필터 (탭2 백업 이력만 해당 — 자산/메타는 자산 수로 유계라 항상 전체)
+        IEnumerable<DexaAction> filteredActions = allActions;
+        if (DateTime.TryParse(start, out var startDate))
+            filteredActions = filteredActions.Where(a => a.Started >= startDate.Date);
+        if (DateTime.TryParse(end, out var endDate))
+            filteredActions = filteredActions.Where(a => a.Started < endDate.Date.AddDays(1));
 
         // assetId → 표시정보 매핑 (백업/통신 이력 행의 자산명/타입/라인/IP 표기에 사용)
         // 이름/타입/IP 는 ViewAsset 기준(Razor 와 동일), 라인은 status 기준.
@@ -105,8 +115,8 @@ public class HistoryController : ControllerBase
             .OrderBy(l => l)
             .ToList();
 
-        // ── 탭2: 백업 이력 (전체, 기간 필터는 클라이언트가 started 로 수행) ──
-        var actions = allActions
+        // ── 탭2: 백업 이력 ──
+        var actions = filteredActions
             .Select(a => new
             {
                 id = a.Id,

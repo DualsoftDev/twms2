@@ -74,7 +74,7 @@ public class SettingsController : ControllerBase
             {
                 appTitle = _config["App:Title"] ?? "TWM",
                 showDate = _config.GetValue<bool>("App:ShowDate"),
-                logoUrl = ScanLogoUrl(),
+                logoUrl = LogoUrlProvider.Get(),
                 // 사이드바 브랜드 — 로고 마크 우측의 제목/부제(저장 즉시 반영). 미설정 시 기본값.
                 navTitle = brand.Title,
                 navSubtitle = brand.Subtitle,
@@ -226,7 +226,8 @@ public class SettingsController : ControllerBase
         await using (var fs = System.IO.File.Create(filePath))
             await file.CopyToAsync(fs);
 
-        return Ok(new { ok = true, logoUrl = ScanLogoUrl() });
+        LogoUrlProvider.Invalidate();
+        return Ok(new { ok = true, logoUrl = LogoUrlProvider.Get() });
     }
 
     [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
@@ -240,20 +241,7 @@ public class SettingsController : ControllerBase
                     System.IO.File.Delete(f);
         }
         catch { /* 삭제 실패는 무시 (SettingsGeneral.DeleteLogoAsync 와 동일) */ }
+        LogoUrlProvider.Invalidate();
         return Ok(new { ok = true });
-    }
-
-    /// <summary>업로드 폴더의 app-logo.* 미리보기 URL (NavController.ScanLogoUrl 과 동일).</summary>
-    private static string? ScanLogoUrl()
-    {
-        try
-        {
-            if (!Directory.Exists(TwmsDataPath.Uploads)) return null;
-            var files = Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*");
-            if (files.Length == 0) return null;
-            var fi = new FileInfo(files[0]);
-            return $"/uploads/{Path.GetFileName(files[0])}?t={fi.LastWriteTimeUtc.Ticks}";
-        }
-        catch { return null; }
     }
 }

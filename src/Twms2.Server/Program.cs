@@ -40,6 +40,18 @@ builder.Host.UseWindowsService();
 // 인메모리 캐시 (DEXA DB 중복 조회 방지)
 builder.Services.AddMemoryCache();
 
+// 응답 압축 — 30초 폴링 JSON(/api/*)이 자산 수에 비례해 커지므로 brotli/gzip 으로 전송량 절감.
+// wwwroot 정적 자산은 MapStaticAssets 의 빌드타임 사전압축이 우선 적용되고, 이 미들웨어는
+// Content-Encoding 이 이미 있으면 건너뛰므로 이중 압축되지 않는다.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+    options.MimeTypes = Microsoft.AspNetCore.ResponseCompression.ResponseCompressionDefaults.MimeTypes
+        .Concat(new[] { "image/svg+xml" });
+});
+
 // MudBlazor
 builder.Services.AddMudServices();
 
@@ -119,6 +131,10 @@ builder.Services.AddHostedService<PingBackgroundService>();
 builder.Services.Configure<MdnsOptions>(builder.Configuration.GetSection("Mdns"));
 builder.Services.AddHostedService<MdnsHostedService>();
 
+// 일일 유지보수 (핑 이력 보존기간 삭제 + import-tmp 잔여 임시파일 정리)
+builder.Services.Configure<MaintenanceOptions>(builder.Configuration.GetSection("Maintenance"));
+builder.Services.AddHostedService<MaintenanceBackgroundService>();
+
 var app = builder.Build();
 
 // TWM DB 테이블 자동 생성
@@ -132,23 +148,31 @@ await dexaClient.InitializeAsync();
 // DEXA 알림 서비스 시작 (서버 알림 → Blazor UI 실시간 갱신)
 app.Services.GetRequiredService<DexaNotificationService>();
 
-// 캐시 워밍업 (DEXA DB 미리 로드 — 완료 전까지 app.Run() 미호출 → 클라이언트 접속 불가)
+// 캐시 워밍업 (DEXA DB 미리 로드) — 백그라운드로 수행해 기동 즉시 클라이언트를 수용한다.
+// 워밍업 완료 전 첫 요청이 들어와도 AssetStatusService 의 single-flight 락이 중복 조회를 병합하므로 안전.
+_ = Task.Run(async () =>
 {
     var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-    startupLogger.LogInformation("캐시 워밍업 시작...");
-    using var scope = app.Services.CreateScope();
-    var sp = scope.ServiceProvider;
-    var statusService = sp.GetRequiredService<AssetStatusService>();
-    var dashboardService = sp.GetRequiredService<DashboardService>();
-    // 첫 화면(/api/nav + /api/dashboard) 이 실제로 쓰는 합성 데이터를 통째로 데운다:
-    //  - 합성 자산상태: 병합자산·에이전트·최신액션·전체액션(연속실패 집계)·핑·라인맵 + 합성 캐시 시드
-    //  - 대시보드 코어: 7일 액션·드라이브 용량 등
-    // 이전 워밍업은 자산·최근200건만 데워 전체액션/핑/머지자산 비용을 첫 클릭이 다 냈음(콜드).
-    var statusTask = statusService.GetAssetStatusesAsync();
-    var coreTask = dashboardService.GetDashboardCoreAsync();
-    await Task.WhenAll(statusTask, coreTask);
-    startupLogger.LogInformation("캐시 워밍업 완료: 자산 상태 {Count}건 로드됨", statusTask.Result.Count);
-}
+    try
+    {
+        startupLogger.LogInformation("캐시 워밍업 시작...");
+        using var scope = app.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var statusService = sp.GetRequiredService<AssetStatusService>();
+        var dashboardService = sp.GetRequiredService<DashboardService>();
+        // 첫 화면(/api/nav + /api/dashboard) 이 실제로 쓰는 합성 데이터를 통째로 데운다:
+        //  - 합성 자산상태: 병합자산·에이전트·최신액션·전체액션(연속실패 집계)·핑·라인맵 + 합성 캐시 시드
+        //  - 대시보드 코어: 7일 액션·드라이브 용량 등
+        var statusTask = statusService.GetAssetStatusesAsync();
+        var coreTask = dashboardService.GetDashboardCoreAsync();
+        await Task.WhenAll(statusTask, coreTask);
+        startupLogger.LogInformation("캐시 워밍업 완료: 자산 상태 {Count}건 로드됨", statusTask.Result.Count);
+    }
+    catch (Exception ex)
+    {
+        startupLogger.LogWarning(ex, "캐시 워밍업 실패 — 첫 요청이 콜드 비용을 부담합니다.");
+    }
+});
 
 if (!app.Environment.IsDevelopment())
 {
@@ -160,6 +184,9 @@ if (app.Configuration.GetSection("Kestrel:Endpoints:Https").Exists())
 {
     app.UseHttpsRedirection();
 }
+
+// 응답 압축 — 본문을 쓰는 미들웨어(/report 리라이트, 정적 shell, API)보다 앞서 등록해야 전 구간에 적용된다.
+app.UseResponseCompression();
 
 app.UseAntiforgery();
 

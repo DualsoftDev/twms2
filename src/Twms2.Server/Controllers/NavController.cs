@@ -56,7 +56,7 @@ public class NavController : ControllerBase
 
         return Ok(new
         {
-            logoUrl = ScanLogoUrl(),
+            logoUrl = LogoUrlProvider.Get(),
             // 사이드바 브랜드 — 로고 마크 우측 제목/부제(일반설정에서 변경, 저장 즉시 반영).
             navTitle = brand.Title,
             navSubtitle = brand.Subtitle,
@@ -186,16 +186,4 @@ public class NavController : ControllerBase
         offline = a.LatestPing is { Reachable: false },
     };
 
-    private static string? ScanLogoUrl()
-    {
-        try
-        {
-            if (!Directory.Exists(TwmsDataPath.Uploads)) return null;
-            var files = Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*");
-            if (files.Length == 0) return null;
-            var fi = new FileInfo(files[0]);
-            return $"/uploads/{Path.GetFileName(files[0])}?t={fi.LastWriteTimeUtc.Ticks}";
-        }
-        catch { return null; }
-    }
 }

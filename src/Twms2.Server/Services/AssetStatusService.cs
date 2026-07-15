@@ -68,15 +68,13 @@ public class AssetStatusService
             // 독립적인 쿼리를 병렬 실행 (자산+aug+conn 병합은 AssetService에 위임)
             var assetsTask     = _assetService.GetMergedAssetsAsync();
             var agentsTask     = _dexaRead.GetAgentsAsync();
-            var actionsTask    = _dexaRead.GetLatestActionPerAssetAsync();
             var allActionsTask = _dexaRead.GetAllActionsAsync();
             var pingTask       = _pingDb.GetAllPingResultsAsync();
             var lineTask       = _layoutDb.GetTwmsLayoutLineMapAsync();
-            await Task.WhenAll(assetsTask, agentsTask, actionsTask, allActionsTask, pingTask, lineTask);
+            await Task.WhenAll(assetsTask, agentsTask, allActionsTask, pingTask, lineTask);
 
             var assets      = assetsTask.Result;
             var agents      = agentsTask.Result;
-            var actions     = actionsTask.Result;
             var pingResults = pingTask.Result;
             var lineMap     = lineTask.Result;
 
@@ -85,15 +83,15 @@ public class AssetStatusService
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
             var pingMap  = pingResults.ToDictionary(p => p.DexaAssetId);
 
-            // 자산별 최신 액션 (assetId → 최신 action)
-            var latestActionMap = actions
-                .GroupBy(a => a.AssetId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.Started).First());
+            // 자산별 최신 액션 + 연속 실패 횟수 — 전체 액션에서 함께 파생
+            // (별도 GetLatestActionPerAssetAsync 쿼리 제거: 최신 = 자산별 MAX(actionId) 와 동일)
+            var allActions = allActionsTask.Result;
+            var byAsset = allActions.GroupBy(a => a.AssetId).ToList();
+            var latestActionMap = byAsset
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.Id).First());
 
             // 자산별 연속 실패 횟수 (최신부터 역순, 성공 만나면 중단)
-            var allActions = allActionsTask.Result;
-            var consecutiveFailMap = allActions
-                .GroupBy(a => a.AssetId)
+            var consecutiveFailMap = byAsset
                 .ToDictionary(
                     g => g.Key,
                     g => g.OrderByDescending(a => a.Id)
