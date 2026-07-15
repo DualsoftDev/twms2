@@ -518,11 +518,18 @@
     });
   }
 
+  // settings.html 동거 시 자기 패널(dexa)이 활성일 때만 폴링 — 독립 페이지에는 패널이 없어 항상 true
+  function panelActive() {
+    const p = document.querySelector('.set-panel[data-panel="dexa"]');
+    return !p || p.classList.contains('active');
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: 'admin' });
     bind();
     await load();
-    setInterval(load, 30000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+    setInterval(() => { if (!document.hidden && panelActive()) load(); }, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && panelActive()) load(); });
+    document.addEventListener('twms:panel-shown', (e) => { if (e.detail === 'dexa') load(); });
   });
 })();

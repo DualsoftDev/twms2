@@ -148,7 +148,7 @@ public class PingDbService
             SELECT Id, DexaAssetId, Reachable, CheckedAt
             FROM TwmsPingLog
             WHERE DexaAssetId = @Id
-            ORDER BY Id DESC
+            ORDER BY CheckedAt DESC
             LIMIT 1
             """, new { Id = dexaAssetId });
     }
@@ -164,5 +164,17 @@ public class PingDbService
             ORDER BY CheckedAt DESC
             """, new { Start = start, End = end.AddDays(1) }
         )).AsList();
+    }
+
+    /// <summary>보존기간을 초과한 핑 상태전환 이력 삭제. 삭제된 행 수 반환.</summary>
+    public async Task<int> DeleteOldPingLogsAsync(int retentionDays)
+    {
+        using var conn = _db.Create();
+        var deleted = await conn.ExecuteAsync(
+            "DELETE FROM TwmsPingLog WHERE CheckedAt < @Cutoff",
+            new { Cutoff = DateTime.Now.AddDays(-retentionDays) });
+        if (deleted > 0)
+            _logger.LogInformation("핑 이력 정리: 보존기간 {Days}일 초과 {Deleted}건 삭제", retentionDays, deleted);
+        return deleted;
     }
 }

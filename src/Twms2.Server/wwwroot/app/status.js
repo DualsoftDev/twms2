@@ -250,7 +250,7 @@
     if (window.Shell) await Shell.init({ active: '' });
     bind();
     await load();
-    setInterval(load, 30000);
+    setInterval(() => { if (!document.hidden) load(); }, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
   });
 })();

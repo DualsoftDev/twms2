@@ -286,6 +286,9 @@
     const panel = document.querySelector(`.set-panel[data-panel="${key}"]`);
     const f = panel && panel.querySelector('iframe[data-src]');
     if (f && !f.dataset.loaded) { f.src = f.getAttribute('data-src'); f.dataset.loaded = '1'; }
+    // 동거 모듈(admin-config/layout-management/admin-database)에 패널 활성화 알림
+    // — 비활성 패널은 폴링을 쉬므로, 전환 시 즉시 갱신하도록.
+    document.dispatchEvent(new CustomEvent('twms:panel-shown', { detail: key }));
   }
 
   // ──────────────── 헬퍼 ────────────────
@@ -337,7 +340,7 @@
     const urlTab = new URLSearchParams(location.search).get('tab');
     if (urlTab && document.querySelector(`.set-panel[data-panel="${urlTab}"]`)) switchTab(urlTab);
     await load();
-    setInterval(load, 30000);
+    setInterval(() => { if (!document.hidden) load(); }, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
   });
 })();

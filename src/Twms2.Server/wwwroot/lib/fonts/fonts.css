@@ -4,13 +4,14 @@
  * DSPilot(css/fonts.css)과 동일 구성 — 두 앱 폰트 통일
  * ============================================ */
 
-/* ── Noto Sans KR (한글) ── */
+/* ── Noto Sans KR (한글) — 한글 음절 전체+라틴 서브셋 woff2 (원본 TTF 6MB → 약 0.65MB).
+   재생성: python scripts/subset-fonts.py (한자 등 비한글 글자는 시스템 폰트 폴백) ── */
 @font-face {
   font-family: 'Noto Sans KR';
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url('./files/NotoSansKR-Light.ttf') format('truetype');
+  src: url('./files/NotoSansKR-Light-subset.woff2') format('woff2');
 }
 
 @font-face {
@@ -18,7 +19,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('./files/NotoSansKR-Regular.ttf') format('truetype');
+  src: url('./files/NotoSansKR-Regular-subset.woff2') format('woff2');
 }
 
 @font-face {
@@ -26,7 +27,7 @@
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('./files/NotoSansKR-Medium.ttf') format('truetype');
+  src: url('./files/NotoSansKR-Medium-subset.woff2') format('woff2');
 }
 
 @font-face {
@@ -34,7 +35,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('./files/NotoSansKR-Bold.ttf') format('truetype');
+  src: url('./files/NotoSansKR-Bold-subset.woff2') format('woff2');
 }
 
 /* Inter (가변폰트: wght 축) — 라틴 본문/헤딩/수치용. self-host woff2(오프라인).

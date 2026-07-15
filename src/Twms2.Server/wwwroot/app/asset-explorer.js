@@ -177,7 +177,7 @@
     if (S.search) $('ax-search').value = S.search;
     if (S.filterHealth) $('ax-health').value = S.filterHealth;
     await load();
-    setInterval(load, 30000);
+    setInterval(() => { if (!document.hidden) load(); }, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
   });
 })();

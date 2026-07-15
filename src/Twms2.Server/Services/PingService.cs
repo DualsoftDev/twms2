@@ -28,6 +28,9 @@ public class PingService
 
     private static readonly TimeSpan PingTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan Phase2FailDelay = TimeSpan.FromSeconds(6);
+    // 그룹당 실패 대기 총량 상한 — 하부자산 다수가 연속 실패하면 (5초 타임아웃+6초 대기)×N 으로
+    // 단일 그룹이 핑 주기(기본 5분)를 초과할 수 있어, 대기 누적을 60초에서 끊는다(테스트 자체는 계속).
+    private static readonly TimeSpan Phase2MaxFailDelayPerGroup = TimeSpan.FromSeconds(60);
     private const int DeepPingTimeoutSec = 5;
 
     public PingService(AssetService assetService, DexaReadService dexaRead, TwmDbService twmDb, PingDbService pingDb, ILogger<PingService> logger)
@@ -222,22 +225,28 @@ public class PingService
     }
 
     /// <summary>
-    /// 2차 테스트 그룹 내 순차 실행.
-    /// 실패 시 6초 대기 후 다음 자산 테스트.
+    /// 2차 테스트 그룹 내 순차 실행 (경유 PLC 의 Pass-Through 채널을 공유하므로 그룹 내 동시성 불가).
+    /// 실패 시 6초 대기 후 다음 자산 테스트 — 단, 그룹당 대기 총량 상한(60초)을 넘으면
+    /// 대기 없이 계속 진행하고, 마지막 자산 뒤에는 대기하지 않는다.
     /// </summary>
     private async Task PingPhase2GroupAsync(
         string viaIp, List<ViewAsset> assets, CancellationToken ct)
     {
-        foreach (var asset in assets)
+        var delayBudget = Phase2MaxFailDelayPerGroup;
+        for (var i = 0; i < assets.Count; i++)
         {
             if (ct.IsCancellationRequested) break;
+            var asset = assets[i];
             if (string.IsNullOrEmpty(asset.Ip)) continue;
 
             var result = await PingViaDllAsync(viaIp, asset.AugBaseNumber ?? 0, asset.AugSlotNumber, asset.Ip);
             await _pingDb.UpsertPingResultAsync(asset.AssetId, asset.Ip, result.Reachable, result.RoundtripMs);
 
-            if (!result.Reachable)
+            if (!result.Reachable && i < assets.Count - 1 && delayBudget >= Phase2FailDelay)
+            {
+                delayBudget -= Phase2FailDelay;
                 await Task.Delay(Phase2FailDelay, ct);
+            }
         }
     }
 

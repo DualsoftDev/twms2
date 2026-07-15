@@ -43,7 +43,7 @@
       await this._renderAuth();
       await this.refresh();
       // 30초 폴링 (Blazor 사이드바의 30s 타이머와 동일 주기)
-      this.pollTimer = setInterval(() => this.refresh(), 30000);
+      this.pollTimer = setInterval(() => { if (!document.hidden) this.refresh(); }, 30000);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) this.refresh(); });
     },
 

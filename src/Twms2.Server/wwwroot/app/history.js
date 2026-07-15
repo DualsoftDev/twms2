@@ -110,7 +110,9 @@
   /* ── 데이터 로드 ── */
   async function load() {
     try {
-      const res = await fetch('/api/history', { headers: { 'Accept': 'application/json' } });
+      // 백업 이력은 현재 선택 기간만 서버에서 받는다 (30초 폴링 응답 크기 절감)
+      const url = `/api/history?start=${encodeURIComponent(S.startDate)}&end=${encodeURIComponent(S.endDate)}`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (!res.ok) return;
       const d = await res.json();
       S.assets = d.assets || [];
@@ -601,14 +603,14 @@
     S.periodLabel = days === 0 ? 'today' : days === 7 ? '7days' : days === 30 ? '30days' : '';
     setPeriodDates(days);
     syncDateInputs(); syncPeriodButtons();
-    loadPings();
+    load(); loadPings();
     if (S.activeTab === 1) renderActions(); else if (S.activeTab === 2) renderPings();
     syncUrl();
   }
   function onDateManual() {
     S.periodLabel = '';
     syncPeriodButtons();
-    loadPings();
+    load(); loadPings();
     if (S.activeTab === 1) renderActions(); else if (S.activeTab === 2) renderPings();
     syncUrl();
   }
@@ -711,7 +713,7 @@
     bind();
     applyControlsFromState();
     await Promise.all([load(), loadPings()]);
-    setInterval(() => { load(); loadPings(); }, 30000);
+    setInterval(() => { if (!document.hidden) { load(); loadPings(); } }, 30000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); loadPings(); } });
   });
 })();
