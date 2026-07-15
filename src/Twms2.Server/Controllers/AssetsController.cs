@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Twms2.Server.Helpers;
+using static Twms2.Server.Helpers.ActionResultHelper;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Models.Dexa;
 using Twms2.Server.Services;
@@ -62,7 +63,7 @@ public class AssetsController : ControllerBase
                 typeId = a.AssetTypeId,
                 lineName = a.LayoutLineName,
                 isRobotPlc = a.AugIsRobotPLC is > 0,
-                health = HealthKey(a.Health),
+                health = LayoutHelpers.GetHealthKey(a.Health),
                 healthLabel = LayoutHelpers.GetHealthLabel(a.Health),
                 agentOnline = a.AgentOnline,
                 agentName = a.AgentName,
@@ -71,13 +72,8 @@ public class AssetsController : ControllerBase
             })
             .ToList();
 
-        // KPI (대시보드와 동일한 정의 — Home.RefreshAll)
-        var total = statuses.Count;
-        var backupSuccess = statuses.Count(s => s.LastBackupSucceeded);
-        var changed = statuses.Count(s => s.LastBackupChanged == true);
-        var noBackup = statuses.Count(s => s.LastBackupTime == null);
-        var failed = total - backupSuccess - noBackup;
-        var unchanged = backupSuccess - changed;
+        // KPI (단일 정의)
+        var kpi = AssetStatusService.ComputeKpi(statuses);
         var offline = statuses.Count(s => s.LatestPing is { Reachable: false });
 
         var typeNames = statuses
@@ -96,7 +92,7 @@ public class AssetsController : ControllerBase
         return Ok(new
         {
             assets = list,
-            kpi = new { total, backedUp = changed, unchanged, failed, offline },
+            kpi = new { total = kpi.Total, backedUp = kpi.BackedUp, unchanged = kpi.Unchanged, failed = kpi.Failed, offline },
             typeNames,
             lineNames,
         });
@@ -190,7 +186,7 @@ public class AssetsController : ControllerBase
             description = asset.Description,
 
             // ── 상태 ──
-            health = HealthKey(health),
+            health = LayoutHelpers.GetHealthKey(health),
             healthLabel = LayoutHelpers.GetHealthLabel(health),
             agentOnline = statusInfo?.AgentOnline ?? false,
             agentName = statusInfo?.AgentName,
@@ -234,40 +230,4 @@ public class AssetsController : ControllerBase
         return "";
     }
 
-    // ── HistoryController 와 동일한 라벨/판정 (이식) ──
-
-    private static bool IsInProgress(DexaAction a) => a.IsInProgress && !a.IsIncomplete;
-
-    private static string GetResultKey(DexaAction a)
-        => IsInProgress(a) ? "inprogress"
-         : !a.IsSuccess ? (a.IsIncomplete ? "incomplete" : "failed")
-         : a.ContentsChanged == true ? "backedup"
-         : "unchanged";
-
-    private static string GetResultLabel(DexaAction a)
-        => IsInProgress(a) ? "작업중"
-         : !a.IsSuccess ? (a.IsIncomplete ? "미완료" : "작업 실패")
-         : a.ContentsChanged == true ? "백업 갱신"
-         : "변경 없음";
-
-    private static void FillLastSuccessVersions(List<DexaAction> actions)
-    {
-        int? lastSuccess = null;
-        foreach (var action in actions.OrderBy(a => a.Id))
-        {
-            if (action.IsSuccess && action.Version.HasValue)
-                lastSuccess = action.Version;
-            else if (!action.IsSuccess)
-                action.LastSuccessVersion = lastSuccess;
-        }
-    }
-
-    private static string HealthKey(AssetHealthStatus h) => h switch
-    {
-        AssetHealthStatus.BackedUp => "backedup",
-        AssetHealthStatus.Unchanged => "unchanged",
-        AssetHealthStatus.Failed => "failed",
-        AssetHealthStatus.InProgress => "inprogress",
-        _ => "unknown",
-    };
 }

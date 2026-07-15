@@ -778,18 +778,13 @@
             RebuildBars();
             _driveStat = coreTask.Result.Drive;
 
-            // 통계 계산
-            var total = _assetStatuses.Count;
-            var backupSuccessCount = _assetStatuses.Count(s => s.LastBackupSucceeded);
-            var changedCount = _assetStatuses.Count(s => s.LastBackupChanged == true);
-            var noBackup = _assetStatuses.Count(s => s.LastBackupTime == null);
-            var failed = total - backupSuccessCount - noBackup;
-            var unchanged = backupSuccessCount - changedCount;
-
-            _statBackedUp = changedCount;
-            _statUnchanged = unchanged;
-            _statFailed = failed;
-            _statUnknown = noBackup;
+            // 통계 계산 (단일 정의)
+            var kpi = AssetStatusService.ComputeKpi(_assetStatuses);
+            var total = kpi.Total;
+            _statBackedUp = kpi.BackedUp;
+            _statUnchanged = kpi.Unchanged;
+            _statFailed = kpi.Failed;
+            _statUnknown = kpi.NoBackup;
             _statBackedUpPct = total > 0 ? Math.Round(100.0 * _statBackedUp / total, 1) : 0;
             _statUnchangedPct = total > 0 ? Math.Round(100.0 * _statUnchanged / total, 1) : 0;
             _statFailedPct = total > 0 ? Math.Round(100.0 * _statFailed / total, 1) : 0;

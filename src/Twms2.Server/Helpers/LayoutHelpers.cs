@@ -61,6 +61,19 @@ public static class LayoutHelpers
         _         => "#e0e0e0",
     };
 
+    /// <summary>
+    /// API 응답용 health 키 문자열 (backedup/unchanged/failed/inprogress/unknown).
+    /// 정적 페이지 JS 가 css 분기/필터 값으로 사용하는 계약 — enum 이름 변경과 무관하게 고정.
+    /// </summary>
+    public static string GetHealthKey(AssetHealthStatus health) => health switch
+    {
+        AssetHealthStatus.BackedUp   => "backedup",
+        AssetHealthStatus.Unchanged  => "unchanged",
+        AssetHealthStatus.Failed     => "failed",
+        AssetHealthStatus.InProgress => "inprogress",
+        _                            => "unknown",
+    };
+
     public static string GetHealthLabel(AssetHealthStatus health) => health switch
     {
         AssetHealthStatus.BackedUp   => "백업 갱신",

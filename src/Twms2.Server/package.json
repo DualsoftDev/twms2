@@ -6,8 +6,8 @@
   "scripts": {
     "build:css": "tailwindcss -c tailwind.config.js -i Styles/twms.input.css -o wwwroot/app/twms.css --minify",
     "watch:css": "tailwindcss -c tailwind.config.js -i Styles/twms.input.css -o wwwroot/app/twms.css --watch",
-    "fetch:fonts": "node scripts/fetch-fonts.mjs",
-    "build": "npm run fetch:fonts && npm run build:css"
+    "build": "npm run build:css",
+    "subset:fonts": "python scripts/subset-fonts.py"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",

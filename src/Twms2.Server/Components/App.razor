@@ -14,16 +14,17 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="shortcut icon" href="/favicon.ico" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css" />
+    <link rel="stylesheet" href="/lib/gridstack/gridstack.min.css" />
     <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
 </head>
 
 <body>
     <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
+    @* 폐쇄망 대비 self-host (구 jsdelivr CDN — wwwroot/lib 로 로컬화) *@
+    <script src="/lib/echarts/echarts.min.js"></script>
+    <script src="/lib/d3/d3.min.js"></script>
+    <script src="/lib/gridstack/gridstack-all.js"></script>
     <script src="js/sankey-chart.js"></script>
     <script src="js/dashboard-layout.js"></script>
     <script src="js/imagetracer.min.js"></script>

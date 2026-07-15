@@ -5,11 +5,34 @@ using Twms2.Server.Models.Dexa;
 namespace Twms2.Server.Services;
 
 /// <summary>
+/// 대시보드/사이드바 공통 KPI. BackedUp=백업갱신(변경 있음), Failed=총-성공-내역없음.
+/// </summary>
+public record KpiSummary(int Total, int BackedUp, int Unchanged, int Failed, int NoBackup);
+
+/// <summary>
 /// 자산 상태 통합 서비스.
 /// DEXA 자산/에이전트/백업 데이터 + TWM 태그/그룹/ping 병합.
 /// </summary>
 public class AssetStatusService
 {
+    /// <summary>
+    /// KPI 집계 단일 정의 — Nav/Assets/Dashboard API 와 Blazor(NavMenu/Home)가 모두 이걸 사용.
+    /// 정의를 바꾸면 전 화면이 함께 바뀐다(과거엔 5곳에 복붙돼 불일치 위험).
+    /// </summary>
+    public static KpiSummary ComputeKpi(IReadOnlyCollection<AssetStatusInfo> statuses)
+    {
+        var total = statuses.Count;
+        var backupSuccess = statuses.Count(s => s.LastBackupSucceeded);
+        var changed = statuses.Count(s => s.LastBackupChanged == true);
+        var noBackup = statuses.Count(s => s.LastBackupTime == null);
+        return new KpiSummary(
+            Total: total,
+            BackedUp: changed,
+            Unchanged: backupSuccess - changed,
+            Failed: total - backupSuccess - noBackup,
+            NoBackup: noBackup);
+    }
+
     private readonly AssetService _assetService;
     private readonly DexaReadService _dexaRead;
     private readonly PingDbService _pingDb;
