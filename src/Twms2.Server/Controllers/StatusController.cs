@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Twms2.Server.Helpers;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Services;
 
@@ -38,7 +39,7 @@ public class StatusController : ControllerBase
                 lastBackupSucceeded = a.LastBackupSucceeded,
                 lastBackupChanged  = a.LastBackupChanged,
                 groupName          = a.GroupName,
-                health             = HealthKey(a.Health),
+                health             = LayoutHelpers.GetHealthKey(a.Health),
                 healthLabel        = Helpers.LayoutHelpers.GetHealthLabel(a.Health),
                 ping = a.LatestPing == null ? null : new
                 {
@@ -59,12 +60,4 @@ public class StatusController : ControllerBase
         return Ok(new { rows, types });
     }
 
-    private static string HealthKey(AssetHealthStatus h) => h switch
-    {
-        AssetHealthStatus.BackedUp => "backedup",
-        AssetHealthStatus.Unchanged => "unchanged",
-        AssetHealthStatus.Failed => "failed",
-        AssetHealthStatus.InProgress => "inprogress",
-        _ => "unknown",
-    };
 }

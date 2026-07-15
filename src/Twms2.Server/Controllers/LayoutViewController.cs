@@ -87,7 +87,7 @@ public class LayoutViewController : ControllerBase
             typeId        = a.AssetTypeId,
             isRobotPlc    = a.AugIsRobotPLC is > 0,
             icon          = LayoutHelpers.GetAssetIcon(a.AssetTypeName, a.AugIsRobotPLC),
-            health        = HealthKey(a.Health),
+            health        = LayoutHelpers.GetHealthKey(a.Health),
             healthLabel   = LayoutHelpers.GetHealthLabel(a.Health),
             healthColor   = LayoutHelpers.GetHealthColor(a.Health),
             iconBgColor   = LayoutHelpers.GetIconBgColor(a.Health, a.LatestPing is { Reachable: false }),
@@ -132,12 +132,4 @@ public class LayoutViewController : ControllerBase
         });
     }
 
-    private static string HealthKey(AssetHealthStatus h) => h switch
-    {
-        AssetHealthStatus.BackedUp => "backedup",
-        AssetHealthStatus.Unchanged => "unchanged",
-        AssetHealthStatus.Failed => "failed",
-        AssetHealthStatus.InProgress => "inprogress",
-        _ => "unknown",
-    };
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Twms2.Server.Helpers;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Services;
 
@@ -36,14 +37,9 @@ public class DashboardController : ControllerBase
         var core = coreTask.Result;
         var statuses = statusTask.Result;
 
-        // KPI (Home.RefreshAll 정의)
-        var total = statuses.Count;
-        var backupSuccess = statuses.Count(s => s.LastBackupSucceeded);
-        var changed = statuses.Count(s => s.LastBackupChanged == true);
-        var noBackup = statuses.Count(s => s.LastBackupTime == null);
-        var failed = total - backupSuccess - noBackup;
-        var unchanged = backupSuccess - changed;
-        double Pct(int v) => total > 0 ? Math.Round(100.0 * v / total, 1) : 0;
+        // KPI (단일 정의)
+        var kpi = AssetStatusService.ComputeKpi(statuses);
+        double Pct(int v) => kpi.Total > 0 ? Math.Round(100.0 * v / kpi.Total, 1) : 0;
 
         // 타입별 (Robot PLC 분리)
         var typeStats = statuses
@@ -70,7 +66,7 @@ public class DashboardController : ControllerBase
                 assetId = a.AssetId,
                 name = a.Name,
                 typeName = a.AssetTypeName,
-                health = HealthKey(a.Health),
+                health = LayoutHelpers.GetHealthKey(a.Health),
                 healthLabel = Helpers.LayoutHelpers.GetHealthLabel(a.Health),
                 consecutiveFailureCount = a.ConsecutiveFailureCount,
             })
@@ -97,10 +93,10 @@ public class DashboardController : ControllerBase
         {
             kpi = new
             {
-                total,
-                backedUp = changed, backedUpPct = Pct(changed),
-                unchanged, unchangedPct = Pct(unchanged),
-                failed, failedPct = Pct(failed),
+                total = kpi.Total,
+                backedUp = kpi.BackedUp, backedUpPct = Pct(kpi.BackedUp),
+                unchanged = kpi.Unchanged, unchangedPct = Pct(kpi.Unchanged),
+                failed = kpi.Failed, failedPct = Pct(kpi.Failed),
             },
             typeStats,
             lineStats,
@@ -126,12 +122,4 @@ public class DashboardController : ControllerBase
         g.Count(a => a.Health == AssetHealthStatus.InProgress),
         g.Count(a => a.Health == AssetHealthStatus.Unknown));
 
-    private static string HealthKey(AssetHealthStatus h) => h switch
-    {
-        AssetHealthStatus.BackedUp => "backedup",
-        AssetHealthStatus.Unchanged => "unchanged",
-        AssetHealthStatus.Failed => "failed",
-        AssetHealthStatus.InProgress => "inprogress",
-        _ => "unknown",
-    };
 }

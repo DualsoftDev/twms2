@@ -58,15 +58,14 @@
 ```
 Twms2.0/
 ├── src/
-│   ├── DexaWeb.Dexa/              # F# — Akka.NET 클라이언트 라이브러리
-│   │   ├── Infrastructure/        #   액터 시스템 설정, Guardian, Serializer
+│   ├── Twms2.Dexa/                # F# — DEXA 클라이언트 라이브러리 (CommProxy in-process)
 │   │   ├── Messages/              #   C2S, S2C, A2S 메시지 정의
 │   │   ├── Models/                #   Asset, User, Schedule 등 도메인 모델
 │   │   ├── Utilities/             #   mDNS, 에러 처리
-│   │   ├── DexaClient.fs          #   메인 클라이언트 (초기화, 재연결)
+│   │   ├── DexaDirectClient.fs    #   메인 클라이언트 (초기화, 재연결)
 │   │   └── IDexaClient.fs         #   C# 인터옵용 인터페이스
 │   │
-│   ├── DexaWeb.Server/            # C# — Blazor Server 웹 애플리케이션
+│   ├── Twms2.Server/              # C# — Blazor Server + 정적 페이지(/api/*) 웹 애플리케이션
 │   │   ├── Components/
 │   │   │   ├── Pages/             #   Razor 페이지 (Home, Layout, Assets, ...)
 │   │   │   ├── Layout/            #   MainLayout, NavMenu
@@ -82,16 +81,16 @@ Twms2.0/
 │   │   ├── Program.cs             #   앱 진입점 및 DI 구성
 │   │   └── appsettings.json       #   애플리케이션 설정
 │   │
-│   ├── DeepPinger/                # C++ — 네이티브 Ping DLL (x64)
-│   └── DeepPingerTest/            # C# — DeepPinger 테스트 앱 (WinForms)
+│   ├── DeepPinger/                # C++ — 네이티브 Ping DLL (x64, 소스 미추적 — src/libs DLL 사용)
+│   ├── DeepPingerTest/            # C# — DeepPinger 테스트 앱 (WinForms)
+│   └── Twms2.slnx                 # 솔루션 파일
 │
 ├── installer/                     # 인스톨러 관련 파일
 │   ├── twms2.0-setup.iss          #   InnoSetup 스크립트
 │   ├── setup-https.ps1            #   HTTPS 인증서 설정 스크립트
 │   └── output/                    #   빌드된 설치파일 출력 디렉토리
 │
-├── build-installer.bat            # 인스톨러 빌드 스크립트 (전체 빌드 + 패키징)
-└── DexaWeb.slnx                   # 솔루션 파일
+└── build-installer.bat            # 인스톨러 빌드 스크립트 (전체 빌드 + 패키징)
 ```
 
 ---
@@ -134,7 +133,7 @@ graph TD
         UI["MudBlazor UI · ECharts · D3 · GridStack"]
     end
 
-    subgraph Server["⚙️ DexaWeb.Server — C# Blazor Server"]
+    subgraph Server["⚙️ Twms2.Server — C# Blazor Server"]
         direction LR
         subgraph Services["Services"]
             S1["AssetService"]
@@ -156,8 +155,8 @@ graph TD
         end
     end
 
-    subgraph Dexa["📡 DexaWeb.Dexa — F# 클라이언트 라이브러리"]
-        DC["DexaClient<br/>(IDexaClient)"]
+    subgraph Dexa["📡 Twms2.Dexa — F# 클라이언트 라이브러리"]
+        DC["DexaDirectClient<br/>(IDexaClient)"]
         GA["GuardianActor<br/>(Ask/Tell)"]
         DC --> GA
     end
@@ -336,7 +335,7 @@ C:\ProgramData\DualSoft\TWMS2\
 
 ```bash
 cd src
-dotnet build DexaWeb.slnx
+dotnet build Twms2.slnx
 ```
 
 > DeepPinger(C++ DLL)는 MSBuild 타겟에 의해 자동으로 빌드·복사됩니다.
@@ -344,7 +343,7 @@ dotnet build DexaWeb.slnx
 ### 실행
 
 ```bash
-dotnet run --project src/DexaWeb.Server
+dotnet run --project src/Twms2.Server
 ```
 
 브라우저에서 `http://localhost` 또는 `http://twms.local` (mDNS 활성화 시)로 접속합니다.

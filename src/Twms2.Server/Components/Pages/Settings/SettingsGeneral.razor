@@ -165,7 +165,7 @@
         _appTitle = Config["App:Title"] ?? "TWM";
         _showDate = Config.GetValue<bool>("App:ShowDate");
         _logoPadding = Config.GetValue("App:LogoPadding", 10);
-        _logoUrl = ScanLogoUrl();
+        _logoUrl = LogoUrlProvider.Get();
     }
 
     // ── 헤더 이름 저장 ──────────────────────────────────────
@@ -224,17 +224,6 @@
 
     // ── 로고 ────────────────────────────────────────────────
 
-    private string? ScanLogoUrl()
-    {
-        try
-        {
-            if (!Directory.Exists(TwmsDataPath.Uploads)) return null;
-            var files = Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*");
-            return files.Length > 0 ? "/uploads/" + Path.GetFileName(files[0]) : null;
-        }
-        catch { return null; }
-    }
-
     private void OnLogoFileSelected(InputFileChangeEventArgs e)
     {
         _selectedLogoFile = e.File;
@@ -283,8 +272,8 @@
                 await _selectedLogoFile.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024).CopyToAsync(stream);
             }
 
-            var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            _logoUrl = $"/uploads/app-logo{savedExt}?t={ts}";
+            LogoUrlProvider.Invalidate();
+            _logoUrl = LogoUrlProvider.Get();
             _selectedLogoFile = null;
             _selectedLogoName = null;
             NotificationService.NotifyRefresh();
@@ -310,6 +299,7 @@
                     File.Delete(f);
             }
 
+            LogoUrlProvider.Invalidate();
             _logoUrl = null;
             _selectedLogoFile = null;
             _selectedLogoName = null;

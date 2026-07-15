@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Twms2.Server.Helpers;
+using static Twms2.Server.Helpers.ActionResultHelper;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Models.Dexa;
 using Twms2.Server.Services;
@@ -45,9 +46,9 @@ public class HistoryController : ControllerBase
         var allActions = actionsTask.Result;
         var statuses = statusTask.Result;
 
-        // 실패 액션에 직전 성공 버전 채움 (Razor.FillLastSuccessVersions 이식)
+        // 실패 액션에 직전 성공 버전 채움 (자산별 계산)
         // 기간 필터보다 먼저 수행 — 직전 성공이 기간 밖에 있어도 정확히 계산되도록.
-        FillLastSuccessVersions(allActions);
+        FillLastSuccessVersionsGrouped(allActions);
 
         // 기간 필터 (탭2 백업 이력만 해당 — 자산/메타는 자산 수로 유계라 항상 전체)
         IEnumerable<DexaAction> filteredActions = allActions;
@@ -91,7 +92,7 @@ public class HistoryController : ControllerBase
                 stationNumber = a.AugStationNumber,
                 modelVersion = a.ModelVersion,
                 isRobotPlc = a.AugIsRobotPLC == 1,
-                health = HealthKey(a.Health),
+                health = LayoutHelpers.GetHealthKey(a.Health),
                 healthLabel = LayoutHelpers.GetHealthLabel(a.Health),
                 agentOnline = a.AgentOnline,
                 agentName = a.AgentName,
@@ -197,47 +198,7 @@ public class HistoryController : ControllerBase
         });
     }
 
-    // ── Razor 로직 이식 (라벨/판정) ──
-
-    private static bool IsInProgress(DexaAction a) => a.IsInProgress && !a.IsIncomplete;
-
-    private static string GetResultKey(DexaAction a)
-        => IsInProgress(a) ? "inprogress"
-         : !a.IsSuccess ? (a.IsIncomplete ? "incomplete" : "failed")
-         : a.ContentsChanged == true ? "backedup"
-         : "unchanged";
-
-    private static string GetResultLabel(DexaAction a)
-        => IsInProgress(a) ? "작업중"
-         : !a.IsSuccess ? (a.IsIncomplete ? "미완료" : "작업 실패")
-         : a.ContentsChanged == true ? "백업 갱신"
-         : "변경 없음";
-
     /// <summary>리포트 버튼 표시 여부: PLC(6)와 Drive/인버터(4)만 리포트 지원 (Razor.HasReport 이식)</summary>
     private static bool HasReport(Dictionary<int, int?> typeIdMap, int assetId)
         => typeIdMap.TryGetValue(assetId, out var typeId) && (typeId == 4 || typeId == 6);
-
-    private static void FillLastSuccessVersions(List<DexaAction> actions)
-    {
-        foreach (var group in actions.GroupBy(a => a.AssetId))
-        {
-            int? lastSuccess = null;
-            foreach (var action in group.OrderBy(a => a.Id))
-            {
-                if (action.IsSuccess && action.Version.HasValue)
-                    lastSuccess = action.Version;
-                else if (!action.IsSuccess)
-                    action.LastSuccessVersion = lastSuccess;
-            }
-        }
-    }
-
-    private static string HealthKey(AssetHealthStatus h) => h switch
-    {
-        AssetHealthStatus.BackedUp => "backedup",
-        AssetHealthStatus.Unchanged => "unchanged",
-        AssetHealthStatus.Failed => "failed",
-        AssetHealthStatus.InProgress => "inprogress",
-        _ => "unknown",
-    };
 }

@@ -70,9 +70,6 @@ installer/redist/
 # DEXA data directory (local runtime data)
 ProgramData/
 
-# Bridge lib/ DLLs are tracked (needed for .NET 4.8 references)
-# Do NOT ignore src/DexaWeb.Bridge/lib/
-
 # Logs
 *.log
 logs/
@@ -99,9 +96,9 @@ appsettings.*.json
 *.key
 .env
 .env.*
-src/DexaWeb.Server/twm.db.sqlite3
-src/DexaWeb.Server/wwwroot/uploads/app-logo.svg
-src/DexaWeb.Server/manuals/
+src/Twms2.Server/twm.db.sqlite3
+src/Twms2.Server/wwwroot/uploads/app-logo.svg
+src/Twms2.Server/manuals/
 
 # DeepPinger source (private - use pre-built DLL from src/libs/)
 src/DeepPinger/

@@ -245,20 +245,6 @@
         }
     }
 
-    private string? ScanLogoUrl()
-    {
-        try
-        {
-            if (!Directory.Exists(TwmsDataPath.Uploads)) return null;
-            var files = Directory.GetFiles(TwmsDataPath.Uploads, "app-logo.*");
-            if (files.Length == 0) return null;
-            var fi = new FileInfo(files[0]);
-            var ts = fi.LastWriteTimeUtc.Ticks;
-            return $"/uploads/{Path.GetFileName(files[0])}?t={ts}";
-        }
-        catch { return null; }
-    }
-
     private async Task LoadStatusAsync()
     {
         try
@@ -273,19 +259,13 @@
             _agents = agentTask.Result;
             _assetStatuses = assetTask.Result;
             _statusMap = _assetStatuses.ToDictionary(s => s.AssetId);
-            _logoUrl = ScanLogoUrl();
+            _logoUrl = LogoUrlProvider.Get();
 
-            // KPI 통계
-            var total = _assetStatuses.Count;
-            var backupSuccessCount = _assetStatuses.Count(s => s.LastBackupSucceeded);
-            var changedCount = _assetStatuses.Count(s => s.LastBackupChanged == true);
-            var noBackup = _assetStatuses.Count(s => s.LastBackupTime == null);
-            var failed = total - backupSuccessCount - noBackup;
-            var unchanged = backupSuccessCount - changedCount;
-
-            _statBackedUp = changedCount;
-            _statUnchanged = unchanged;
-            _statFailed = failed;
+            // KPI 통계 (단일 정의)
+            var kpi = AssetStatusService.ComputeKpi(_assetStatuses);
+            _statBackedUp = kpi.BackedUp;
+            _statUnchanged = kpi.Unchanged;
+            _statFailed = kpi.Failed;
 
             // 히트맵 정렬
             _heatmapAssets = _assetStatuses

@@ -44,13 +44,8 @@ public class NavController : ControllerBase
         var auth = await HttpContext.AuthenticateAsync(AuthController.Scheme);
         var isAdmin = auth.Succeeded && auth.Principal?.IsInRole("Admin") == true;
 
-        // 미니 KPI (Home/NavMenu 와 동일한 정의)
-        var total = statuses.Count;
-        var backupSuccess = statuses.Count(s => s.LastBackupSucceeded);
-        var changed = statuses.Count(s => s.LastBackupChanged == true);
-        var noBackup = statuses.Count(s => s.LastBackupTime == null);
-        var failed = total - backupSuccess - noBackup;
-        var unchanged = backupSuccess - changed;
+        // 미니 KPI (단일 정의)
+        var kpi = AssetStatusService.ComputeKpi(statuses);
 
         var brand = _settings.GetBrand();
 
@@ -62,7 +57,7 @@ public class NavController : ControllerBase
             navSubtitle = brand.Subtitle,
             isAdmin,
             dexaOnline,
-            kpi = new { total, backedUp = changed, unchanged, failed },
+            kpi = new { total = kpi.Total, backedUp = kpi.BackedUp, unchanged = kpi.Unchanged, failed = kpi.Failed },
             tree = BuildTree(statuses),
         });
     }
@@ -181,7 +176,7 @@ public class NavController : ControllerBase
         icon = LayoutHelpers.GetAssetIcon(a.AssetTypeName, a.AugIsRobotPLC),
         statusColor = LayoutHelpers.GetHealthColor(a.Health),
         // 상태 키(css/펄스 분기용) + 한글 라벨(툴팁용)
-        health = a.Health.ToString().ToLowerInvariant(),  // backedup/unchanged/failed/inprogress/unknown
+        health = LayoutHelpers.GetHealthKey(a.Health),
         healthLabel = LayoutHelpers.GetHealthLabel(a.Health),
         offline = a.LatestPing is { Reachable: false },
     };
