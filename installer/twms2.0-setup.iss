@@ -3,7 +3,6 @@
 ; ============================================================
 
 #define MyAppName "Twms2.0"
-#define MyAppVersion "2.0.0"
 #define MyAppPublisher "LS"
 #define MyAppExeName "Twms2.Server.exe"
 #define MyServiceName "twms2.0"
@@ -13,6 +12,9 @@
 #ifndef PublishDir
   #define PublishDir "..\src\Twms2.Server\bin\Release\net10.0-windows\win-x64\publish"
 #endif
+
+; 버전은 게시된 exe(ProductVersion = csproj <Version>)에서 읽는다 — 단일 출처: Twms2.Server.csproj
+#define MyAppVersion GetStringFileInfo(PublishDir + "\" + MyAppExeName, "ProductVersion")
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}

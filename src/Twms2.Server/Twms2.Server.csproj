@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- 제품 버전의 단일 출처. 인스톨러(twms2.0-setup.iss)가 게시된 exe에서 이 값을 읽는다. -->
+    <Version>2.0.1</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <!-- 프런트 자산 빌드 툴체인(node_modules 등)은 .NET 빌드/배포에서 제외.
