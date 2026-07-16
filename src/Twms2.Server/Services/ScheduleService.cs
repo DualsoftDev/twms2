@@ -58,7 +58,11 @@ public class ScheduleService
         var existing = triggers.FirstOrDefault(t => t.Id == triggerId);
         if (existing == null) return false;
 
-        return await UpdateTriggerAsync(existing.Id, existing.Name, cronExpression, existing.Enabled, existing.Description);
+        if (await UpdateTriggerAsync(existing.Id, existing.Name, cronExpression, existing.Enabled, existing.Description))
+            return true;
+        // 응답 유실 대비: DEXA가 변경을 적용하고도 회신이 안 올 수 있어 DB로 실제 반영 여부 확인
+        var after = (await _dexaRead.GetTriggersAsync()).FirstOrDefault(t => t.Id == triggerId);
+        return after != null && after.CronExpression == cronExpression;
     }
 
     public async Task<bool> UpdateTriggerNameAsync(int triggerId, string name)
@@ -67,7 +71,11 @@ public class ScheduleService
         var existing = triggers.FirstOrDefault(t => t.Id == triggerId);
         if (existing == null) return false;
 
-        return await UpdateTriggerAsync(existing.Id, name, existing.CronExpression, existing.Enabled, existing.Description);
+        if (await UpdateTriggerAsync(existing.Id, name, existing.CronExpression, existing.Enabled, existing.Description))
+            return true;
+        // 응답 유실 대비: DEXA가 변경을 적용하고도 회신이 안 올 수 있어 DB로 실제 반영 여부 확인
+        var after = (await _dexaRead.GetTriggersAsync()).FirstOrDefault(t => t.Id == triggerId);
+        return after != null && after.Name == name;
     }
 
     public async Task<bool> DeleteTriggerAsync(int id)

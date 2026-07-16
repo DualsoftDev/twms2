@@ -31,6 +31,11 @@
     backedup: '#65B991', unchanged: '#6BA0DE', failed: '#E67E7E',
     inprogress: '#f59e0b', unknown: '#999',
   };
+  // 정상 계열 저채도 링 색 — 정상은 침묵시키고 경보(실패/작업중)만 원색으로 전경화.
+  const HEALTH_SOFT = {
+    backedup: '#9ccab2', unchanged: '#a3c3e3', failed: '#E67E7E',
+    inprogress: '#f59e0b', unknown: '#b9bfcb',
+  };
   const HEALTH_LABEL = {
     backedup: '백업 갱신', unchanged: '변경 없음', failed: '작업 실패',
     inprogress: '작업중', unknown: '내역 없음',
@@ -44,6 +49,7 @@
   const NAME_FZ = 7.5, NAME_LH = 9.5, IP_FZ = 6, IP_LH = 8, NAME_MAX = 14;
   const OFFLINE_COLOR = '#8b93b0'; // ping 불가(오프라인) 축 — health 색과 분리
   const LINE_BG_DEFAULT = '#1f2937a6'; // 라인 영역 카드 기본 배경 = 차콜 65% (도면 설정 '라인 영역 색' 미설정 시)
+  const GROUP_COLOR_DEFAULT = '#8a93a6'; // 그룹(층) 영역 기본색 — 상태색과 경합하지 않는 중립 슬레이트(구 파랑 #4a90d9 대체)
 
   // ── 무상태 유틸 ───────────────────────────────────────────────────────────
   function svgEl(name, attrs) {
@@ -80,6 +86,49 @@
       const d = r * 0.5;
       g.appendChild(svgEl('line', { x1: mx - d, y1: my - d, x2: mx + d, y2: my + d, stroke: 'white', 'stroke-width': 0.9, 'stroke-linecap': 'round' }));
     }
+  }
+
+  function isAlertHealth(h) { return h === 'failed' || h === 'inprogress'; }
+  function softColorFor(asset) { return HEALTH_SOFT[asset.health] || HEALTH_SOFT.unknown; }
+
+  // 오프라인 외곽 링 — 본체 테두리 밖에 회색 한 겹 더. 행 상태점/점격자의 오프라인 링과 같은 언어.
+  function offlineRing(g, x, y, size, rx) {
+    const o = Math.max(0.8, size * 0.07);
+    g.appendChild(svgEl('rect', {
+      x: x - o, y: y - o, width: size + o * 2, height: size + o * 2, rx: rx + o,
+      fill: 'none', stroke: OFFLINE_COLOR, 'stroke-width': Math.max(0.7, size * 0.05), 'stroke-opacity': 0.9,
+    }));
+  }
+
+  // 작업 결과 배지(우상단) — 실패 ✕ / 작업중 ▶(점멸). 오프라인 점(좌상단)과 대칭인 코너 축.
+  // 색+도형 이중 채널이라 색각 이상에도 안전. 경보 상태에만 붙인다.
+  // animate=false(오프라인): 상태가 낡은 정보라 점멸 없이 정적으로만 표시.
+  function statusBadge(g, x, y, size, health, animate) {
+    const r = Math.min(Math.max(1.6, size * 0.28), 4);
+    const off = size < 8 ? r * 0.45 : r * 0.75;
+    const mx = x + size - off, my = y + off;
+    const b = svgEl('g', health === 'inprogress' && animate !== false ? { class: 'lv-badge-work' } : null);
+    b.appendChild(svgEl('circle', { cx: mx, cy: my, r, fill: HEALTH_COLOR[health], stroke: 'white', 'stroke-width': size < 8 ? 0.4 : 0.6 }));
+    if (size >= 8) { // 작은 아이콘에서는 도형 생략(점만) — offlineMark 와 같은 규칙
+      const d = r * 0.45;
+      if (health === 'failed') {
+        b.appendChild(svgEl('line', { x1: mx - d, y1: my - d, x2: mx + d, y2: my + d, stroke: 'white', 'stroke-width': 0.9, 'stroke-linecap': 'round' }));
+        b.appendChild(svgEl('line', { x1: mx - d, y1: my + d, x2: mx + d, y2: my - d, stroke: 'white', 'stroke-width': 0.9, 'stroke-linecap': 'round' }));
+      } else {
+        b.appendChild(svgEl('path', { d: `M ${mx - d * 0.7} ${my - d} L ${mx + d} ${my} L ${mx - d * 0.7} ${my + d} Z`, fill: 'white' }));
+      }
+    }
+    g.appendChild(b);
+  }
+
+  // 실패 헤일로 — 마커 뒤 광륜(호흡 애니메이션). 축소 도면에서도 실패 위치가 먼저 눈에 들어온다.
+  // animate=false(오프라인): 호흡 없이 정적 광륜만(stroke-opacity 0.4 고정).
+  function failedHalo(g, x, y, size, animate) {
+    g.appendChild(svgEl('rect', {
+      x: x - size * 0.18, y: y - size * 0.18, width: size * 1.36, height: size * 1.36, rx: size * 0.28,
+      fill: 'none', stroke: HEALTH_COLOR.failed, 'stroke-width': Math.max(1, size * 0.09),
+      'stroke-opacity': 0.4, class: animate !== false ? 'lv-halo-failed' : null,
+    }));
   }
   // 글리프 폭 추정(한글≈전각, 라틴≈0.58em) — content-driven 카드 폭 계산용
   function textWidth(s, fz) {
@@ -126,26 +175,34 @@
 
   // 자산 마커 <g> (사각 배경 + 아이콘 + 툴팁), 클릭 → /assets/{id}
   // 툴팁 텍스트는 data-tip 에 담아 두고, 뷰포트의 커스텀 HTML 툴팁이 hover 시 표시한다.
-  // neutral: 라인 뷰용 중립 배경(경보만 채움색) — 개별(배치도) 뷰는 기존 상태색 배경 유지.
-  function assetMarker(asset, x, y, size, floor, neutral) {
+  // 상태 표시: 면(배경)은 정보 채널이 아니다 — 중립 배경 + 상태 링(정상 저채도/경보 원색·두껍게)
+  //           + 경보 코너 배지(우상단 ✕/▶) + 실패 헤일로. 오프라인 점(좌상단)은 별도 축 유지.
+  function assetMarker(asset, x, y, size, floor) {
+    const alert = isAlertHealth(asset.health);
+    const offline = asset.pingReachable === false;
     const g = svgEl('g', {
       transform: `translate(${x}, ${y})`,
       class: 'lv-asset-icon',
       style: 'cursor:pointer',
-      opacity: '0.92',
+      opacity: alert ? '1' : '0.92',
       'data-tip': titleFor(asset, floor),
       'data-asset-id': asset.assetId, // 클릭은 인스턴스 위임 핸들러가 처리(상세 페이지 이동)
     });
+    if (asset.health === 'failed') failedHalo(g, 0, 0, size, !offline);
+    const rx = Math.max(1, size * 0.12);
+    if (offline) offlineRing(g, 0, 0, size, rx);
     g.appendChild(svgEl('rect', {
-      width: size, height: size, rx: Math.max(1, size * 0.12),
-      fill: neutral ? neutralIconBg(asset.health) : (asset.iconBgColor || '#e0e0e0'), stroke: colorFor(asset),
-      'stroke-width': Math.max(0.5, size * 0.05),
+      width: size, height: size, rx,
+      fill: neutralIconBg(asset.health),
+      stroke: alert ? colorFor(asset) : softColorFor(asset),
+      'stroke-width': alert ? Math.max(1.2, size * 0.11) : Math.max(0.6, size * 0.06),
     }));
     g.appendChild(svgEl('image', {
       href: '/' + String(asset.icon || 'images/icons/plc.png').replace(/^\//, ''),
       x: size * 0.08, y: size * 0.08, width: size * 0.84, height: size * 0.84,
     }));
-    if (asset.pingReachable === false) offlineMark(g, 0, 0, size);
+    if (offline) offlineMark(g, 0, 0, size);
+    if (alert) statusBadge(g, 0, 0, size, asset.health, !offline);
     return g;
   }
 
@@ -168,8 +225,8 @@
     return { childIds, plcChildren };
   }
 
-  // 라인 뷰 아이콘 배경 — 면은 중립(무채색), 경보(실패/작업중)만 채움색으로 튀게.
-  // 정상/내역없음의 상태는 테두리색(colorFor)이 전담한다.
+  // 아이콘 배경(전 뷰 공통) — 면은 중립(무채색), 경보(실패/작업중)만 옅은 틴트로 받쳐준다.
+  // 상태 식별은 링(테두리)·코너 배지·헤일로가 전담한다.
   function neutralIconBg(health) {
     return health === 'failed' ? '#f5d0d0' : health === 'inprogress' ? '#fde8c4' : '#e6e9f2';
   }
@@ -479,7 +536,7 @@
       const dotX = x + ROW_DOT_R + 1;
       if (c.pingReachable === false)
         row.appendChild(svgEl('circle', { cx: dotX, cy: cyr, r: ROW_DOT_R + 1.1, fill: 'none', stroke: OFFLINE_COLOR, 'stroke-width': 0.8 }));
-      row.appendChild(svgEl('circle', { cx: dotX, cy: cyr, r: ROW_DOT_R, fill: colorFor(c) }));
+      row.appendChild(svgEl('circle', { cx: dotX, cy: cyr, r: ROW_DOT_R, fill: isAlertHealth(c.health) ? colorFor(c) : softColorFor(c) }));
       const nt = svgEl('text', { x: dotX + ROW_DOT_R + 3, y: cyr + ROW_NAME_FZ * 0.36, 'font-size': ROW_NAME_FZ, fill: '#dfe6f5' });
       nt.textContent = truncName(c.name); row.appendChild(nt);
       if (c.ip) {
@@ -495,11 +552,14 @@
     const { cols, tileSz, gap } = card;
     card.children.forEach((c, i) => {
       const tx = x + (i % cols) * (tileSz + gap), ty = y + Math.floor(i / cols) * (tileSz + gap);
-      const hcc = colorFor(c);
+      const alert = isAlertHealth(c.health);
+      const offline = c.pingReachable === false;
       const t = svgEl('g', { class: 'lv-asset-icon', style: 'cursor:pointer', 'data-asset-id': c.assetId, 'data-tip': titleFor(c, c.floor) });
-      t.appendChild(svgEl('rect', { x: tx, y: ty, width: tileSz, height: tileSz, rx: Math.max(2, tileSz * 0.22), fill: neutralIconBg(c.health), stroke: hcc, 'stroke-width': c.health === 'failed' ? 1.5 : 1.1, opacity: 0.95 }));
+      if (offline) offlineRing(t, tx, ty, tileSz, Math.max(2, tileSz * 0.22));
+      t.appendChild(svgEl('rect', { x: tx, y: ty, width: tileSz, height: tileSz, rx: Math.max(2, tileSz * 0.22), fill: neutralIconBg(c.health), stroke: alert ? colorFor(c) : softColorFor(c), 'stroke-width': alert ? 1.5 : 0.9, opacity: 0.95 }));
       t.appendChild(svgEl('image', { href: iconHref(c.icon), x: tx + 1.2, y: ty + 1.2, width: tileSz - 2.4, height: tileSz - 2.4 }));
-      if (c.pingReachable === false) offlineMark(t, tx, ty, tileSz);
+      if (offline) offlineMark(t, tx, ty, tileSz);
+      if (alert) statusBadge(t, tx, ty, tileSz, c.health, !offline); // 헤일로는 타일 간격(2px)을 침범해 생략 — 링+배지로 충분
       g.appendChild(t);
     });
   }
@@ -513,7 +573,7 @@
       const d = svgEl('g', { class: 'lv-asset-icon', style: 'cursor:pointer', 'data-asset-id': c.assetId, 'data-tip': titleFor(c, c.floor) });
       if (c.pingReachable === false)
         d.appendChild(svgEl('circle', { cx: cxp, cy: cyp, r: dotR + 0.9, fill: 'none', stroke: OFFLINE_COLOR, 'stroke-width': 0.7 }));
-      d.appendChild(svgEl('circle', { cx: cxp, cy: cyp, r: dotR, fill: colorFor(c), stroke: 'rgba(0,0,0,0.25)', 'stroke-width': 0.3 }));
+      d.appendChild(svgEl('circle', { cx: cxp, cy: cyp, r: dotR, fill: isAlertHealth(c.health) ? colorFor(c) : softColorFor(c), stroke: 'rgba(0,0,0,0.25)', 'stroke-width': 0.3 }));
       g.appendChild(d);
     });
   }
@@ -554,12 +614,16 @@
     // ── 헤더: PLC 아이콘(자체 상태색) ──
     const icoSize = card.plcSize;
     const icoX = PAD, icoY = card.headerY + (card.headerH - icoSize) / 2;
-    const hc = plc.healthColor || colorFor(plc);
+    const plcAlert = isAlertHealth(plc.health);
+    const plcOffline = plc.pingReachable === false;
+    const hc = plcAlert ? (plc.healthColor || colorFor(plc)) : softColorFor(plc);
     const ico = svgEl('g', { class: 'lv-asset-icon', 'data-tip': titleFor(plc, plc.floor) });
-    ico.appendChild(svgEl('rect', { x: icoX, y: icoY, width: icoSize, height: icoSize, rx: 4, fill: neutralIconBg(plc.health), stroke: hc, 'stroke-width': 0.9, opacity: 0.97 }));
+    if (plcOffline) offlineRing(ico, icoX, icoY, icoSize, 4);
+    ico.appendChild(svgEl('rect', { x: icoX, y: icoY, width: icoSize, height: icoSize, rx: 4, fill: neutralIconBg(plc.health), stroke: hc, 'stroke-width': plcAlert ? 1.4 : 0.9, opacity: 0.97 }));
     ico.appendChild(svgEl('image', { href: iconHref(plc.icon), x: icoX + 2, y: icoY + 2, width: icoSize - 4, height: icoSize - 4 }));
     g.appendChild(ico);
-    if (plc.pingReachable === false) offlineMark(g, icoX, icoY, icoSize);
+    if (plcOffline) offlineMark(g, icoX, icoY, icoSize);
+    if (plcAlert) statusBadge(g, icoX, icoY, icoSize, plc.health, !plcOffline);
 
     // 이름(hero) + IP(보조)
     const tx = icoX + icoSize + HDR_GAP;
@@ -890,7 +954,7 @@
         const scaler = svgEl('g', { transform });
         for (const card of plcCards) scaler.appendChild(plcCardGroup(card, cardBg));
         for (const st of standalones) {
-          const m = assetMarker(st.asset, st.x, st.y, st.size, st.asset.floor, true);
+          const m = assetMarker(st.asset, st.x, st.y, st.size, st.asset.floor);
           if (st.asset.health === 'unknown') m.setAttribute('opacity', '0.55'); // 내역없음 감쇠 — 실상태가 튀게
           scaler.appendChild(m);
         }
@@ -916,7 +980,9 @@
           .filter(a => !(inst.hiddenFloors && a.floor != null && inst.hiddenFloors.has(a.floor)));
         if (members.length === 0) continue;
 
-        const grpColor = grp.color || '#4a90d9';
+        // 기본색은 중립 슬레이트 — 층 표현(2층 그림자·지하 음영)이 자산 상태색과 경합하지 않게.
+        // 그룹에 색을 명시한 경우만 그 색을 존중한다.
+        const grpColor = grp.color || GROUP_COLOR_DEFAULT;
         const g = svgEl('g');
         const rRx = Math.min(6.0, Math.min(grp.width, grp.height) / 2);
         // 층 기반 3D 톤 (AssetPlacementView 이식: >=2 튀어나옴, <0 들어감, 그 외 점선)
