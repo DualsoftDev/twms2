@@ -240,6 +240,29 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                     msgType.Name :> obj, dexaType.Name :> obj, dexaType.Assembly.GetName().Name :> obj)
                 if isNull result then message else result
 
+    /// Ask 응답 타입 해석: F# 래퍼 타입(Twms2.Dexa)이면 동명의 DEXA DLL 타입으로.
+    /// 서버 응답은 DEXA.Core.Actor 어셈블리 타입으로 역직렬화되므로,
+    /// 래퍼 타입 그대로 AskServer<T>를 부르면 타입 정체성이 달라 영원히 매칭되지 않는다(타임아웃).
+    let resolveDexaReplyType (t: Type) =
+        if t.Assembly.GetName().Name = "DEXA.Core.Actor" then t
+        else
+            let dt = dexaCoreActorAsm.Value.GetType(t.FullName)
+            if isNull dt then t else dt
+
+    /// DEXA DLL 응답 → 호출자 래퍼 타입 인스턴스로 변환.
+    /// 동명·타입호환 프로퍼티만 얕은 복사 — ActorRef 등 DEXA 공유 타입은 참조 그대로 보존.
+    let convertReplyTo (targetType: Type) (reply: obj) : obj =
+        if isNull reply then null
+        elif targetType.IsInstanceOfType(reply) then reply
+        else
+            let wrapper = Activator.CreateInstance(targetType, true)
+            for p in targetType.GetProperties(BindingFlags.Public ||| BindingFlags.Instance) do
+                if p.CanWrite then
+                    let sp = reply.GetType().GetProperty(p.Name)
+                    if not (isNull sp) && sp.CanRead && p.PropertyType.IsAssignableFrom(sp.PropertyType) then
+                        try p.SetValue(wrapper, sp.GetValue(reply)) with _ -> ()
+            wrapper
+
     /// DEXA DLL 알림 → F# 재정의 알림 타입으로 변환
     /// DexaNotificationService가 F# 타입으로 switch/pattern match하므로 필수
     let convertNotification (notification: obj) : obj =
@@ -390,14 +413,19 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                     if isNull askMethod then
                         return raise (InvalidOperationException("CommProxy.AskServer 메서드를 찾을 수 없습니다."))
                     else
-                        let genericAsk = askMethod.MakeGenericMethod(typeof<'T>)
+                        // 응답은 DEXA DLL 타입으로 도착하므로 래퍼 타입이 아닌 동명 DEXA 타입으로 Ask해야 매칭된다
+                        let replyType = resolveDexaReplyType typeof<'T>
+                        let genericAsk = askMethod.MakeGenericMethod(replyType)
                         let dexaMsg = toDexaType message
                         let taskObj = genericAsk.Invoke(proxy :> obj, [| dexaMsg |])
-                        let task = taskObj :?> Task<'T>
+                        let innerTask = taskObj :?> Task
                         let actualTimeout = defaultArg timeout (TimeSpan.FromSeconds(float opts.AskTimeoutSeconds))
-                        let! completed = Task.WhenAny(task, Task.Delay(actualTimeout))
-                        if obj.ReferenceEquals(completed, task) then
-                            return task.Result
+                        let! completed = Task.WhenAny(innerTask, Task.Delay(actualTimeout))
+                        if obj.ReferenceEquals(completed, innerTask) then
+                            let dexaReply = taskObj.GetType().GetProperty("Result").GetValue(taskObj)
+                            match convertReplyTo typeof<'T> dexaReply with
+                            | null -> return Unchecked.defaultof<'T>
+                            | converted -> return converted :?> 'T
                         else
                             return raise (TimeoutException(sprintf "Ask 타임아웃: %s (%O)" (message.GetType().Name) actualTimeout))
                 with
