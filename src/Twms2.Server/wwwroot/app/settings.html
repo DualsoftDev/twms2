@@ -208,8 +208,8 @@
     .db-hint { font-size: 13px; color: var(--c-on-surface-variant); margin: 0 0 16px; line-height: 1.5; }
     .db-section-title { font-weight: 700; font-size: 1rem; color: var(--c-on-surface); display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
 
-    /* DB 관리 접이식 (DEXA 설정 > 트리거 목록 카드 내부) — 기본 접힘 */
-    .db-collapse { margin-top: 18px; border-top: 1px solid var(--c-outline-variant); padding-top: 12px; }
+    /* DB 관리 접이식 (DEXA 설정 하단 독립 카드) — 일반적으로 쓰지 않는 고급 설정이라 큰 간격을 두고 분리, 기본 접힘 */
+    .db-collapse { margin-top: 140px; margin-bottom: 24px; }
     .db-collapse-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; cursor: pointer; padding: 6px 2px; font-weight: 700; font-size: 14px; color: var(--c-on-surface); font-family: inherit; }
     .db-collapse-toggle .material-symbols-outlined { font-size: 20px; }
     .db-collapse-toggle .db-collapse-chev { color: var(--c-on-surface-variant); transition: transform 0.15s ease; }
@@ -537,9 +537,10 @@
           </div>
         </div>
         <div id="triggers-host"><div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div></div>
+      </div>
 
-        <!-- ── DB 관리 (admin-database 직접 이식) — 고급 기능이라 기본 접힘, 펼칠 때만 로드 ── -->
-        <div class="db-collapse" id="db-collapse">
+      <!-- ── DB 관리 (admin-database 직접 이식) — 일반적으로 쓰지 않는 고급 설정이라 아래로 분리 배치, 기본 접힘 · 펼칠 때만 로드 ── -->
+      <div class="nm-card db-collapse" id="db-collapse">
           <button class="db-collapse-toggle" id="db-collapse-toggle" type="button" aria-expanded="false" aria-controls="db-collapse-body">
             <span class="material-symbols-outlined db-collapse-chev">chevron_right</span>
             <span class="material-symbols-outlined">database</span>DB 관리
@@ -609,7 +610,6 @@
               <div id="migrations-host"></div>
             </div>
           </div>
-        </div>
       </div>
     </section>
 
