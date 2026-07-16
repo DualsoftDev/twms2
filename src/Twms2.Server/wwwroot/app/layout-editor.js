@@ -629,7 +629,7 @@
     function groupNode(grp) {
       const ids = memberIdsOf(grp.id);
       const members = ids.map(id => assetMap.get(id)).filter(Boolean);
-      const color = grp.color || '#4a90d9';
+      const color = grp.color || '#8a93a6'; // 뷰어(layout-render.js GROUP_COLOR_DEFAULT)와 동일한 중립 슬레이트 기본색
       const selCls = selGroups.has(grp.id) ? ' ap-group-selected' : '';
       const rSz = clamp(Math.min(grp.width, grp.height) * 0.15, 6, 16), rOff = rSz / 2;
       let inner = '';
@@ -740,7 +740,7 @@
         return `<div class="ap-group-item ${selCls}">`
           + `<div class="ap-group-header" data-grp-locate="${g.id}" title="도면에서 위치 보기">`
           + `<span class="material-symbols-outlined" data-grp-exp="${g.id}" style="font-size:18px;cursor:pointer;border-radius:6px;" title="${isExp ? '접기' : '펼치기'}">${isExp ? 'expand_more' : 'chevron_right'}</span>`
-          + `<span class="ap-group-color" style="background:${g.color || '#4a90d9'}"></span>`
+          + `<span class="ap-group-color" style="background:${g.color || '#8a93a6'}"></span>`
           + `<span class="flex-grow-1 ap-list-name" style="font-size:.72rem;">${esc(groupLabel(g.id))}</span>`
           + `<span class="le-floor-wrap" title="그룹이 표시될 층" onclick="event.stopPropagation()"><input type="number" class="le-floor-input" data-grp-floor="${g.id}" value="${g.floor}" min="-20" max="100"/><span class="le-floor-suffix">층</span></span>`
           + `<span class="ap-group-count">${ids.length}</span>`

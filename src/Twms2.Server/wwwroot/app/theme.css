@@ -456,6 +456,16 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .lv-pop-row-ip { color: var(--c-on-surface-variant); font-size: 12px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .lv-pop-empty { color: var(--c-on-surface-variant); padding: 6px; }
 
+/* 도면 경보 애니메이션 (layout-render.js 가 SVG 에 클래스 부여)
+   — 실패 헤일로는 느린 호흡, 작업중 코너 배지는 점멸. 정상 자산은 정적(침묵). */
+@keyframes lv-halo-breathe { 0%, 100% { stroke-opacity: 0.5; } 50% { stroke-opacity: 0.12; } }
+@keyframes lv-badge-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.lv-halo-failed { animation: lv-halo-breathe 2.2s ease-in-out infinite; }
+.lv-badge-work { animation: lv-badge-blink 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .lv-halo-failed, .lv-badge-work { animation: none; }
+}
+
 /* ============================================================================
  * 반응형 (모바일 · 좁게 조절한 창)
  *  데스크톱 우선 레이아웃에 좁은 화면 폴백을 덧붙인다. 페이지 HTML/JS 는 거의
