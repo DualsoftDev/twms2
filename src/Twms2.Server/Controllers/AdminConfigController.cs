@@ -14,6 +14,7 @@ namespace Twms2.Server.Controllers;
 /// - GET    /api/admin/config                       : 에이전트 목록 + 트리거 목록(+자산 매핑 수) 1회 조회.
 /// - POST   /api/admin/config/triggers              : 트리거 추가 (ScheduleService.AddTriggerAsync 래핑).
 /// - PUT    /api/admin/config/triggers/{id}/cron    : 스케줄(cron) 수정 (ScheduleService.UpdateTriggerCronAsync).
+/// - PUT    /api/admin/config/triggers/{id}/name    : 트리거 이름 변경 (ScheduleService.UpdateTriggerNameAsync).
 /// - POST   /api/admin/config/triggers/{id}/execute : 트리거 즉시 실행 (ScheduleService.ExecuteTriggerAsync).
 /// - DELETE /api/admin/config/triggers/{id}         : 트리거 삭제 (ScheduleService.DeleteTriggerAsync).
 /// - GET    /api/admin/config/triggers/{id}/assets : 트리거 자산 매핑 조회(선택ID + 라인별 자산).
@@ -116,6 +117,22 @@ public class AdminConfigController : ControllerBase
 
         var ok = await _schedule.UpdateTriggerCronAsync(id, cron);
         if (!ok) return StatusCode(502, new { error = "스케줄 수정에 실패했습니다." });
+        return Ok(new { ok = true });
+    }
+
+    // ──────────────── 트리거 이름 변경 ────────────────
+
+    public record NameDto(string? Name);
+
+    [HttpPut("triggers/{id:int}/name")]
+    public async Task<IActionResult> UpdateName(int id, [FromBody] NameDto dto)
+    {
+        var name = (dto.Name ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(new { error = "트리거 이름을 입력해주세요." });
+
+        var ok = await _schedule.UpdateTriggerNameAsync(id, name);
+        if (!ok) return StatusCode(502, new { error = "트리거 이름 변경에 실패했습니다." });
         return Ok(new { ok = true });
     }
 

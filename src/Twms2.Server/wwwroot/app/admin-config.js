@@ -268,7 +268,7 @@
         : `<button class="ac-iconbtn ac-iconbtn-success" data-act="run" data-id="${t.id}" title="즉시 실행"><span class="material-symbols-outlined">play_arrow</span></button>`;
       return `<tr>
         <td>${t.id}</td>
-        <td>${esc(t.name || '-')}</td>
+        <td><a class="ac-cron-link" data-act="rename" data-id="${t.id}" title="이름 변경">${esc(t.name || '-')}</a></td>
         <td><a class="ac-cron-link" data-act="cron" data-id="${t.id}" title="${esc(t.cronExpression || '')}">${esc(cronToReadable(t.cronExpression))}</a></td>
         <td>${stateChip}</td>
         <td class="wrap" title="${esc(t.description || '')}">${esc(t.description || '-')}</td>
@@ -292,6 +292,7 @@
         else if (act === 'del') deleteTrigger(id);
         else if (act === 'cron') openCronModal(id);
         else if (act === 'map') openMapModal(id);
+        else if (act === 'rename') renameTrigger(id);
       });
     });
   }
@@ -321,6 +322,25 @@
       S.runningTriggerIds.delete(id);
       renderTriggers();
     }
+  }
+
+  async function renameTrigger(id) {
+    const t = S.triggers.find(x => x.id === id);
+    if (!t) return;
+    const input = window.prompt(`트리거 '${t.name}'의 새 이름을 입력하세요.`, t.name || '');
+    if (input == null) return;
+    const name = input.trim();
+    if (!name) { toast('트리거 이름을 입력해주세요.'); return; }
+    if (name === t.name) return;
+    try {
+      const r = await fetch(`/api/admin/config/triggers/${id}/name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (r.ok) { toast('트리거 이름이 변경되었습니다.'); await load(); }
+      else toast((await safeErr(r)) || '트리거 이름 변경 실패');
+    } catch (e) { toast('트리거 이름 변경 실패: ' + e.message); }
   }
 
   async function deleteTrigger(id) {

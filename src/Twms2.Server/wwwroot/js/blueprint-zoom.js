@@ -33,6 +33,7 @@ window.blueprintZoom = (() => {
             vbStart: null,
             clampMargin: (opts && opts.clampMargin) || 0.3,  // 기본 30%, 에디터용으로 확대 가능
             pan: !(opts && opts.pan === false),              // 드래그 팬 (기본 on; 대시보드 도면 등에서 off)
+            wheel: !(opts && opts.wheel === false),          // 휠 줌 (off 면 preventDefault 안 해 페이지 스크롤로 통과 — 스크롤 잠금)
             onZoom: (opts && opts.onZoom) || null,           // 줌 배율 변경 콜백 (툴바 % 표시용)
         };
         instances[containerId] = inst;
@@ -42,6 +43,7 @@ window.blueprintZoom = (() => {
 
         // ── wheel zoom ──
         inst._onWheel = (e) => {
+            if (!inst.wheel) return; // 스크롤 잠금: 휠을 삼키지 않고 페이지 스크롤로 흘려보냄
             e.preventDefault();
             // deltaY 크기에 비례하여 줌 (1.002^delta → deltaY=100 일 때 약 22% 줌)
             const factor = Math.pow(1.002, -e.deltaY);
@@ -180,6 +182,12 @@ window.blueprintZoom = (() => {
         }
     }
 
+    // 휠 줌 on/off 런타임 전환 — 스크롤 잠금 토글(레이아웃 뷰 컨트롤)에서 사용.
+    function setWheelEnabled(containerId, enabled) {
+        const inst = getInstance(containerId);
+        if (inst) inst.wheel = !!enabled;
+    }
+
     function getViewBox(containerId) {
         const inst = getInstance(containerId);
         if (!inst) return null; // 미초기화 시 null — 호출부가 "저장된 줌 없음"으로 처리
@@ -209,5 +217,5 @@ window.blueprintZoom = (() => {
         delete instances[containerId];
     }
 
-    return { init, zoomIn, zoomOut, reset, toggleFullscreen, getViewBox, setViewBox, dispose };
+    return { init, zoomIn, zoomOut, reset, toggleFullscreen, setWheelEnabled, getViewBox, setViewBox, dispose };
 })();

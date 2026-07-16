@@ -207,6 +207,17 @@
     .db-btn .material-symbols-outlined { font-size: 18px; }
     .db-hint { font-size: 13px; color: var(--c-on-surface-variant); margin: 0 0 16px; line-height: 1.5; }
     .db-section-title { font-weight: 700; font-size: 1rem; color: var(--c-on-surface); display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+
+    /* DB 관리 접이식 (DEXA 설정 > 트리거 목록 카드 내부) — 기본 접힘 */
+    .db-collapse { margin-top: 18px; border-top: 1px solid var(--c-outline-variant); padding-top: 12px; }
+    .db-collapse-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; cursor: pointer; padding: 6px 2px; font-weight: 700; font-size: 14px; color: var(--c-on-surface); font-family: inherit; }
+    .db-collapse-toggle .material-symbols-outlined { font-size: 20px; }
+    .db-collapse-toggle .db-collapse-chev { color: var(--c-on-surface-variant); transition: transform 0.15s ease; }
+    .db-collapse-toggle.open .db-collapse-chev { transform: rotate(90deg); }
+    .db-collapse-hint { font-weight: 500; font-size: 12px; color: var(--c-on-surface-variant); margin-left: auto; }
+    .db-collapse-body { padding-top: 14px; }
+    .db-caution { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px; margin-bottom: 16px; font-size: 13px; line-height: 1.5; color: var(--c-on-surface); background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); }
+    .db-caution .material-symbols-outlined { font-size: 20px; color: var(--health-inprogress); flex: none; }
     .db-dropzone { border-radius: 18px; padding: 18px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .db-alert { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-radius: 14px; font-size: 13px; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
     .db-alert-error { color: var(--health-failed); }
@@ -357,25 +368,24 @@
     <div class="flex justify-between items-end mb-element-gap">
       <div>
         <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">종합설비관리 설정</h2>
-        <p class="text-on-surface-variant" style="margin:4px 0 0;">자산 · 라인 · 매뉴얼 · 일반 환경 설정</p>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">라인 · 레이아웃 · 자산 · 매뉴얼 · 일반 환경 설정</p>
       </div>
     </div>
 
-    <!-- 탭: 기본(라인/매뉴얼/일반) + 고급(관리 — 직접 이식, 최상위 컨텍스트라 쿠키 정상 전송) -->
+    <!-- 탭: 기본(라인/레이아웃/자산/매뉴얼/일반) + 고급(DEXA 설정 — DB 관리는 트리거 목록 안 접이식) -->
     <div class="set-tabs" id="set-tabs">
-      <button class="set-tab active" data-tab="assets"><span class="material-symbols-outlined">table_edit</span>자산 관리</button>
-      <button class="set-tab" data-tab="lines"><span class="material-symbols-outlined">linear_scale</span>라인 관리</button>
+      <button class="set-tab active" data-tab="lines"><span class="material-symbols-outlined">linear_scale</span>라인 관리</button>
+      <button class="set-tab" data-tab="layoutmgmt"><span class="material-symbols-outlined">space_dashboard</span>레이아웃 관리</button>
+      <button class="set-tab" data-tab="assets"><span class="material-symbols-outlined">table_edit</span>자산 관리</button>
       <button class="set-tab" data-tab="manuals"><span class="material-symbols-outlined">menu_book</span>매뉴얼</button>
       <button class="set-tab" data-tab="general"><span class="material-symbols-outlined">settings</span>일반</button>
       <span class="set-tab-sep"></span>
       <span class="set-tab-grouplabel"><span class="material-symbols-outlined">tune</span>고급</span>
       <button class="set-tab" data-tab="dexa"><span class="material-symbols-outlined">dns</span>DEXA 설정</button>
-      <button class="set-tab" data-tab="layoutmgmt"><span class="material-symbols-outlined">space_dashboard</span>레이아웃 관리</button>
-      <button class="set-tab" data-tab="database"><span class="material-symbols-outlined">database</span>DB 관리</button>
     </div>
 
     <!-- ── 자산 관리 (asset-table.html 직접 이식 — 동일 ID 로 asset-table.js 재사용) ── -->
-    <section class="set-panel active" data-panel="assets">
+    <section class="set-panel" data-panel="assets">
       <div class="hist-filter" style="margin-bottom:14px;">
         <span class="hist-count" id="t-summary" style="margin:0;"></span>
         <span class="hist-spacer"></span>
@@ -411,7 +421,7 @@
     </section>
 
     <!-- ── 라인 관리 ── -->
-    <section class="set-panel" data-panel="lines">
+    <section class="set-panel active" data-panel="lines">
       <div class="nm-card">
         <div class="panel-header">
           <span class="panel-title"><span class="material-symbols-outlined">linear_scale</span>라인 관리</span>
@@ -520,13 +530,86 @@
       </div>
       <div class="nm-card" style="margin-bottom:24px;">
         <div class="panel-header">
-          <span class="panel-title">트리거 목록</span>
+          <span class="panel-title">스케줄 설정</span>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="ac-btn ac-btn-primary" id="trigger-add"><span class="material-symbols-outlined">add</span>트리거 추가</button>
             <button class="ac-btn" id="triggers-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
           </div>
         </div>
         <div id="triggers-host"><div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div></div>
+
+        <!-- ── DB 관리 (admin-database 직접 이식) — 고급 기능이라 기본 접힘, 펼칠 때만 로드 ── -->
+        <div class="db-collapse" id="db-collapse">
+          <button class="db-collapse-toggle" id="db-collapse-toggle" type="button" aria-expanded="false" aria-controls="db-collapse-body">
+            <span class="material-symbols-outlined db-collapse-chev">chevron_right</span>
+            <span class="material-symbols-outlined">database</span>DB 관리
+            <span class="db-collapse-hint">DEXA 데이터 가져오기 · 마이그레이션 이력</span>
+          </button>
+          <div class="db-collapse-body" id="db-collapse-body" hidden>
+            <div class="db-caution">
+              <span class="material-symbols-outlined">warning</span>
+              <span><b>주의:</b> DB 관리는 시스템 데이터베이스를 직접 변경하는 고급 기능입니다. 가져오기 적용 시 기존 자산의 확장·연결정보를 덮어쓰고 라인·그룹 구성이 전체 교체되므로, 내용을 충분히 확인한 뒤 진행하세요.</span>
+            </div>
+            <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(3,1fr);">
+              <div class="db-stat">
+                <div class="db-stat-icon kpi-icon-primary"><span class="material-symbols-outlined">storage</span></div>
+                <div class="db-stat-value" id="stat-version">–</div>
+                <div class="db-stat-label">스키마 버전</div>
+              </div>
+              <div class="db-stat">
+                <div class="db-stat-icon kpi-icon-info"><span class="material-symbols-outlined">extension</span></div>
+                <div class="db-stat-value" id="stat-aug">–</div>
+                <div class="db-stat-label">자산 확장정보</div>
+              </div>
+              <div class="db-stat">
+                <div class="db-stat-icon kpi-icon-success"><span class="material-symbols-outlined">cable</span></div>
+                <div class="db-stat-value" id="stat-conn">–</div>
+                <div class="db-stat-label">연결정보 (PLC/Servo)</div>
+              </div>
+            </div>
+            <div class="nm-card mb-element-gap">
+              <h3 class="db-section-title"><span class="material-symbols-outlined">file_upload</span>DEXA 데이터 가져오기</h3>
+              <p class="db-hint">DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 분석합니다. 가져오기를 눌러도 바로 저장되지 않으며, 아래 <b>'aug 데이터 이전하기'</b>에서 <b>적용</b>을 눌러야 DB에 반영됩니다.</p>
+              <div class="db-dropzone">
+                <button class="db-btn" id="import-pick-btn" type="button"><span class="material-symbols-outlined">folder_open</span>파일 선택</button>
+                <span id="import-file-name" class="text-on-surface-variant" style="font-size:13px;">선택된 파일 없음</span>
+                <input id="import-file-input" type="file" accept=".sqlite3,.sqlite,.db" style="display:none;" />
+                <button class="db-btn db-btn-primary" id="import-run-btn" disabled><span class="material-symbols-outlined">download</span><span id="import-run-label">가져오기</span></button>
+              </div>
+              <div id="import-result-host"></div>
+            </div>
+            <!-- aug 데이터 이전하기 (실제 커밋) — 분석 후에만 표시. admin-database.js openAfterImport() 필수 요소 -->
+            <div class="nm-card mb-element-gap" id="aug-card" style="display:none;">
+              <h3 class="db-section-title"><span class="material-symbols-outlined">sync_alt</span>aug 데이터 이전하기</h3>
+              <p class="db-hint">아래 내용이 TWM2 DB에 반영됩니다. <b>적용</b>을 눌러야 실제로 저장됩니다. 기존 자산의 확장·연결정보는 덮어쓰며, 라인·그룹은 전체 교체됩니다.</p>
+              <div id="aug-preview-host"></div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+                <button class="db-btn db-btn-primary" id="aug-apply-btn" disabled>
+                  <span class="material-symbols-outlined">check</span><span id="aug-apply-label">적용</span>
+                </button>
+                <button class="db-btn" id="aug-close-btn" type="button">닫기</button>
+              </div>
+              <div id="aug-result-host"></div>
+            </div>
+            <div class="nm-card mb-element-gap" id="batch-card" style="display:none;">
+              <h3 class="db-section-title"><span class="material-symbols-outlined">map</span>배치 가져오기</h3>
+              <p class="db-hint">TWM1 라인을 TWM2 레이아웃(도면)에 매핑하면 자산 위치와 그룹이 자동 배치됩니다. 같은 도면 이미지를 사용해야 좌표가 정확히 맞습니다.</p>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+                <select class="db-select" id="bulk-layout"><option value="">-- 일괄 선택 / 건너뛰기 --</option></select>
+                <button class="db-btn" id="bulk-apply-btn" type="button"><span class="material-symbols-outlined">select_all</span>일괄 적용</button>
+              </div>
+              <div id="batch-table-host"></div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+                <button class="db-btn db-btn-primary" id="batch-run-btn" disabled><span class="material-symbols-outlined">play_arrow</span><span id="batch-run-label">배치 가져오기</span></button>
+              </div>
+              <div id="batch-result-host"></div>
+            </div>
+            <div class="nm-card">
+              <div class="panel-header"><span class="panel-title">마이그레이션 이력</span></div>
+              <div id="migrations-host"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -541,67 +624,6 @@
       </div>
     </section>
 
-    <!-- ── DB 관리 (admin-database 직접 이식) ── -->
-    <section class="set-panel" data-panel="database">
-      <div class="dsp-grid mb-element-gap" style="grid-template-columns:repeat(3,1fr);">
-        <div class="db-stat">
-          <div class="db-stat-icon kpi-icon-primary"><span class="material-symbols-outlined">storage</span></div>
-          <div class="db-stat-value" id="stat-version">–</div>
-          <div class="db-stat-label">스키마 버전</div>
-        </div>
-        <div class="db-stat">
-          <div class="db-stat-icon kpi-icon-info"><span class="material-symbols-outlined">extension</span></div>
-          <div class="db-stat-value" id="stat-aug">–</div>
-          <div class="db-stat-label">자산 확장정보</div>
-        </div>
-        <div class="db-stat">
-          <div class="db-stat-icon kpi-icon-success"><span class="material-symbols-outlined">cable</span></div>
-          <div class="db-stat-value" id="stat-conn">–</div>
-          <div class="db-stat-label">연결정보 (PLC/Servo)</div>
-        </div>
-      </div>
-      <div class="nm-card mb-element-gap">
-        <h3 class="db-section-title"><span class="material-symbols-outlined">file_upload</span>DEXA 데이터 가져오기</h3>
-        <p class="db-hint">DEXA.sqlite3 파일을 첨부하면 자산의 aug 정보(Station·벤더·사양·라인)와 PLC/Servo 연결정보(IP·경유IP·Base·Slot)를 분석합니다. 가져오기를 눌러도 바로 저장되지 않으며, 아래 <b>'aug 데이터 이전하기'</b>에서 <b>적용</b>을 눌러야 DB에 반영됩니다.</p>
-        <div class="db-dropzone">
-          <button class="db-btn" id="import-pick-btn" type="button"><span class="material-symbols-outlined">folder_open</span>파일 선택</button>
-          <span id="import-file-name" class="text-on-surface-variant" style="font-size:13px;">선택된 파일 없음</span>
-          <input id="import-file-input" type="file" accept=".sqlite3,.sqlite,.db" style="display:none;" />
-          <button class="db-btn db-btn-primary" id="import-run-btn" disabled><span class="material-symbols-outlined">download</span><span id="import-run-label">가져오기</span></button>
-        </div>
-        <div id="import-result-host"></div>
-      </div>
-      <!-- aug 데이터 이전하기 (실제 커밋) — 분석 후에만 표시. admin-database.js openAfterImport() 필수 요소 -->
-      <div class="nm-card mb-element-gap" id="aug-card" style="display:none;">
-        <h3 class="db-section-title"><span class="material-symbols-outlined">sync_alt</span>aug 데이터 이전하기</h3>
-        <p class="db-hint">아래 내용이 TWM2 DB에 반영됩니다. <b>적용</b>을 눌러야 실제로 저장됩니다. 기존 자산의 확장·연결정보는 덮어쓰며, 라인·그룹은 전체 교체됩니다.</p>
-        <div id="aug-preview-host"></div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
-          <button class="db-btn db-btn-primary" id="aug-apply-btn" disabled>
-            <span class="material-symbols-outlined">check</span><span id="aug-apply-label">적용</span>
-          </button>
-          <button class="db-btn" id="aug-close-btn" type="button">닫기</button>
-        </div>
-        <div id="aug-result-host"></div>
-      </div>
-      <div class="nm-card mb-element-gap" id="batch-card" style="display:none;">
-        <h3 class="db-section-title"><span class="material-symbols-outlined">map</span>배치 가져오기</h3>
-        <p class="db-hint">TWM1 라인을 TWM2 레이아웃(도면)에 매핑하면 자산 위치와 그룹이 자동 배치됩니다. 같은 도면 이미지를 사용해야 좌표가 정확히 맞습니다.</p>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-          <select class="db-select" id="bulk-layout"><option value="">-- 일괄 선택 / 건너뛰기 --</option></select>
-          <button class="db-btn" id="bulk-apply-btn" type="button"><span class="material-symbols-outlined">select_all</span>일괄 적용</button>
-        </div>
-        <div id="batch-table-host"></div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
-          <button class="db-btn db-btn-primary" id="batch-run-btn" disabled><span class="material-symbols-outlined">play_arrow</span><span id="batch-run-label">배치 가져오기</span></button>
-        </div>
-        <div id="batch-result-host"></div>
-      </div>
-      <div class="nm-card" style="margin-bottom:24px;">
-        <div class="panel-header"><span class="panel-title">마이그레이션 이력</span></div>
-        <div id="migrations-host"></div>
-      </div>
-    </section>
   </div>
 
   <!-- ── 이식한 관리 모듈의 모달/오버레이 (position:fixed — DOM 위치 무관) ── -->

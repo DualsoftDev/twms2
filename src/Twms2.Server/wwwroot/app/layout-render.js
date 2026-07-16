@@ -36,6 +36,9 @@
     inprogress: '작업중', unknown: '내역 없음',
   };
   let _vpSeq = 0; // viewport 자동 id 시퀀스 (blueprintZoom 은 getElementById 필요)
+  // 스크롤 잠금: on 이면 도면 위 휠이 줌 대신 페이지 스크롤로 통과. 브라우저 공용 기억(기본 해제).
+  const SCROLL_LOCK_KEY = 'twms-bp-scroll-lock';
+  function isScrollLocked() { try { return localStorage.getItem(SCROLL_LOCK_KEY) === '1'; } catch (e) { return false; } }
   // 카드 공통 패딩 + PLC 이름/IP 텍스트 메트릭 (buildCardModel · plcCardGroup 공유)
   const CARD_PAD = 3;
   const NAME_FZ = 7.5, NAME_LH = 9.5, IP_FZ = 6, IP_LH = 8, NAME_MAX = 14;
@@ -764,10 +767,25 @@
       const c = document.createElement('div');
       c.className = 'lv-controls';
       c.innerHTML =
-        `<button class="lv-ctrl-btn" data-z="in" title="확대"><span class="material-symbols-outlined">add</span></button>`
+        `<button class="lv-ctrl-btn" data-z="lock"><span class="material-symbols-outlined"></span></button>`
+        + `<button class="lv-ctrl-btn" data-z="in" title="확대"><span class="material-symbols-outlined">add</span></button>`
         + `<button class="lv-ctrl-btn" data-z="out" title="축소"><span class="material-symbols-outlined">remove</span></button>`
         + `<button class="lv-ctrl-btn" data-z="reset" title="원래대로"><span class="material-symbols-outlined">fit_screen</span></button>`
         + `<button class="lv-ctrl-btn" data-z="fs" title="전체화면"><span class="material-symbols-outlined">fullscreen</span></button>`;
+      const lockBtn = c.querySelector('[data-z="lock"]');
+      const syncLock = () => {
+        const on = isScrollLocked();
+        lockBtn.classList.toggle('lv-lock-on', on);
+        lockBtn.querySelector('.material-symbols-outlined').textContent = on ? 'lock' : 'lock_open';
+        lockBtn.title = on ? '스크롤 잠금 해제 (휠로 확대/축소)' : '스크롤 잠금 (휠은 페이지 스크롤)';
+      };
+      syncLock();
+      lockBtn.addEventListener('click', () => {
+        const on = !isScrollLocked();
+        try { localStorage.setItem(SCROLL_LOCK_KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
+        window.blueprintZoom.setWheelEnabled(viewport.id, !on);
+        syncLock();
+      });
       c.querySelector('[data-z="in"]').addEventListener('click', () => window.blueprintZoom.zoomIn(viewport.id));
       c.querySelector('[data-z="out"]').addEventListener('click', () => window.blueprintZoom.zoomOut(viewport.id));
       c.querySelector('[data-z="reset"]').addEventListener('click', () => window.blueprintZoom.reset(viewport.id));
@@ -1053,7 +1071,7 @@
       attachTooltip(svg);
       attachClicks(svg);
       if (zoomEnabled) {
-        window.blueprintZoom.init(viewport.id, { clampMargin: 0.3, pan: panEnabled, padding: VB_PAD });
+        window.blueprintZoom.init(viewport.id, { clampMargin: 0.3, pan: panEnabled, padding: VB_PAD, wheel: !isScrollLocked() });
         if (savedVb) window.blueprintZoom.setViewBox(viewport.id, savedVb);
         viewport.appendChild(buildControls());
         onFsChange(); // 전체화면 아이콘 동기화

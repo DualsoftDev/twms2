@@ -37,7 +37,7 @@
 
   // ── 전역 상태 ──
   const S = {
-    activeTab: 1,
+    activeTab: 0,
     searchText: '', searchMode: 'contains',
     // 탭1 자산
     assets: [], typeNames: [], lineNames: [],
@@ -69,7 +69,7 @@
   function applyQuery() {
     const q = new URLSearchParams(location.search);
     const tab = parseInt(q.get('tab'), 10);
-    S.activeTab = Number.isInteger(tab) ? tab : 1;
+    S.activeTab = Number.isInteger(tab) ? tab : 0;
     if (q.get('line')) { S.filterLine = q.get('line'); }
     if (q.get('type')) { S.filterType = q.get('type'); }
     if (q.get('health')) S.filterHealth = q.get('health');
@@ -92,7 +92,7 @@
   /* ── URL 동기화 (필터 변경 시 — replaceState, Razor.UpdateUrl 이식) ── */
   function syncUrl() {
     const q = new URLSearchParams();
-    if (S.activeTab !== 1) q.set('tab', String(S.activeTab));
+    if (S.activeTab !== 0) q.set('tab', String(S.activeTab));
     if (S.filterLine) q.set('line', S.filterLine);
     if (S.filterType) q.set('type', S.filterType);
     if (S.periodLabel && S.periodLabel !== 'today') q.set('period', S.periodLabel);
