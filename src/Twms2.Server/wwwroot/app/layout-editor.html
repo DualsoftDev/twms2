@@ -31,7 +31,7 @@
     /* ── 페이지 헤더 + 탭 ── */
     .le-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
     .le-title { font-size: 20px; font-weight: 800; color: var(--c-primary); margin: 0; }
-    .le-tabs { margin-left: auto; }
+    .le-tabs { margin-left: 0; }
     .le-tab[hidden] { display: none; }
 
     /* 액션/아이콘 버튼 (레이아웃 관리 페이지 톤 재사용) */
@@ -254,7 +254,6 @@
   <div class="dsp-page">
     <!-- 헤더 + 탭 -->
     <div class="le-head">
-      <a href="/admin/layout" class="le-iconbtn" title="레이아웃 관리로"><span class="material-symbols-outlined">arrow_back</span></a>
       <h2 class="le-title" id="le-title">레이아웃 편집</h2>
       <div class="lv-seg le-tabs" id="le-tabs">
         <button type="button" class="lv-seg-btn active" data-tab="config"><span class="material-symbols-outlined">image</span>도면 설정</button>

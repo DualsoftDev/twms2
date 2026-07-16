@@ -412,18 +412,36 @@
     on('batch-run-btn', 'click', runPositionImport);
   }
 
-  // settings.html 동거 시 자기 패널(database)이 활성일 때만 폴링 — 독립 페이지에는 패널이 없어 항상 true
+  // settings.html 동거 시 DEXA 패널이 활성이고 DB 관리 섹션이 펼쳐진 때만 폴링
+  // — 독립 페이지에는 패널/접이식이 없어 항상 true
   function panelActive() {
-    const p = document.querySelector('.set-panel[data-panel="database"]');
-    return !p || p.classList.contains('active');
+    const p = document.querySelector('.set-panel[data-panel="dexa"]');
+    if (p && !p.classList.contains('active')) return false;
+    const body = $('db-collapse-body');
+    return !body || !body.hidden;
+  }
+
+  // settings.html 접이식 토글 — 첫 펼침 때 최초 로드(지연)
+  let _loaded = false;
+  function bindCollapse() {
+    const t = $('db-collapse-toggle'), body = $('db-collapse-body');
+    if (!t || !body) return;
+    t.addEventListener('click', () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      t.classList.toggle('open', open);
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open && !_loaded) { _loaded = true; load(); }
+    });
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: 'admin' });
     bind();
-    await load();
-    setInterval(() => { if (!document.hidden && panelActive()) load(); }, 30000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && panelActive()) load(); });
-    document.addEventListener('twms:panel-shown', (e) => { if (e.detail === 'database') load(); });
+    bindCollapse();
+    if (!$('db-collapse-body')) { _loaded = true; await load(); } // 독립 페이지는 즉시 로드
+    setInterval(() => { if (_loaded && !document.hidden && panelActive()) load(); }, 30000);
+    document.addEventListener('visibilitychange', () => { if (_loaded && !document.hidden && panelActive()) load(); });
+    document.addEventListener('twms:panel-shown', (e) => { if (e.detail === 'dexa' && _loaded && panelActive()) load(); });
   });
 })();

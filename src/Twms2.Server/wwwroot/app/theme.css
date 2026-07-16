@@ -437,6 +437,9 @@ body.nav-collapsed .dsp-header { width: 100%; }
 .lv-ctrl-btn:hover { color: var(--c-primary); }
 .lv-ctrl-btn:active { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
 .lv-ctrl-btn .material-symbols-outlined { font-size: 20px; }
+/* 스크롤 잠금 on: 눌린(inset) 모양 + 강조색으로 상태 표시 */
+.lv-ctrl-btn.lv-lock-on { color: var(--c-primary);
+  box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
 
 .lv-pop { position: absolute; z-index: 30; min-width: 200px; max-width: 300px; max-height: calc(100% - 16px); overflow-y: auto;
   background: var(--c-surface); border-radius: 14px; padding: 12px 14px; font-size: 13px; line-height: 1.5;

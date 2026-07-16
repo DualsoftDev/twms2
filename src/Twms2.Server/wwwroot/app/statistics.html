@@ -132,7 +132,7 @@
     <div class="flex justify-between items-end mb-element-gap">
       <div>
         <h2 class="font-headline-lg text-headline-lg text-primary" style="margin:0;">통계</h2>
-        <p class="text-on-surface-variant" style="margin:4px 0 0;">기간별 백업 횟수 · 성공/실패 · 변화 추이와 온·오프라인 전환 통계</p>
+        <p class="text-on-surface-variant" style="margin:4px 0 0;">기간별 작업 횟수 · 성공/실패 · 변화 추이와 온·오프라인 전환 통계</p>
       </div>
     </div>
 
@@ -180,7 +180,7 @@
     <div class="dsp-grid mb-element-gap" id="st-kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
       <div class="kpi-card">
         <div class="kpi-icon kpi-icon-primary"><span class="material-symbols-outlined">backup</span></div>
-        <div class="kpi-body"><span class="kpi-label">총 백업 횟수</span>
+        <div class="kpi-body"><span class="kpi-label">총 작업 횟수</span>
           <div class="kpi-value-row"><span class="kpi-value" id="kpi-total">–</span><span class="kpi-unit">회</span></div>
           <span class="st-kpi-sub" id="kpi-total-sub"></span></div>
       </div>
@@ -223,7 +223,8 @@
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
           <!-- 비교 모드(라인/타입 전체 비교) 시 어떤 지표를 비교할지 -->
           <select class="st-input" id="st-metric" style="display:none;">
-            <option value="n">백업 횟수</option>
+            <option value="n">작업 횟수</option>
+            <option value="s">작업 성공 횟수</option>
             <option value="c">변화</option>
             <option value="f">실패</option>
             <option value="successRate">성공률</option>

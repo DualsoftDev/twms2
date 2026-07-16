@@ -420,6 +420,7 @@
         const bd = backupDaily(groupMap.get(name) || new Set());
         const values = bd.map(o => {
           if (metric === 'n') return o.n;
+          if (metric === 's') return o.c + o.u;
           if (metric === 'c') return o.c;
           if (metric === 'f') return o.f;
           if (o.n === 0) return null; // 비율은 시도 없으면 공백
@@ -428,10 +429,11 @@
           if (metric === 'changeRate') return rate(o.c, o.n);
           return o.n;
         });
-        return { key: 'g:' + name, label: name, color: PALETTE[k % PALETTE.length], values };
-      }).filter(s => percent
-        ? s.values.some(v => v != null)             // 비율: 시도가 있던(=비-null) 그룹은 0%여도 표시(최악 성과군 노출)
-        : s.values.some(v => v != null && v > 0));  // 횟수: 활동이 있던 그룹만
+        // active: 기간 내 작업 시도가 있던 그룹 (성공 횟수처럼 값이 전부 0이어도 표시할 근거)
+        return { key: 'g:' + name, label: name, color: PALETTE[k % PALETTE.length], values, active: bd.some(o => o.n > 0) };
+      }).filter(s => percent || metric === 's'
+        ? s.active                                  // 비율·성공 횟수: 시도가 있던 그룹은 0이어도 표시(최악 성과군 노출)
+        : s.values.some(v => v != null && v > 0));  // 그 외 횟수: 활동이 있던 그룹만
       legendItems = series;
     } else {
       const bd = backupDaily(ids);
@@ -444,7 +446,8 @@
         ];
       } else {
         series = [
-          { key: 'n', label: '백업 횟수', color: pal.primary, values: bd.map(o => o.n), width: 3 },
+          { key: 'n', label: '작업 횟수', color: pal.primary, values: bd.map(o => o.n), width: 3 },
+          { key: 's', label: '성공', color: '#8b5cf6', values: bd.map(o => o.c + o.u), dash: '2 3' },
           { key: 'c', label: '변화', color: pal.changed, values: bd.map(o => o.c) },
           { key: 'u', label: '변경없음', color: pal.unchanged, values: bd.map(o => o.u), dash: '5 4' },
           { key: 'f', label: '실패', color: pal.failed, values: bd.map(o => o.f) },
@@ -455,8 +458,12 @@
 
     renderTrendLegend(legendItems);
 
-    const hasData = series.some(s => s.values.some(v => v != null && v > 0));
-    if (!hasData) { emptyHost(host, '이 기간에 백업 이력이 없습니다.'); return; }
+    // 비율·성공 횟수는 값이 전부 0(예: 실패만 있던 기간)이어도 시도가 있었다면 데이터로 취급해 0으로 그린다.
+    // 비교 모드는 위 필터가 이미 표시 대상 그룹만 남기므로 시리즈 유무로 판단.
+    const hasData = compare
+      ? series.length > 0
+      : series.some(s => s.values.some(v => percent ? v != null : (v != null && v > 0)));
+    if (!hasData) { emptyHost(host, '이 기간에 작업 이력이 없습니다.'); return; }
     lineChart(host, { series, percent, tipTitle: compare ? null : scopeName() });
   }
 
@@ -477,7 +484,7 @@
   function renderStack(ids) {
     const host = $('st-stack');
     const bd = backupDaily(ids);
-    if (!bd.some(o => o.n > 0)) { emptyHost(host, '백업 이력이 없습니다.'); return; }
+    if (!bd.some(o => o.n > 0)) { emptyHost(host, '작업 이력이 없습니다.'); return; }
     const pal = palette();
     stackedChart(host, {
       stacks: [
@@ -554,8 +561,8 @@
       `<span class="st-ratiobar"><span style="width:${Math.max(0, Math.min(100, pct))}%;background:${color}"></span></span> <span style="font-variant-numeric:tabular-nums;">${pct}%</span>`;
 
     const cols = isAsset
-      ? [['name', '자산명', 'l'], ['line', '라인', 'l'], ['type', '타입', 'l'], ['n', '백업', 'r'], ['c', '변화', 'r'], ['f', '실패', 'r'], ['successRate', '성공률', 'r'], ['on', '온라인전환', 'r'], ['off', '오프라인전환', 'r']]
-      : [['name', field === 'type' ? '타입' : '라인', 'l'], ['count', '자산수', 'r'], ['n', '백업', 'r'], ['c', '변화', 'r'], ['u', '변경없음', 'r'], ['f', '실패', 'r'], ['successRate', '성공률', 'r'], ['on', '온라인전환', 'r'], ['off', '오프라인전환', 'r']];
+      ? [['name', '자산명', 'l'], ['line', '라인', 'l'], ['type', '타입', 'l'], ['n', '작업', 'r'], ['s', '성공', 'r'], ['c', '변화', 'r'], ['f', '실패', 'r'], ['successRate', '성공률', 'r'], ['on', '온라인전환', 'r'], ['off', '오프라인전환', 'r']]
+      : [['name', field === 'type' ? '타입' : '라인', 'l'], ['count', '자산수', 'r'], ['n', '작업', 'r'], ['s', '성공', 'r'], ['c', '변화', 'r'], ['u', '변경없음', 'r'], ['f', '실패', 'r'], ['successRate', '성공률', 'r'], ['on', '온라인전환', 'r'], ['off', '오프라인전환', 'r']];
 
     const arrow = (key) => state.sortKey === key ? `<span class="sort-arrow material-symbols-outlined">${state.sortDir < 0 ? 'arrow_drop_down' : 'arrow_drop_up'}</span>` : '';
     const thead = `<thead><tr>${cols.map(([key, lbl, al]) =>
@@ -778,11 +785,11 @@
     if (!state.data) return;
     const ids = scopeIds();
     const bd = backupDaily(ids), td = transDaily(ids);
-    const head = ['날짜', '백업횟수', '변화', '변경없음', '실패', '작업중', '성공률(%)', '온라인전환', '오프라인전환'];
+    const head = ['날짜', '작업횟수', '성공', '변화', '변경없음', '실패', '작업중', '성공률(%)', '온라인전환', '오프라인전환'];
     const lines = [head.join(',')];
     state.data.days.forEach((day, i) => {
       const o = bd[i], t = td[i];
-      lines.push([day, o.n, o.c, o.u, o.f, o.p, (o.n ? rate(o.c + o.u, o.n) : 0), t.on, t.off].join(','));
+      lines.push([day, o.n, o.c + o.u, o.c, o.u, o.f, o.p, (o.n ? rate(o.c + o.u, o.n) : 0), t.on, t.off].join(','));
     });
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');

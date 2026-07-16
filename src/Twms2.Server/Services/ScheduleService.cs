@@ -61,6 +61,15 @@ public class ScheduleService
         return await UpdateTriggerAsync(existing.Id, existing.Name, cronExpression, existing.Enabled, existing.Description);
     }
 
+    public async Task<bool> UpdateTriggerNameAsync(int triggerId, string name)
+    {
+        var triggers = await _dexaRead.GetTriggersAsync();
+        var existing = triggers.FirstOrDefault(t => t.Id == triggerId);
+        if (existing == null) return false;
+
+        return await UpdateTriggerAsync(existing.Id, name, existing.CronExpression, existing.Enabled, existing.Description);
+    }
+
     public async Task<bool> DeleteTriggerAsync(int id)
     {
         var trigger = new ORM.Trigger(id, null, null, null);
