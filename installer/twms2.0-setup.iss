@@ -105,17 +105,39 @@ begin
   Result := (ResultCode = 0);
 end;
 
-// 기존 서비스 중지 (업그레이드 시)
+// 서비스가 STOPPED 상태인지 확인
+function ServiceStopped(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('cmd.exe', '/c sc.exe query ' + SERVICE_NAME + ' | findstr /C:"STOPPED"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := (ResultCode = 0);
+end;
+
+// 기존 서비스 중지 (업그레이드 시) — STOPPED 확인까지 대기 + 잔여 프로세스 강제 종료
 procedure StopExistingService();
 var
   ResultCode: Integer;
+  i: Integer;
 begin
   if ServiceExists() then
   begin
     Log('기존 서비스 중지 중...');
     Exec('sc.exe', 'stop ' + SERVICE_NAME, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(3000);
+    // 최대 30초 동안 STOPPED 상태 대기 (Akka/Kestrel 정리에 3초 이상 걸릴 수 있음)
+    for i := 1 to 30 do
+    begin
+      if ServiceStopped() then Break;
+      Sleep(1000);
+    end;
+    if not ServiceStopped() then
+      Log('경고: 서비스가 30초 내에 중지되지 않음 — 프로세스 강제 종료 시도');
   end;
+
+  // 수동 실행 인스턴스 포함, DLL을 물고 있는 잔여 프로세스 강제 종료
+  Exec('taskkill.exe', '/F /T /IM ' + '{#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1000);
 end;
 
 // 서비스 생성 및 설정
@@ -203,8 +225,7 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    Exec('sc.exe', 'stop ' + SERVICE_NAME, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(3000);
+    StopExistingService();
     Exec('sc.exe', 'delete ' + SERVICE_NAME, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
