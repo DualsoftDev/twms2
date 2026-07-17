@@ -48,6 +48,28 @@
     // 삭제 버튼은 로고가 있을 때만 노출 (SettingsGeneral 와 동일)
     const delBtn = $('logo-delete-btn');
     if (delBtn) delBtn.style.display = g.logoUrl ? 'inline-flex' : 'none';
+
+    // 다운로드 보안 — 저장 직후 폴링이 이전 값으로 되돌리지 않도록 저장 중에는 건너뜀
+    const dlChk = $('dl-auth-chk');
+    if (dlChk && !_savingDlAuth) dlChk.checked = !!g.requireLoginForDownload;
+  }
+
+  // ──────────────── 다운로드 보안 ────────────────
+  let _savingDlAuth = false;
+
+  async function saveDownloadAuth(e) {
+    const on = e.target.checked;
+    _savingDlAuth = true;
+    e.target.disabled = true;
+    try {
+      const res = await postJson('/api/settings/security', { requireLoginForDownload: on });
+      if (!res.ok) { e.target.checked = !on; toast(res.error || '저장 실패'); return; }
+      if (_state.general) _state.general.requireLoginForDownload = on;
+      toast(on ? '이제 다운로드/리포트에 로그인이 필요합니다.' : '이제 로그인 없이 다운로드할 수 있습니다.');
+    } finally {
+      _savingDlAuth = false;
+      e.target.disabled = false;
+    }
   }
 
   // ──────────────── 사이드바 로고 ────────────────
@@ -319,6 +341,8 @@
     // 제목·부제
     $('brand-save-btn').addEventListener('click', saveBrand);
     $('brand-reset-btn').addEventListener('click', resetBrand);
+    // 다운로드 보안
+    $('dl-auth-chk').addEventListener('change', saveDownloadAuth);
     // 로고 업로드/삭제
     $('logo-pick-btn').addEventListener('click', () => $('logo-file-input').click());
     $('logo-file-input').addEventListener('change', onLogoPicked);

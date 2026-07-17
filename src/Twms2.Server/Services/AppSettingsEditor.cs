@@ -21,6 +21,10 @@ public class AppSettingsEditor
     private string _navTitle;
     private string _navSubtitle;
 
+    // 다운로드/리포트 로그인 요구 여부. 기본 false(개방 — 구 TWM 동작).
+    // 미들웨어가 요청마다 읽으므로 브랜드와 같은 이유로 메모리 캐시(저장 즉시 반영).
+    private volatile bool _requireLoginForDownload;
+
     public const string DefaultNavTitle = "TWMS";
     public const string DefaultNavSubtitle = "Total Web Management System";
 
@@ -28,6 +32,16 @@ public class AppSettingsEditor
     {
         _navTitle = config["App:NavTitle"] ?? DefaultNavTitle;
         _navSubtitle = config["App:NavSubtitle"] ?? DefaultNavSubtitle;
+        _requireLoginForDownload = bool.TryParse(config["App:RequireLoginForDownload"], out var r) && r;
+    }
+
+    /// <summary>백업 ZIP 다운로드·DEXA 리포트 열람에 로그인을 요구할지. 저장 즉시 반영.</summary>
+    public bool RequireLoginForDownload => _requireLoginForDownload;
+
+    public Task SaveRequireLoginForDownloadAsync(bool require)
+    {
+        _requireLoginForDownload = require;
+        return UpdateAppSectionAsync(app => app["RequireLoginForDownload"] = require);
     }
 
     /// <summary>현재 사이드바 브랜드(제목/부제). 저장 즉시 반영(메모리 캐시) — Dev/Prod 공통 동작.</summary>

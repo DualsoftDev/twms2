@@ -46,6 +46,7 @@
     <Compile Include="Messages/A2SMessages.fs" />
     <Compile Include="Messages/S2CMessages.fs" />
     <Compile Include="DexaClientOptions.fs" />
+    <Compile Include="DexaPortPatch.fs" />
     <Compile Include="IDexaClient.fs" />
     <Compile Include="DexaDirectClient.fs" />
   </ItemGroup>
@@ -119,6 +120,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- DEXA DLL의 하드코딩 포트(50011) 런타임 패치용 (DexaPortPatch.fs) -->
+    <PackageReference Include="Lib.Harmony" Version="2.*" />
     <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.*" />
     <PackageReference Include="System.Reactive" Version="6.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
