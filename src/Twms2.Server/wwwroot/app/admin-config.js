@@ -2,7 +2,9 @@
  * DEXA 설정(관리) — ServerConfig.razor 의 에이전트 목록 + 트리거 관리를 정적 페이지로 이식.
  * GET /api/admin/config 스냅샷 1회 조회 → 두 표 렌더. 30초 폴링 + 탭 복귀 시 갱신.
  * 쓰기: 트리거 추가/스케줄(cron) 수정/실행/삭제 (같은 출처 → 쿠키 자동 동봉, JS 토큰 불필요).
- * 제외(deviations): 에이전트 재시작·연결 피어(Akka), 트리거↔자산 매핑 편집.
+ * 에이전트 재시작 + 트리거↔자산 매핑 편집 포함(Inc12).
+ * 수동 백업 테스트: 필터 테이블에서 선택한 자산을 한 대씩 순차 백업 —
+ * 큐는 이 페이지 JS 에만 존재(이탈 시 잔여 자동 중단), 진행 감지는 액션 id 기반 폴링.
  * ==========================================================================*/
 (function () {
   'use strict';
@@ -259,8 +261,8 @@
     }
     const body = S.triggers.map(t => {
       const stateChip = t.enabled
-        ? `<span class="chip chip-success">활성</span>`
-        : `<span class="chip chip-default">비활성</span>`;
+        ? `<button class="ac-chip-btn ac-chip-btn-on" data-act="toggle" data-id="${t.id}" title="클릭하여 비활성화">활성</button>`
+        : `<button class="ac-chip-btn ac-chip-btn-off" data-act="toggle" data-id="${t.id}" title="클릭하여 활성화">비활성</button>`;
       const mapChip = `<span class="chip ${t.mappedAssetCount > 0 ? 'chip-info' : 'chip-default'}">${t.mappedAssetCount}개</span>`;
       const running = S.runningTriggerIds.has(t.id);
       const runBtn = running
@@ -270,9 +272,9 @@
         <td>${t.id}</td>
         <td><a class="ac-cron-link" data-act="rename" data-id="${t.id}" title="이름 변경">${esc(t.name || '-')}</a></td>
         <td><a class="ac-cron-link" data-act="cron" data-id="${t.id}" title="${esc(t.cronExpression || '')}">${esc(cronToReadable(t.cronExpression))}</a></td>
-        <td>${stateChip}</td>
         <td class="wrap" title="${esc(t.description || '')}">${esc(t.description || '-')}</td>
         <td>${mapChip}</td>
+        <td>${stateChip}</td>
         <td><div class="ac-actions">
           <button class="ac-iconbtn ac-iconbtn-info" data-act="map" data-id="${t.id}" title="자산 매핑"><span class="material-symbols-outlined">account_tree</span></button>
           ${runBtn}
@@ -281,7 +283,7 @@
       </tr>`;
     }).join('');
     host.innerHTML = `<div class="ac-table-wrap"><table class="nm-table">
-      <thead><tr><th>ID</th><th>이름</th><th>스케줄</th><th>상태</th><th>설명</th><th>자산 매핑</th><th>작업</th></tr></thead>
+      <thead><tr><th>ID</th><th>이름</th><th>스케줄</th><th>설명</th><th>자산 매핑</th><th>상태</th><th>작업</th></tr></thead>
       <tbody>${body}</tbody></table></div>`;
 
     host.querySelectorAll('[data-act]').forEach(el => {
@@ -293,6 +295,7 @@
         else if (act === 'cron') openCronModal(id);
         else if (act === 'map') openMapModal(id);
         else if (act === 'rename') renameTrigger(id);
+        else if (act === 'toggle') toggleTriggerEnabled(id);
       });
     });
   }
@@ -341,6 +344,22 @@
       if (r.ok) { toast('트리거 이름이 변경되었습니다.'); await load(); }
       else toast((await safeErr(r)) || '트리거 이름 변경 실패');
     } catch (e) { toast('트리거 이름 변경 실패: ' + e.message); }
+  }
+
+  async function toggleTriggerEnabled(id) {
+    const t = S.triggers.find(x => x.id === id);
+    if (!t) return;
+    const next = !t.enabled;
+    if (!confirm(`트리거 '${t.name}'을(를) ${next ? '활성화' : '비활성화'}하시겠습니까?${next ? '' : '\n비활성화하면 스케줄 백업이 실행되지 않습니다.'}`)) return;
+    try {
+      const r = await fetch(`/api/admin/config/triggers/${id}/enabled`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (r.ok) { toast(`트리거가 ${next ? '활성화' : '비활성화'}되었습니다.`); await load(); }
+      else toast((await safeErr(r)) || '트리거 활성 상태 변경 실패');
+    } catch (e) { toast('트리거 활성 상태 변경 실패: ' + e.message); }
   }
 
   async function deleteTrigger(id) {
@@ -494,6 +513,254 @@
     finally { btn.disabled = false; }
   }
 
+  /* ════════════════ 수동 백업 테스트 (선택 자산 순차 실행) ════════════════
+   * DEXA 백업은 fire & forget 이라 완료 응답이 없다. 대신 백업 시작 시 DEXA DB 에
+   * 액션 행이 생기고 종료 시 그 행에 결과가 영구 기록되므로,
+   * 요청 직전 최신 액션 id(baseline)를 잡고 "baseline 보다 큰 새 행 등장 → 그 행의 종료"를
+   * 폴링으로 관측한다 (health 비교보다 견고 — 서버 15s 캐시 지연/동일 결과 재백업에도 오판 없음).
+   * 순차 큐는 이 함수 스코프에만 존재 → 페이지 이탈 시 다음 명령이 나가지 않아 자동 중단. */
+  const BT = {
+    assets: [],            // GET /api/assets 스냅샷
+    selected: new Set(),   // 체크된 assetId
+    q: '', line: '', type: '', health: '',
+    running: false,
+    stopReq: false,
+    currentId: null,       // 지금 백업 중인 자산 (행 하이라이트)
+    res: new Map(),        // assetId → { state, label, spin }
+    page: 1,
+    manualPage: false,     // 실행 중 사용자가 직접 페이지를 넘겼으면 자동 추적(현재 자산 페이지로 이동) 중단
+  };
+  const BT_PAGE_SIZE = 15;         // 통계 자산별 상세 테이블과 동일
+  const BT_POLL = 5000;            // 상태 폴링 주기 (서버 캐시 15s 보다 촘촘하면 충분)
+  const BT_START_TIMEOUT = 90e3;   // 시작(새 액션 행 등장) 감지 상한 — 캐시 15s×2단 지연 + 큐잉 여유
+  const BT_FINISH_TIMEOUT = 600e3; // 완료 대기 상한 — 3분대 백업 실측 + 여유 (원본 Blazor 5분 → 10분)
+
+  const btSleep = (ms) => new Promise(r => setTimeout(r, ms));
+  function btBeforeUnload(e) { e.preventDefault(); e.returnValue = ''; return ''; }
+
+  async function btFetchStatus(id) {
+    const r = await fetch(`/api/assets/${id}/backup-status`, { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  async function btLoadAssets() {
+    if (BT.running || !$('bt-host')) return;
+    try {
+      const r = await fetch('/api/assets', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return;
+      const d = await r.json();
+      BT.assets = d.assets || [];
+      btFillSelect($('bt-line'), d.lineNames || [], BT.line, '전체 라인');
+      btFillSelect($('bt-type'), d.typeNames || [], BT.type, '전체 타입');
+      // 목록에서 사라진 자산은 선택 해제
+      const ids = new Set(BT.assets.map(a => a.assetId));
+      Array.from(BT.selected).forEach(id => { if (!ids.has(id)) BT.selected.delete(id); });
+      renderBT();
+    } catch (e) { /* 무시 — 다음 폴링에서 재시도 */ }
+  }
+
+  function btFillSelect(sel, names, cur, allLabel) {
+    if (!sel) return;
+    sel.innerHTML = `<option value="">${esc(allLabel)}</option>`
+      + names.map(n => `<option value="${esc(n)}"${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  }
+
+  function btFiltered() {
+    const q = BT.q.trim().toLowerCase();
+    return BT.assets.filter(a =>
+      (!q || (a.name || '').toLowerCase().includes(q) || (a.ip || '').toLowerCase().includes(q)) &&
+      (!BT.line || (a.lineName || '') === BT.line) &&
+      (!BT.type || (a.typeName || '') === BT.type) &&
+      (!BT.health || (a.health || 'unknown') === BT.health));
+  }
+
+  function btSetRes(id, state, label, spin) {
+    BT.res.set(id, { state, label, spin: !!spin });
+    renderBT();
+  }
+
+  const BT_HEALTH_CHIP = { backedup: 'chip-success', unchanged: 'chip-info', failed: 'chip-error', inprogress: 'chip-warning' };
+  const BT_RES_CHIP = { backedup: 'chip-success', unchanged: 'chip-info', failed: 'chip-error', incomplete: 'chip-error', error: 'chip-error', nostart: 'chip-error' };
+
+  function btResultCell(id) {
+    const r = BT.res.get(id);
+    if (!r) return `<span style="color:var(--c-outline);font-size:12px;">-</span>`;
+    if (r.spin)
+      return `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--c-on-surface-variant);"><span class="ac-spinner" style="width:14px;height:14px;"></span>${esc(r.label)}</span>`;
+    const title = r.state === 'timeout' ? '완료 신호를 제한시간 내 받지 못했습니다. 백업은 서버에서 계속 진행 중일 수 있으니 백업 이력에서 확인하세요.'
+      : r.state === 'nostart' ? 'DEXA 가 백업을 시작하지 않았습니다. 에이전트 오프라인/미할당이거나 요청이 거부되었을 수 있습니다.'
+      : '';
+    return `<span class="chip ${BT_RES_CHIP[r.state] || 'chip-default'}"${title ? ` title="${esc(title)}"` : ''}>${esc(r.label)}</span>`;
+  }
+
+  function renderBT() {
+    const host = $('bt-host');
+    if (!host) return;
+    const list = btFiltered();
+    const visSel = list.filter(a => BT.selected.has(a.assetId));
+
+    const cnt = $('bt-selcount'); if (cnt) cnt.textContent = `${visSel.length}개 선택`;
+    const run = $('bt-run'); if (run) { run.style.display = BT.running ? 'none' : ''; run.disabled = !visSel.length; }
+    const stop = $('bt-stop'); if (stop) { stop.style.display = BT.running ? '' : 'none'; stop.disabled = BT.stopReq; }
+    const refresh = $('bt-refresh'); if (refresh) refresh.disabled = BT.running;
+
+    if (!list.length) {
+      host.innerHTML = `<div class="ac-empty">${BT.assets.length ? '조건에 맞는 자산이 없습니다.' : '등록된 자산이 없습니다.'}</div>`;
+      return;
+    }
+
+    // 페이징 — 실행 중에는 현재 백업 중인 자산의 페이지를 자동 추적(직접 넘기면 중단)
+    const pages = Math.max(1, Math.ceil(list.length / BT_PAGE_SIZE));
+    if (BT.running && BT.currentId != null && !BT.manualPage) {
+      const idx = list.findIndex(a => a.assetId === BT.currentId);
+      if (idx >= 0) BT.page = Math.floor(idx / BT_PAGE_SIZE) + 1;
+    }
+    if (BT.page > pages) BT.page = pages;
+    if (BT.page < 1) BT.page = 1;
+    const pageList = list.slice((BT.page - 1) * BT_PAGE_SIZE, BT.page * BT_PAGE_SIZE);
+
+    const allOn = visSel.length === list.length && list.length > 0;
+    const dis = BT.running ? ' disabled' : '';
+    const cb = 'style="width:16px;height:16px;accent-color:var(--c-primary);cursor:pointer;"';
+    const rows = pageList.map(a => {
+      const agent = a.agentName
+        ? `${esc(a.agentName)} <span class="chip ${a.agentOnline ? 'chip-success' : 'chip-default'}">${a.agentOnline ? '온라인' : '오프라인'}</span>`
+        : `<span style="color:var(--c-outline);">자동</span>`;
+      return `<tr${BT.currentId === a.assetId ? ' style="background:var(--c-surface-container-low);"' : ''}>
+        <td><input type="checkbox" data-bt="${a.assetId}" ${BT.selected.has(a.assetId) ? 'checked' : ''}${dis} ${cb} /></td>
+        <td>${esc(a.name || '-')}</td>
+        <td>${esc(a.lineName || '-')}</td>
+        <td>${esc(a.typeName || '-')}</td>
+        <td>${esc(a.ip || '-')}</td>
+        <td>${agent}</td>
+        <td><span class="chip ${BT_HEALTH_CHIP[a.health] || 'chip-default'}">${esc(a.healthLabel || '-')}</span></td>
+        <td>${fmtDateTime(a.lastBackupTime)}</td>
+        <td>${btResultCell(a.assetId)}</td>
+      </tr>`;
+    }).join('');
+    const pager = pages > 1 ? `<div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px;">
+      <button class="ac-btn" id="bt-prev" ${BT.page <= 1 ? 'disabled' : ''} title="이전 페이지"><span class="material-symbols-outlined">chevron_left</span></button>
+      <span style="font-size:12px;color:var(--c-on-surface-variant);font-variant-numeric:tabular-nums;">${BT.page} / ${pages} 페이지 · 총 ${list.length}개</span>
+      <button class="ac-btn" id="bt-next" ${BT.page >= pages ? 'disabled' : ''} title="다음 페이지"><span class="material-symbols-outlined">chevron_right</span></button>
+    </div>` : '';
+
+    host.innerHTML = `<div class="ac-table-wrap"><table class="nm-table">
+      <thead><tr>
+        <th><input type="checkbox" id="bt-all" ${allOn ? 'checked' : ''}${dis} ${cb} title="필터 결과 전체(모든 페이지) 선택/해제" /></th>
+        <th>이름</th><th>라인</th><th>타입</th><th>IP</th><th>에이전트</th><th>현재 상태</th><th>마지막 백업</th><th>테스트 결과</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>${pager}`;
+
+    host.querySelectorAll('input[data-bt]').forEach(el => el.addEventListener('change', () => {
+      const id = parseInt(el.getAttribute('data-bt'), 10);
+      if (el.checked) BT.selected.add(id); else BT.selected.delete(id);
+      renderBT();
+    }));
+    const all = host.querySelector('#bt-all');
+    if (all) all.addEventListener('change', () => {
+      list.forEach(a => { if (all.checked) BT.selected.add(a.assetId); else BT.selected.delete(a.assetId); });
+      renderBT();
+    });
+    const movePage = (d) => { BT.page += d; if (BT.running) BT.manualPage = true; renderBT(); };
+    const prev = host.querySelector('#bt-prev'); if (prev) prev.addEventListener('click', () => movePage(-1));
+    const next = host.querySelector('#bt-next'); if (next) next.addEventListener('click', () => movePage(1));
+  }
+
+  async function btRun() {
+    if (BT.running) return;
+    const order = btFiltered().map(a => a.assetId).filter(id => BT.selected.has(id));
+    if (!order.length) { toast('백업할 자산을 선택해주세요.'); return; }
+    if (!confirm(`선택한 ${order.length}개 자산을 위에서부터 한 대씩 순서대로 백업합니다.\n진행 중 페이지를 벗어나면 남은 자산은 실행되지 않습니다.\n시작하시겠습니까?`)) return;
+
+    BT.running = true;
+    BT.stopReq = false;
+    BT.manualPage = false;
+    BT.res.clear();
+    order.forEach(id => BT.res.set(id, { state: 'pending', label: '대기' }));
+    window.addEventListener('beforeunload', btBeforeUnload);
+    renderBT();
+    try {
+      for (const id of order) {
+        if (BT.stopReq) { BT.res.set(id, { state: 'skipped', label: '건너뜀' }); continue; }
+        BT.currentId = id;
+        await btBackupOne(id);
+        BT.currentId = null;
+      }
+    } finally {
+      BT.running = false;
+      BT.currentId = null;
+      window.removeEventListener('beforeunload', btBeforeUnload);
+      renderBT();
+      load();          // 상단 표(에이전트/트리거) + 다음 btLoadAssets 로 health 갱신
+      btLoadAssets();
+    }
+    toast(BT.stopReq ? '수동 백업 테스트가 중지되었습니다.' : '수동 백업 테스트가 완료되었습니다.');
+  }
+
+  async function btBackupOne(id) {
+    // 1) baseline — 요청 직전 최신 액션 id. 이보다 큰 id 의 새 행 = 이번 백업.
+    let baseline = 0;
+    try { baseline = (await btFetchStatus(id)).latestActionId || 0; }
+    catch (e) { btSetRes(id, 'error', '상태 조회 실패'); return; }
+
+    // 2) 백업 명령 (fire & forget)
+    btSetRes(id, 'request', '요청 중', true);
+    try {
+      const r = await fetch(`/api/assets/${id}/backup`, { method: 'POST' });
+      if (!r.ok) { btSetRes(id, 'error', (await safeErr(r)) || `요청 실패 (${r.status})`); return; }
+    } catch (e) { btSetRes(id, 'error', '요청 실패: ' + e.message); return; }
+
+    // 3) 시작 감지 — baseline 보다 큰 새 액션 행 등장 대기.
+    //    경과시간(Date.now) 기준 — 백그라운드 탭 타이머 스로틀링에도 창 길이가 유지된다.
+    btSetRes(id, 'waitstart', '시작 대기', true);
+    let action = null;
+    const t0 = Date.now();
+    while (Date.now() - t0 < BT_START_TIMEOUT) {
+      await btSleep(BT_POLL);
+      try {
+        const st = await btFetchStatus(id);
+        action = (st.actions || []).filter(a => a.id > baseline).sort((x, y) => x.id - y.id)[0] || null;
+      } catch (e) { /* 일시 오류 — 다음 폴에서 재시도 */ }
+      if (action) break;
+    }
+    if (!action) { btSetRes(id, 'nostart', '시작 감지 실패'); return; }
+
+    // 4) 완료 대기 — 해당 액션 행의 종료 (result != inprogress 는 영구 기록이라 유실 없음)
+    if (action.result === 'inprogress') {
+      btSetRes(id, 'inprogress', '작업중', true);
+      const t1 = Date.now();
+      while (Date.now() - t1 < BT_FINISH_TIMEOUT) {
+        await btSleep(BT_POLL);
+        try {
+          const st = await btFetchStatus(id);
+          const cur = (st.actions || []).find(a => a.id === action.id);
+          if (cur) action = cur;
+        } catch (e) { /* 재시도 */ }
+        if (action.result !== 'inprogress') break;
+      }
+    }
+    if (action.result === 'inprogress') { btSetRes(id, 'timeout', '시간 초과'); return; }
+    // 서버 result 키 계약: backedup(백업 갱신)/unchanged(변경 없음)/failed(작업 실패)/incomplete(미완료)
+    btSetRes(id, action.result, action.resultLabel || action.result);
+  }
+
+  function bindBackupTest() {
+    if (!$('bt-host')) return;
+    $('bt-run').addEventListener('click', btRun);
+    $('bt-stop').addEventListener('click', () => {
+      if (!BT.running || BT.stopReq) return;
+      BT.stopReq = true;
+      toast('진행 중인 백업이 끝나면 중지됩니다. (이미 시작된 백업은 서버에서 계속 진행)');
+      renderBT();
+    });
+    $('bt-refresh').addEventListener('click', btLoadAssets);
+    $('bt-search').addEventListener('input', (e) => { BT.q = e.target.value; BT.page = 1; renderBT(); });
+    $('bt-line').addEventListener('change', (e) => { BT.line = e.target.value; BT.page = 1; renderBT(); });
+    $('bt-type').addEventListener('change', (e) => { BT.type = e.target.value; BT.page = 1; renderBT(); });
+    $('bt-health').addEventListener('change', (e) => { BT.health = e.target.value; BT.page = 1; renderBT(); });
+    btLoadAssets();
+  }
+
   /* ════════════════ 모달 제어 ════════════════ */
   function openModal(id) { $(id).classList.add('open'); }
   function closeModal(id) { $(id).classList.remove('open'); }
@@ -528,6 +795,7 @@
     $('map-save').addEventListener('click', saveMap);
     $('map-all').addEventListener('click', () => mapSelectAll(true));
     $('map-none').addEventListener('click', () => mapSelectAll(false));
+    bindBackupTest();
 
     document.querySelectorAll('[data-close]').forEach(b =>
       b.addEventListener('click', () => closeModal(b.getAttribute('data-close'))));
@@ -548,8 +816,8 @@
     if (window.Shell) await Shell.init({ active: 'admin' });
     bind();
     await load();
-    setInterval(() => { if (!document.hidden && panelActive()) load(); }, 30000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && panelActive()) load(); });
-    document.addEventListener('twms:panel-shown', (e) => { if (e.detail === 'dexa') load(); });
+    setInterval(() => { if (!document.hidden && panelActive()) { load(); btLoadAssets(); } }, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && panelActive()) { load(); btLoadAssets(); } });
+    document.addEventListener('twms:panel-shown', (e) => { if (e.detail === 'dexa') { load(); btLoadAssets(); } });
   });
 })();

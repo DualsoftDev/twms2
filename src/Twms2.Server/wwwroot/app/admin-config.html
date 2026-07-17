@@ -46,6 +46,20 @@
     .ac-iconbtn-info:hover:not(:disabled) { color: var(--c-primary); }
     .ac-iconbtn-danger:hover:not(:disabled) { color: var(--health-failed); }
 
+    /* 상태 칩 버튼 (활성/비활성 토글) — 표면색 + 상태색 점·글자 */
+    .ac-chip-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 8px; cursor: pointer; border: none;
+      background: var(--c-surface); font: inherit; font-size: 11px; font-weight: 700;
+      box-shadow: 2px 2px 5px var(--nm-dark), -2px -2px 5px var(--nm-light);
+      transition: all 0.15s ease;
+    }
+    .ac-chip-btn::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+    .ac-chip-btn:hover { transform: translateY(-1px); }
+    .ac-chip-btn:active { transform: none; box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
+    .ac-chip-btn-on { color: var(--health-backedup); }
+    .ac-chip-btn-off { color: var(--c-on-surface-variant); }
+
     /* 인셋 입력 (history .hist-input 톤) */
     .ac-input {
       background: var(--c-surface); color: var(--c-on-surface);
@@ -183,6 +197,39 @@
         </div>
       </div>
       <div id="triggers-host">
+        <div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>
+      </div>
+    </div>
+
+    <!-- ─── 수동 백업 테스트 (선택 자산 순차 실행) ─── -->
+    <div class="nm-card" style="margin-bottom:24px;">
+      <div class="panel-header">
+        <span class="panel-title">수동 백업 테스트</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="chip chip-info" id="bt-selcount">0개 선택</span>
+          <button class="ac-btn ac-btn-primary" id="bt-run"><span class="material-symbols-outlined">play_arrow</span>선택 자산 순차 백업</button>
+          <button class="ac-btn ac-btn-danger" id="bt-stop" style="display:none;"><span class="material-symbols-outlined">stop</span>중지</button>
+          <button class="ac-btn" id="bt-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
+        </div>
+      </div>
+      <div class="ac-deviation" style="margin:0 0 12px;">
+        <span class="material-symbols-outlined">info</span>
+        <span>선택한 자산을 위에서부터 <b>한 대씩 순서대로</b> 백업하고 결과를 표시합니다. 진행 중 페이지를 벗어나면 남은 자산은 실행되지 않으며, 이미 시작된 백업은 서버에서 계속 진행됩니다.</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <input type="text" class="ac-input" id="bt-search" placeholder="이름·IP 검색" style="max-width:220px;" />
+        <select class="ac-input" id="bt-line" style="max-width:180px;"><option value="">전체 라인</option></select>
+        <select class="ac-input" id="bt-type" style="max-width:180px;"><option value="">전체 타입</option></select>
+        <select class="ac-input" id="bt-health" style="max-width:180px;">
+          <option value="">전체 상태</option>
+          <option value="failed">작업 실패</option>
+          <option value="backedup">백업 갱신</option>
+          <option value="unchanged">변경 없음</option>
+          <option value="inprogress">작업중</option>
+          <option value="unknown">내역 없음</option>
+        </select>
+      </div>
+      <div id="bt-host">
         <div class="ac-loading"><span class="ac-spinner"></span>불러오는 중…</div>
       </div>
     </div>

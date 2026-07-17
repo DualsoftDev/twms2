@@ -136,6 +136,21 @@ public class AdminConfigController : ControllerBase
         return Ok(new { ok = true });
     }
 
+    // ──────────────── 트리거 활성/비활성 ────────────────
+
+    public record EnabledDto(bool? Enabled);
+
+    [HttpPut("triggers/{id:int}/enabled")]
+    public async Task<IActionResult> UpdateEnabled(int id, [FromBody] EnabledDto dto)
+    {
+        if (dto.Enabled is not bool enabled)
+            return BadRequest(new { error = "활성 여부(enabled)를 입력해주세요." });
+
+        var ok = await _schedule.UpdateTriggerEnabledAsync(id, enabled);
+        if (!ok) return StatusCode(502, new { error = "트리거 활성 상태 변경에 실패했습니다." });
+        return Ok(new { ok = true });
+    }
+
     // ──────────────── 트리거 즉시 실행 ────────────────
 
     [HttpPost("triggers/{id:int}/execute")]

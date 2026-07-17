@@ -1,3 +1,4 @@
+using DEX.Core.Actor;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Twms2.Server.Helpers;
@@ -13,11 +14,11 @@ namespace Twms2.Server.Controllers;
 /// /assets 랜딩: 통합 자산 목록(KPI + 검색 가능 리스트).
 /// /assets/{id}, /qr/{id} 상세: 기본정보/상태/매뉴얼/백업이력/관련링크.
 /// 기존 AssetService / AssetStatusService / DexaReadService / ManualDbService 를
-/// 얇게 래핑(신규 비즈니스 로직 없음). 모두 읽기 전용 — 편집은 Blazor 페이지 유지.
+/// 얇게 래핑(신규 비즈니스 로직 없음). 조회는 공개, 수동 백업 실행만 Admin.
 /// </summary>
 [ApiController]
 [Route("api/assets")]
-// 공개 읽기(자산 조회/상세). 쓰기 없음(편집은 /api/assets/table 가 인증 요구).
+// 공개 읽기(자산 조회/상세) + Admin 전용 수동 백업 실행(편집은 /api/assets/table 가 인증 요구).
 public class AssetsController : ControllerBase
 {
     private readonly AssetService _assets;
@@ -25,19 +26,22 @@ public class AssetsController : ControllerBase
     private readonly DexaReadService _dexaRead;
     private readonly ManualDbService _manualDb;
     private readonly PingDbService _pingDb;
+    private readonly DexaServerClient _dexaClient;
 
     public AssetsController(
         AssetService assets,
         AssetStatusService status,
         DexaReadService dexaRead,
         ManualDbService manualDb,
-        PingDbService pingDb)
+        PingDbService pingDb,
+        DexaServerClient dexaClient)
     {
         _assets = assets;
         _status = status;
         _dexaRead = dexaRead;
         _manualDb = manualDb;
         _pingDb = pingDb;
+        _dexaClient = dexaClient;
     }
 
     /// <summary>
@@ -206,6 +210,56 @@ public class AssetsController : ControllerBase
             // ── 매뉴얼 ──
             matchedManuals = matched,
             allManuals,
+        });
+    }
+
+    /// <summary>
+    /// 수동 백업 실행 (AssetExplorer.ExecuteManualBackup 이식 — fire &amp; forget).
+    /// DEXA 는 완료 응답을 주지 않으므로 클라이언트는 backup-status 로 액션 행 등장/종료를 폴링한다.
+    /// </summary>
+    [HttpPost("{id:int}/backup")]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    public async Task<IActionResult> ExecuteBackup(int id)
+    {
+        if (!_dexaClient.IsConnected)
+            return Conflict(new { error = "DEXA 서버에 연결되어 있지 않습니다." });
+
+        var asset = (await _assets.GetAllAssetsAsync()).FirstOrDefault(a => a.IsRealAsset && a.AssetId == id);
+        if (asset == null)
+            return NotFound(new { error = "자산을 찾을 수 없습니다." });
+
+        _dexaClient.Tell(new AmC2SRequestExecuteBackupOnce(id));
+        return Accepted(new { requested = true });
+    }
+
+    /// <summary>
+    /// 단일 자산의 최근 백업 액션 스냅샷(경량) — 수동 백업 진행 폴링용.
+    /// 요청 직전 latestActionId 를 baseline 으로 잡고, 그보다 큰 id 의 새 행 등장 = 백업 시작,
+    /// 그 행의 result != inprogress = 종료. (health 비교보다 견고 — 캐시 지연/동일상태 재백업에 오판 없음)
+    /// </summary>
+    [HttpGet("{id:int}/backup-status")]
+    public async Task<IActionResult> GetBackupStatus(int id)
+    {
+        var actions = (await _dexaRead.GetAllActionsAsync())
+            .Where(a => a.AssetId == id)
+            .OrderByDescending(a => a.Id)
+            .Take(5)
+            .Select(a => new
+            {
+                id = a.Id,
+                started = a.Started,
+                finished = a.Finished,
+                result = GetResultKey(a),
+                resultLabel = GetResultLabel(a),
+                contentsChanged = a.ContentsChanged,
+                version = a.Version,
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            latestActionId = actions.Count > 0 ? actions[0].id : 0,
+            actions,
         });
     }
 
