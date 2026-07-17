@@ -554,6 +554,11 @@
       const r = await fetch('/api/download/backup/bulk', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids),
       });
+      if (r.status === 401) {
+        // 미로그인: 개별 다운로드(<a> 내비게이션 → /login 리다이렉트)와 동일하게 로그인 페이지로
+        location.href = '/login?returnUrl=' + encodeURIComponent(location.pathname + location.search);
+        return;
+      }
       if (!r.ok) { if (window.Shell) Shell.toast((await r.text()) || '다운로드 실패'); return; }
       const parts = ['DEXA_Backup'];
       if (S.filterLine) parts.push(S.filterLine);

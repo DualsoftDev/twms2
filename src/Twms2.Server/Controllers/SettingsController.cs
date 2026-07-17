@@ -9,6 +9,7 @@ namespace Twms2.Server.Controllers;
 /// 설정(Settings.razor + 자식 탭) 정적 페이지용 API.
 /// - GET  /api/settings        : 일반(App 설정) + 라인 목록 + 매뉴얼 목록 1회 조회.
 /// - POST /api/settings/brand  : 사이드바 제목/부제 저장 (App:NavTitle/NavSubtitle).
+/// - POST /api/settings/security : 다운로드/리포트 로그인 요구 여부 저장 (App:RequireLoginForDownload).
 /// - POST /api/settings/lines  : 라인 추가/수정 (Upsert).
 /// - DELETE /api/settings/lines/{id} : 라인 삭제 (배정 자산 있으면 거부).
 /// - POST /api/settings/manuals: 매뉴얼(키워드+PDF) 업로드.
@@ -78,6 +79,8 @@ public class SettingsController : ControllerBase
                 // 사이드바 브랜드 — 로고 마크 우측의 제목/부제(저장 즉시 반영). 미설정 시 기본값.
                 navTitle = brand.Title,
                 navSubtitle = brand.Subtitle,
+                // 백업 ZIP·리포트 로그인 요구 여부 (기본 false = 개방)
+                requireLoginForDownload = _settings.RequireLoginForDownload,
             },
             lines,
             manuals,
@@ -103,6 +106,19 @@ public class SettingsController : ControllerBase
 
         await _settings.SaveBrandAsync(title, subtitle);
         return Ok(new { ok = true, navTitle = title, navSubtitle = subtitle });
+    }
+
+    // ──────────────── 다운로드 보안 ────────────────
+
+    public record SecurityDto(bool RequireLoginForDownload);
+
+    /// <summary>백업 ZIP 다운로드·DEXA 리포트 열람 시 로그인 요구 여부 저장 (즉시 반영).</summary>
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    [HttpPost("security")]
+    public async Task<IActionResult> SaveSecurity([FromBody] SecurityDto dto)
+    {
+        await _settings.SaveRequireLoginForDownloadAsync(dto.RequireLoginForDownload);
+        return Ok(new { ok = true, requireLoginForDownload = dto.RequireLoginForDownload });
     }
 
     // ──────────────── 라인 관리 ────────────────

@@ -31,6 +31,10 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
     let mutable messageSub: IDisposable = null
     let mutable reconnectCts: CancellationTokenSource = null
     let mutable lastConnectedState = false
+    // CommProxy는 서버 단절(Disassociated) 시 ServerShortTermActor 참조를 비우지 않는다(stale 참조 잔존).
+    // null 체크만으로는 단절을 감지 못해 CommunicationEventSubject 이벤트로 직접 추적한다.
+    let mutable serverLost = false
+    let mutable commEventSub: IDisposable = null
     let dexaPath = opts.DllPath
 
     /// DEXA DLL 경로에서 어셈블리 resolve
@@ -77,7 +81,7 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
 
     /// 현재 연결 여부 확인
     let isConnectedNow () =
-        initialized && not disposed
+        initialized && not disposed && not serverLost
         && not (isNull (getProxyProp "ShortTermActor"))
         && not (isNull (getProxyProp "ServerShortTermActor"))
 
@@ -100,18 +104,21 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                         // 연결 안 되어있으면 재연결 시도
                         if not connected && initialized && not disposed then
                             try
+                                // 시작 시 포트 충돌 등으로 ActorSystem 생성 자체가 실패했으면(로컬 액터 없음)
+                                // Connect만 반복해서는 영원히 복구 불가 → Initialize부터 재시도
+                                if isNull (getProxyProp "ShortTermActor") then
+                                    logger.LogInformation("CommProxy 재초기화 시도 (ActorSystem 미가동 상태)")
+                                    proxy.Initialize(
+                                        typeof<DummyListenerActor>,
+                                        typeof<DEX.Client.DEXClientShortTermActor>,
+                                        typeof<DEX.Client.DEXClientLongTermActor>,
+                                        typeof<DEX.Client.DEXClientStreamActor>) |> ignore
                                 logger.LogInformation("DEXA 서버 재연결 시도: {Ip}:{Port}", opts.ServerIp :> obj, opts.ServerPort :> obj)
-                                proxy.Connect(opts.ServerIp, opts.ServerPort)
-                                // 연결 대기 (최대 10초)
-                                let mutable reconnected = false
-                                for i in 1 .. 10 do
-                                    if not reconnected && not ct.IsCancellationRequested then
-                                        try do! Task.Delay(1000, ct) with :? OperationCanceledException -> ()
-                                        let shortTerm = getProxyProp "ShortTermActor"
-                                        let serverShortTerm = getProxyProp "ServerShortTermActor"
-                                        if not (isNull shortTerm) && not (isNull serverShortTerm) then
-                                            reconnected <- true
+                                // Connect는 동기 수행 후 성공 여부를 반환한다. 서버 단절 후에는 stale
+                                // 참조가 남아 있어 ShortTermActor null 체크로는 성공을 판정할 수 없다.
+                                let reconnected = proxy.Connect(opts.ServerIp, opts.ServerPort)
                                 if reconnected then
+                                    serverLost <- false
                                     lastConnectedState <- true
                                     logger.LogInformation("DEXA 서버 재연결 성공")
                                     notifications.OnNext(ConnectivityChangedNotification(true))
@@ -295,21 +302,14 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
         | _ -> notification
 
     interface IDexaClient with
-        member _.IsConnected =
-            initialized && not disposed
-            && not (isNull (getProxyProp "ShortTermActor"))
-            && not (isNull (getProxyProp "ServerShortTermActor"))
+        member _.IsConnected = isConnectedNow ()
 
         member _.PingServerAsync() =
             task {
                 if not initialized then return false
                 else
-                    try
-                        let shortTerm = getProxyProp "ShortTermActor"
-                        let serverShortTerm = getProxyProp "ServerShortTermActor"
-                        return not (isNull shortTerm) && not (isNull serverShortTerm)
-                    with _ ->
-                        return false
+                    try return isConnectedNow ()
+                    with _ -> return false
             }
 
         member _.InitializeAsync() =
@@ -322,6 +322,10 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
 
                     // 2. DEXA config 로드
                     loadDexaConfig ()
+
+                    // 2.5. 클라이언트 Akka 포트 하드코딩(50011) 패치 — ActorSystem 생성 전에 적용.
+                    // 기본 0(랜덤)이면 DEXA.ClientApp(GUI)와 같은 PC에서 동시 실행 가능.
+                    DexaPortPatch.apply opts.ClientPort logger |> ignore
 
                     // 3. PathDefine.DataDirectory 설정
                     PathDefine.DataDirectory <- @"C:\ProgramData\LS\DEXA\Storage"
@@ -345,6 +349,20 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                     // 6. CommProxy 설정
                     proxy.Name <- opts.ClientName
                     proxy.ActorType <- ActorType.Client
+
+                    // 6.5. 서버 단절/연결 이벤트 구독.
+                    // CommProxy는 Disassociated가 와도 ServerShortTermActor를 비우지 않으므로
+                    // (stale 참조) 이 이벤트가 없으면 서버 재시작을 영영 감지하지 못한다.
+                    commEventSub <-
+                        proxy.CommunicationEventSubject.Subscribe(fun evt ->
+                            match evt with
+                            | :? DEX.Interfaces.DisconnectEvent as d when d.ActorType = ActorType.Server ->
+                                if not serverLost then
+                                    serverLost <- true
+                                    logger.LogWarning("DEXA 서버 단절 감지: {Path}", d.Path :> obj)
+                            | :? DEX.Interfaces.ConnectEvent ->
+                                serverLost <- false
+                            | _ -> ())
 
                     // 7. CommProxy.Initialize
                     try
@@ -457,6 +475,7 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                     reconnectCts.Dispose()
                 if not (isNull dataChangedSub) then dataChangedSub.Dispose()
                 if not (isNull messageSub) then messageSub.Dispose()
+                if not (isNull commEventSub) then commEventSub.Dispose()
                 notifications.OnCompleted()
                 notifications.Dispose()
                 initialized <- false

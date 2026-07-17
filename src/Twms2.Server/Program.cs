@@ -191,14 +191,17 @@ app.UseResponseCompression();
 app.UseAntiforgery();
 
 // ── 민감 산출물 보호 게이트 ──
-// 백업 ZIP(/api/download/backup/*)·DEXA 리포트 HTML(/report/*) 은 장비 프로그램/설정 덤프라
-// 익명 접근 금지(로그인 필요). HTML 내비게이션은 /login 으로, 그 외(다운로드/리소스)는 401.
+// 백업 ZIP(/api/download/backup/*)·DEXA 리포트 HTML(/report/*) 은 장비 프로그램/설정 덤프.
+// 설정>일반의 "다운로드/리포트에 로그인 요구"가 켜진 경우에만 익명 접근을 막는다
+// (기본 꺼짐 = 구 TWM처럼 개방). HTML 내비게이션은 /login 으로, 그 외(다운로드/리소스)는 401.
 // UseAuthentication 보다 앞서 등록되므로 쿠키 스킴을 직접 인증한다.
+var appSettingsForGate = app.Services.GetRequiredService<AppSettingsEditor>();
 app.Use(async (context, next) =>
 {
     var p = context.Request.Path.Value ?? "";
-    if (p.StartsWith("/report", StringComparison.OrdinalIgnoreCase)
-        || p.StartsWith("/api/download/backup", StringComparison.OrdinalIgnoreCase))
+    if (appSettingsForGate.RequireLoginForDownload
+        && (p.StartsWith("/report", StringComparison.OrdinalIgnoreCase)
+            || p.StartsWith("/api/download/backup", StringComparison.OrdinalIgnoreCase)))
     {
         var r = await context.AuthenticateAsync(Twms2.Server.Controllers.AuthController.Scheme);
         if (!r.Succeeded || r.Principal?.Identity?.IsAuthenticated != true)
