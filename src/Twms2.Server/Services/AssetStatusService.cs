@@ -101,9 +101,14 @@ public class AssetStatusService
             var pingResults = pingTask.Result;
             var lineMap     = lineTask.Result;
 
-            var agentMap = agents
-                .GroupBy(a => a.Name ?? "", StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            // 같은 이름의 에이전트가 여러 행 등록될 수 있음(재설치 잔재) — 이름당 한 행이라도
+            // online 이면 온라인으로 본다. DEXA 와 동일하게 preference 의 * 와일드카드도 지원.
+            var onlineAgentNames = agents
+                .Where(a => a.Online)
+                .Select(a => (a.Name ?? "").Trim())
+                .Where(n => n.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
             var pingMap  = pingResults.ToDictionary(p => p.DexaAssetId);
 
             // 자산별 최신 액션 + 연속 실패 횟수 — 전체 액션에서 함께 파생
@@ -128,8 +133,8 @@ public class AssetStatusService
                 var preferredAgents = asset.AssetAgentPreferences?
                     .Split(';', StringSplitOptions.RemoveEmptyEntries) ?? [];
 
-                var agentOnline = preferredAgents.Any(name =>
-                    agentMap.TryGetValue(name.Trim(), out var ag) && ag.Online);
+                var agentOnline = preferredAgents.Any(pref =>
+                    onlineAgentNames.Any(n => MatchesAgentPreference(pref.Trim(), n)));
 
                 var agentName = preferredAgents.FirstOrDefault()?.Trim();
 
@@ -188,6 +193,18 @@ public class AssetStatusService
             _logger.LogError(ex, "자산 상태 조회 실패");
             return [];
         }
+    }
+
+    /// <summary>
+    /// agentPreferences 항목 1개와 에이전트 이름 매칭.
+    /// DEXA 2.20 QueryPickAgentAsync 와 동일 의미론: * → .* 치환 후 무앵커 Regex.Match
+    /// (부분일치, 대소문자 무시). 즉 "LINE1" 은 "LINE1-PC2" 도 매칭한다.
+    /// </summary>
+    private static bool MatchesAgentPreference(string pref, string agentName)
+    {
+        var pattern = System.Text.RegularExpressions.Regex.Escape(pref).Replace(@"\*", ".*");
+        return System.Text.RegularExpressions.Regex.IsMatch(agentName, pattern,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
     /// <summary>대시보드 전체 데이터 (statuses에서 PingSummary 직접 집계, 이중 조회 방지)</summary>
