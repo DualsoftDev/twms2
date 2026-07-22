@@ -786,7 +786,7 @@
     {
         UpdateUrl();
         var url = Navigation.Uri;
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        await JS.InvokeVoidAsync("twmsCopyText", url);
     }
 
     // ─── 탭 1: 자산 필터 핸들러 ───

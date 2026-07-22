@@ -42,7 +42,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Components]
 Name: "main"; Description: "Twms2.0 서버 프로그램"; Types: full compact custom; Flags: fixed
-Name: "https"; Description: "HTTPS 자체서명 인증서 설정 (포트 443)"; Types: full
+; HTTPS는 기본 미선택 (HTTP 80 전용 = 구 TWM과 동일한 접속 방식).
+; 자체서명 인증서는 클라이언트 PC에 별도 배포하지 않으면 브라우저 보안 경고가 표시됨.
+Name: "https"; Description: "HTTPS 자체서명 인증서 설정 (포트 443) — 클라이언트에 인증서 미배포 시 브라우저 경고 표시됨"
 
 [Files]
 ; appsettings.json: 업그레이드 시 사용자 설정 보존
@@ -53,6 +55,7 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "appsettings.json,appsett
 
 ; PowerShell 스크립트 (임시 디렉토리에 복사 후 삭제)
 Source: "setup-https.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall; Components: https
+Source: "disable-https.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: not WizardIsComponentSelected('https')
 
 ; VC++ Redistributable
 Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist; Check: NeedsVCRedist
@@ -63,6 +66,9 @@ Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; S
 
 ; HTTPS 인증서 생성 (선택 시)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{tmp}\setup-https.ps1"" -InstallDir ""{app}"""; StatusMsg: "HTTPS 인증서 생성 중..."; Flags: waituntilterminated runhidden; Components: https
+
+; HTTPS 미선택 시: 이전 설치가 남긴 HTTPS 설정 제거 (HTTP 전용 전환)
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{tmp}\disable-https.ps1"""; StatusMsg: "HTTP 전용 구성 확인 중..."; Flags: waituntilterminated runhidden; Check: not WizardIsComponentSelected('https')
 
 ; 방화벽 규칙 추가
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""TWMS 2.0 HTTP"" dir=in action=allow protocol=TCP localport=80"; Flags: runhidden waituntilterminated
@@ -194,9 +200,24 @@ begin
   Result := not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64');
 end;
 
-// 설치 전: 기존 서비스 중지
+// 구 TWM 1.0 서비스(Twms.WebApp) 존재 여부 — 같은 PC 설치 시 포트 80/443 충돌
+function OldTwm1ServiceExists(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('sc.exe', 'query Twms.WebApp', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := (ResultCode = 0);
+end;
+
+// 설치 전: 기존 서비스 중지 + 구 TWM 충돌 경고
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
+  if OldTwm1ServiceExists() then
+    MsgBox('이 PC에 구버전 TWM 서비스(Twms.WebApp)가 설치되어 있습니다.' + #13#10 +
+           '포트 80/443이 충돌하여 TWMS 2.0이 정상 동작하지 않을 수 있습니다.' + #13#10#13#10 +
+           '설치 후 관리자 명령으로 구 서비스를 제거해 주세요:' + #13#10 +
+           '  sc stop Twms.WebApp' + #13#10 +
+           '  sc delete Twms.WebApp', mbInformation, MB_OK);
   StopExistingService();
   Result := '';
 end;
