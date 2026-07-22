@@ -95,7 +95,8 @@ Twms2.0/
 │
 ├── installer/                     # 인스톨러 관련 파일
 │   ├── twms2.0-setup.iss          #   InnoSetup 스크립트 (버전은 게시된 exe에서 자동 취득)
-│   ├── setup-https.ps1            #   HTTPS 인증서 설정 스크립트
+│   ├── setup-https.ps1            #   HTTPS 인증서 설정 스크립트 (선택 구성요소, 기본 미선택)
+│   ├── disable-https.ps1          #   HTTPS 미선택 설치 시 기존 HTTPS 설정 제거 (HTTP 전용 전환)
 │   ├── redist/                    #   vc_redist.x64.exe (빌드 시 자동 다운로드, git 미추적)
 │   └── output/                    #   빌드된 설치파일 출력 디렉토리
 │
@@ -422,9 +423,14 @@ build-installer.bat
 - TWMS 2.0 애플리케이션 (self-contained, .NET 런타임 포함)
 - DeepPinger.dll (네이티브 PLC Ping)
 - Windows 서비스 등록 (`twms2.0`, 지연 자동 시작)
-- 방화벽 규칙 자동 추가 (HTTP 80, HTTPS 443)
+- 방화벽 규칙 자동 추가 (HTTP 80, HTTPS 선택 시 443)
 - ProgramData 디렉토리 자동 생성
-- HTTPS 설정 (선택 구성요소, `setup-https.ps1`)
+- HTTPS 설정 (선택 구성요소, `setup-https.ps1`) — **기본 미선택: HTTP 80 전용 (구 TWM과 동일한 접속 방식)**
+  - 자체서명 인증서는 서버 PC에만 신뢰 등록되므로 다른 PC 브라우저에서는 보안 경고가 표시됨.
+    경고 없는 HTTPS가 필요하면 사설 CA 인증서 + 접속 클라이언트 전체 신뢰 배포가 필요
+  - HTTPS 미선택 설치(업그레이드 포함) 시 이전 설치가 남긴 HTTPS 설정은 자동 제거 (`disable-https.ps1`)
+  - 구 TWM 1.0 서비스(`Twms.WebApp`)가 같은 PC에 있으면 포트 80 충돌 — 설치 중 경고 표시,
+    `sc stop Twms.WebApp` / `sc delete Twms.WebApp` 으로 제거 필요
 - VC++ 런타임 재배포 패키지 (`vc_redist.x64.exe`, 대상 PC에 미설치 시 자동 설치 → 오프라인 설치 보장)
 
 ---
