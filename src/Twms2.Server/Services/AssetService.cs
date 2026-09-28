@@ -7,8 +7,9 @@ using Twms2.Server.Models.Dexa;
 namespace Twms2.Server.Services;
 
 /// <summary>
-/// 자산 관리: DEXA SQLite 직접 읽기/쓰기.
-/// DB 수정 후 DEXA Server에 알림을 보내 연결된 클라이언트에 변경 브로드캐스트.
+/// 자산 관리: DEXA SQLite 직접 읽기 + 쓰기는 DEXA 서버 경유(Akka).
+/// 쓰기를 서버에 맡겨야 자산명 중복 검사·AssetConfiguration 플러그인·
+/// 접속 클라이언트 브로드캐스트가 함께 적용된다.
 /// </summary>
 public class AssetService
 {
@@ -106,6 +107,10 @@ public class AssetService
             return assetIds.Select(id => new BatchUpdateResult { AssetId = id, Success = true }).ToList();
 
         var rawAssets = await _dexaRead.GetAssetRawBatchAsync(assetIds);
+        // 서버 경유 저장은 자산명 중복 검사에 부모 ID 를 요구한다 (캐시된 목록에서 조회)
+        var parentIds = (await _dexaRead.GetViewAssetsAsync())
+            .GroupBy(a => a.AssetId)
+            .ToDictionary(g => g.Key, g => g.First().AssetParentId);
 
         var results = new List<BatchUpdateResult>();
         int completed = 0;
@@ -133,7 +138,8 @@ public class AssetService
 
                 var newParam = ApplySpecToParameter(raw.parameter, spec);
                 var newAgent = spec.AgentPreferences ?? raw.agentPreferences;
-                await _dexaRead.UpdateAssetAsync(assetId, newParam, newAgent);
+                parentIds.TryGetValue(assetId, out var parentId);
+                await SaveAssetParameterAsync(assetId, parentId, newParam, newAgent);
                 anySuccess = true;
 
                 results.Add(new BatchUpdateResult { AssetId = assetId, Success = true });
@@ -153,7 +159,7 @@ public class AssetService
             progress?.Report((completed, total));
         }
 
-        if (anySuccess) NotifyAssetChanged();
+        if (anySuccess) InvalidateAssetCache();
         return results;
     }
 
@@ -283,7 +289,7 @@ public class AssetService
             progress?.Report((completed, total));
         }
 
-        if (anySuccess) NotifyAssetChanged();
+        if (anySuccess) InvalidateAssetCache();
         return results;
     }
 
@@ -356,7 +362,7 @@ public class AssetService
 
                     row.DexaAsset.AgentPreferences = row.Agent;
                     var newParam = row.DexaAsset.BuildParameter();
-                    await _dexaRead.UpdateAssetAsync(row.AssetId, newParam, row.Agent);
+                    await SaveAssetParameterAsync(row.AssetId, row.AssetParentId, newParam, row.Agent);
                     anyDexaChanged = true;
                 }
 
@@ -400,7 +406,7 @@ public class AssetService
             progress?.Report((completed, targets.Count));
         }
 
-        if (anyDexaChanged) NotifyAssetChanged();
+        if (anyDexaChanged) InvalidateAssetCache();
         return results;
     }
 
@@ -410,7 +416,7 @@ public class AssetService
     public async Task UpdateDescriptionAsync(int dexaAssetId, string description)
     {
         await _dexaRead.UpdateAssetDescriptionAsync(dexaAssetId, description);
-        NotifyAssetChanged();
+        InvalidateAssetCache();
     }
 
     // ── CSV Export / Import ──────────────────────────────────
@@ -628,13 +634,38 @@ public class AssetService
     }
 
     /// <summary>
-    /// DEXA Server에 DB 변경 알림 전송 (fire-and-forget).
-    /// 서버가 연결된 모든 클라이언트에 변경 브로드캐스트.
+    /// DEXA 자산의 parameter/agentPreferences 저장 — DEXA 서버 경유(Akka).
+    /// 직접 SQL 과 달리 서버가 자산명 중복 검사 · AssetConfiguration 플러그인 실행 ·
+    /// 접속 중인 전 클라이언트 브로드캐스트까지 처리한다.
+    ///
+    /// 거부되면 사유를 담은 DexaServerException 이 올라온다(라이선스 만료·이름 중복·서버 Lock).
+    /// DEXA 서버가 떠 있어야 한다 — 직접 SQL 시절과 달리 서버 없이는 저장할 수 없다.
+    /// 주의: 플러그인이 parameter 를 덧붙일 수 있어 저장 결과가 보낸 값과 다를 수 있다.
     /// </summary>
-    private void NotifyAssetChanged()
+    private async Task SaveAssetParameterAsync(
+        int assetId, int parentId, string parameter, string? agentPreferences)
     {
-        _dexa.Tell(new AmC2SNotifyDataChanged("asset", DatabaseChangeOperation.Update));
+        var vwAsset = new DEX.Core.Database.ORM.ViewAsset
+        {
+            AssetId               = assetId,
+            AssetParentId         = parentId,
+            AssetParameter        = parameter,
+            AssetAgentPreferences = agentPreferences,
+        };
+
+        var reply = await _dexa.AskOrThrowAsync<AmS2CReplyUpdateAssetParameter>(
+            new AmC2SRequestUpdateAssetParameter(vwAsset));
+
+        if (reply is null)
+            throw new InvalidOperationException($"자산 {assetId} 저장: DEXA 서버 응답이 없습니다.");
     }
+
+    /// <summary>
+    /// 저장 직후 DEXA 자산 캐시 무효화.
+    /// 서버도 DataChanged 를 브로드캐스트하지만 도착이 비동기라,
+    /// 바로 이어지는 재조회가 옛 값을 보지 않도록 직접 비운다.
+    /// </summary>
+    private void InvalidateAssetCache() => _dexaRead.InvalidateCache();
 }
 
 public class CsvImportResult

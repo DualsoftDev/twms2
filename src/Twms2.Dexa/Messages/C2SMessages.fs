@@ -23,12 +23,6 @@ type AmC2SExecuteTriggerOnce(triggerId: int) =
     member val TriggerId: int = triggerId with get, set
     private new() = AmC2SExecuteTriggerOnce(0)
 
-// Data change notification (TWM → DEXA Server → broadcast to clients)
-type AmC2SNotifyDataChanged(tableName: string, operation: DatabaseChangeOperation) =
-    inherit ActorMessage()
-    member val TableName: string = tableName with get, set
-    member val Operation: DatabaseChangeOperation = operation with get, set
-
 // Single asset backup (AssetExplorer page, fire-and-forget)
 type AmC2SRequestExecuteBackupOnce(assetId: int) =
     inherit AmExecuteBackup(assetId, None)
@@ -40,3 +34,12 @@ type AmC2SRequestConnectedPeers() = inherit ActorMessage()
 type AmC2SRequestAgentRestart() =
     inherit ActorMessage()
     member val Agent: Akka.Actor.IActorRef = null with get, set
+
+// 자산 편집 저장 (이름·설명·IP·에이전트·연결정보 + 프로젝트 파일 교체)
+// 서버가 자산명 중복 검사 → AssetConfiguration 플러그인 실행 → DB 반영 →
+// 접속 중인 전 클라이언트에 DataChanged 브로드캐스트까지 처리한다.
+// 주의: 플러그인이 parameter 를 덧붙일 수 있으므로 저장 후 재조회로 확인해야 한다.
+type AmC2SRequestUpdateAssetParameter(viewAsset: ViewAsset) =
+    inherit ActorMessage()
+    member val ViewAsset: ViewAsset = viewAsset with get, set
+    private new() = AmC2SRequestUpdateAssetParameter(Unchecked.defaultof<ViewAsset>)

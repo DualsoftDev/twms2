@@ -9,6 +9,8 @@ namespace Twms2.Server.Models.Dexa;
 public class AssetEditRow
 {
     public int    AssetId     { get; init; }
+    /// <summary>DEXA 폴더 계층상의 부모 ID. 서버 경유 저장 시 자산명 중복 검사 범위로 쓰인다.</summary>
+    public int    AssetParentId { get; init; }
     public int    AssetTypeId { get; init; }
     public string TypeName    { get; init; } = "";
 
@@ -89,6 +91,7 @@ public class AssetEditRow
         var row = new AssetEditRow
         {
             AssetId     = va.AssetId,
+            AssetParentId = va.AssetParentId,
             AssetTypeId = va.AssetTypeId ?? 0,
             TypeName    = va.AssetTypeUserFriendlyName ?? "",
             DexaAsset   = EditableAsset.FromViewAsset(va),

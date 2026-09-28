@@ -21,6 +21,13 @@ type AmS2CReplyDeleteTrigger(query: AmC2SRequestDeleteTrigger) =
     inherit AmReply(null, query)
     private new() = AmS2CReplyDeleteTrigger(Unchecked.defaultof<_>)
 
+// 자산 편집 저장 응답
+// ViewAsset 은 DEXA 타입이라 래퍼로 복사되지 않는다(타입 불일치) — 값은 DB 재조회로 확인할 것.
+type AmS2CReplyUpdateAssetParameter(query: AmC2SRequestUpdateAssetParameter, viewAsset: ViewAsset) =
+    inherit AmReply(null, query)
+    member val ViewAsset: ViewAsset = viewAsset with get, set
+    private new() = AmS2CReplyUpdateAssetParameter(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
+
 // Connected peers reply (ServerConfig page)
 [<AllowNullLiteral>]
 type AmS2CReplyConnectedPeers() =

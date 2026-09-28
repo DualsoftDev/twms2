@@ -102,3 +102,5 @@ src/Twms2.Server/manuals/
 
 # DeepPinger source (private - use pre-built DLL from src/libs/)
 src/DeepPinger/
+DEXA_Asset.md
+XGCommLib.md

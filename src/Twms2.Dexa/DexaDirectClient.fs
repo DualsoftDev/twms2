@@ -270,6 +270,26 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                         try p.SetValue(wrapper, sp.GetValue(reply)) with _ -> ()
             wrapper
 
+    /// 서버 거부 응답이면 사유 문자열을 돌려준다. 아니면 None.
+    let tryGetServerError (reply: obj) : string option =
+        if isNull reply then None
+        else
+            let t = reply.GetType()
+            if t.Name.EndsWith("ResponseError") || t.Name = "AmReplyError" then
+                [ "ErrorMessage"; "DetailExceptionMessage"; "Message" ]
+                |> List.tryPick (fun n ->
+                    match t.GetProperty(n) with
+                    | null -> None
+                    | p ->
+                        match (try p.GetValue(reply) with _ -> null) with
+                        | null -> None
+                        | v ->
+                            let text = string v
+                            if String.IsNullOrWhiteSpace text then None else Some text)
+                |> Option.defaultValue t.Name
+                |> Some
+            else None
+
     /// DEXA DLL 알림 → F# 재정의 알림 타입으로 변환
     /// DexaNotificationService가 F# 타입으로 switch/pattern match하므로 필수
     let convertNotification (notification: obj) : obj =
@@ -433,7 +453,10 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                     else
                         // 응답은 DEXA DLL 타입으로 도착하므로 래퍼 타입이 아닌 동명 DEXA 타입으로 Ask해야 매칭된다
                         let replyType = resolveDexaReplyType typeof<'T>
-                        let genericAsk = askMethod.MakeGenericMethod(replyType)
+                        // Ask 는 obj 로 받는다. 기대 타입으로 받으면 서버가 거부 응답
+                        // (DEXResponseError)을 보냈을 때 캐스팅이 실패해 사유를 잃고
+                        // 타임아웃처럼 보인다. 실제 타입 판정은 아래에서 직접 한다.
+                        let genericAsk = askMethod.MakeGenericMethod(typeof<obj>)
                         let dexaMsg = toDexaType message
                         let taskObj = genericAsk.Invoke(proxy :> obj, [| dexaMsg |])
                         let innerTask = taskObj :?> Task
@@ -441,12 +464,24 @@ type DexaDirectClient(options: IOptions<DexaClientOptions>, logger: ILogger<Dexa
                         let! completed = Task.WhenAny(innerTask, Task.Delay(actualTimeout))
                         if obj.ReferenceEquals(completed, innerTask) then
                             let dexaReply = taskObj.GetType().GetProperty("Result").GetValue(taskObj)
-                            match convertReplyTo typeof<'T> dexaReply with
-                            | null -> return Unchecked.defaultof<'T>
-                            | converted -> return converted :?> 'T
+                            match tryGetServerError dexaReply with
+                            | Some err ->
+                                logger.LogWarning("DEXA 서버가 요청을 거부: {Type} - {Err}",
+                                    message.GetType().Name :> obj, err :> obj)
+                                return raise (DexaServerException(message.GetType().Name, err))
+                            | None when not (isNull dexaReply) && not (replyType.IsInstanceOfType dexaReply) ->
+                                let msg = sprintf "예상과 다른 응답: %s (기대 %s)" (dexaReply.GetType().Name) replyType.Name
+                                logger.LogWarning("Ask 응답 불일치: {Type} - {Err}",
+                                    message.GetType().Name :> obj, msg :> obj)
+                                return raise (DexaServerException(message.GetType().Name, msg))
+                            | None ->
+                                match convertReplyTo typeof<'T> dexaReply with
+                                | null -> return Unchecked.defaultof<'T>
+                                | converted -> return converted :?> 'T
                         else
                             return raise (TimeoutException(sprintf "Ask 타임아웃: %s (%O)" (message.GetType().Name) actualTimeout))
                 with
+                | :? DexaServerException as ex -> return raise ex
                 | :? TargetInvocationException as ex when not (isNull ex.InnerException) ->
                     logger.LogWarning("Ask 실패: {Type} - {Err}",
                         message.GetType().Name :> obj, ex.InnerException.Message :> obj)
