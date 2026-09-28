@@ -24,6 +24,8 @@ public class MaintenanceBackgroundService : BackgroundService
     private readonly MaintenanceOptions _options;
 
     private static readonly string ImportTempDir = Path.Combine(TwmsDataPath.Base, "import-tmp");
+    // 자산 등록 중 이탈해 남은 PLC/서보 프로젝트 파일
+    private static readonly string ProjectTempDir = Path.Combine(TwmsDataPath.Base, "project-tmp");
 
     public MaintenanceBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -46,6 +48,7 @@ public class MaintenanceBackgroundService : BackgroundService
             {
                 await CleanPingLogsAsync();
                 CleanImportTemp();
+                CleanTempDir(ProjectTempDir, "project-tmp");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -66,6 +69,38 @@ public class MaintenanceBackgroundService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var pingDb = scope.ServiceProvider.GetRequiredService<PingDbService>();
         await pingDb.DeleteOldPingLogsAsync(_options.PingLogRetentionDays);
+    }
+
+    /// <summary>
+    /// 지정한 임시 디렉터리에서 보존시간을 넘긴 잔여 파일 정리.
+    /// 등록 도중 이탈해 남은 프로젝트 파일 등이 대상이다.
+    /// </summary>
+    private void CleanTempDir(string dir, string label)
+    {
+        if (!Directory.Exists(dir)) return;
+
+        var cutoff = DateTime.Now.AddHours(-Math.Max(1, _options.ImportTempMaxAgeHours));
+        var removed = 0;
+        long freedBytes = 0;
+        foreach (var file in Directory.EnumerateFiles(dir))
+        {
+            try
+            {
+                var info = new FileInfo(file);
+                if (info.LastWriteTime >= cutoff) continue;
+                freedBytes += info.Length;
+                info.Delete();
+                removed++;
+            }
+            catch (IOException)
+            {
+                // 사용 중인 파일은 건너뛴다(다음 주기에 재시도)
+            }
+        }
+
+        if (removed > 0)
+            _logger.LogInformation("{Label} 정리: 잔여 임시파일 {Count}건 삭제 ({SizeKB}KB 확보)",
+                label, removed, freedBytes / 1024);
     }
 
     private void CleanImportTemp()

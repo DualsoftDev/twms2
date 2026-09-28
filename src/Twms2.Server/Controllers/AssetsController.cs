@@ -7,6 +7,8 @@ using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Models.Dexa;
 using Twms2.Server.Services;
 
+using Twms2.Dexa;
+
 namespace Twms2.Server.Controllers;
 
 /// <summary>
@@ -217,6 +219,100 @@ public class AssetsController : ControllerBase
     /// 수동 백업 실행 (AssetExplorer.ExecuteManualBackup 이식 — fire &amp; forget).
     /// DEXA 는 완료 응답을 주지 않으므로 클라이언트는 backup-status 로 액션 행 등장/종료를 폴링한다.
     /// </summary>
+    /// PLC(.xgwx) / 서보(.xpj) 프로젝트 파일 최대 크기.
+    /// DEXA 의 Akka 프레임 상한(CommBufferSize 약 28MB)보다 넉넉히 아래로 잡는다.
+    private const long MaxProjectFileSize = 20L * 1024 * 1024;
+
+    /// <summary>
+    /// PLC/서보 프로젝트 파일 업로드 (Admin 전용).
+    /// 등록 API 에 넘길 토큰을 돌려준다. 파일은 등록이 확인될 때까지 임시 보관되고,
+    /// 이탈해 남은 것은 유지보수 잡이 정리한다.
+    /// </summary>
+    [HttpPost("project-file")]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    [RequestSizeLimit(MaxProjectFileSize + 1024 * 1024)]
+    public async Task<IActionResult> UploadProjectFile(IFormFile? file)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "파일을 선택해주세요." });
+        if (file.Length > MaxProjectFileSize)
+            return BadRequest(new { error = $"파일 크기가 {MaxProjectFileSize / (1024 * 1024)}MB 를 초과합니다." });
+
+        var ext = Path.GetExtension(file.FileName);
+        if (!string.Equals(ext, ".xgwx", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ext, ".xpj", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "PLC 는 .xgwx, 서보는 .xpj 파일만 올릴 수 있습니다." });
+
+        // 원본 파일명을 그대로 보관한다 — DEXA projectFile.path 에 들어가고 화면에도 보인다.
+        var safeName = Path.GetFileName(file.FileName);
+        if (safeName.Any(Path.GetInvalidFileNameChars().Contains))
+            return BadRequest(new { error = "파일명에 사용할 수 없는 문자가 있습니다." });
+
+        Directory.CreateDirectory(AssetService.ProjectTempDir);
+        var token = Guid.NewGuid().ToString("N");
+        var path = Path.Combine(AssetService.ProjectTempDir, $"{token}__{safeName}");
+
+        await using (var fs = System.IO.File.Create(path))
+            await file.CopyToAsync(fs);
+
+        var md5 = AssetService.Md5Hex(await System.IO.File.ReadAllBytesAsync(path));
+
+        // 같은 파일이 이미 다른 자산에 쓰이고 있으면 복붙 실수일 가능성이 높다 — 경고만 하고 막지는 않는다.
+        var used = await _dexaRead.GetProjectFileChecksumsAsync();
+        var warning = used.TryGetValue(md5, out var owner) && !string.IsNullOrEmpty(owner)
+            ? $"같은 프로젝트 파일이 이미 '{owner}' 에 사용 중입니다. 파일을 잘못 고르지 않았는지 확인하세요."
+            : null;
+
+        return Ok(new { ok = true, token, fileName = safeName, size = file.Length, md5, warning });
+    }
+
+    /// <summary>
+    /// 자산 신규 등록 (Admin 전용). DEXA 서버 경유(CreateNewAsset) — 상위 폴더부터 만든다.
+    /// 경로 규칙: /twms/{라인ID}_{라인명}/{타입폴더}/{자산명}
+    /// </summary>
+    [HttpPost]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    public async Task<IActionResult> Register([FromBody] AssetService.RegisterAssetRequest req)
+    {
+        if (req is null)
+            return BadRequest(new { error = "요청 본문이 비어 있습니다." });
+        if (!_dexaClient.IsConnected)
+            return StatusCode(503, new { error = "DEXA 서버에 연결되어 있지 않습니다. 등록은 서버가 필요합니다." });
+
+        try
+        {
+            var (ok, error, assetId) = await _assets.RegisterAssetAsync(req);
+            return ok ? Ok(new { ok = true, assetId }) : BadRequest(new { error });
+        }
+        catch (DexaServerException ex)
+        {
+            // 서버가 거부한 사유를 그대로 보여준다(라이선스 만료·이름 중복·서버 Lock).
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 자산/폴더 삭제 (Admin 전용). DEXA 서버 경유 — soft delete 이고 자식은 직접 순회한다.
+    /// 백업 파일·이력은 보존되며 라이선스 슬롯은 반환된다.
+    /// </summary>
+    [HttpDelete("{id:int}")]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    public async Task<IActionResult> Delete(int id, [FromQuery] bool includeChildren = false)
+    {
+        if (!_dexaClient.IsConnected)
+            return StatusCode(503, new { error = "DEXA 서버에 연결되어 있지 않습니다. 삭제는 서버가 필요합니다." });
+
+        try
+        {
+            var (ok, error, deleted) = await _assets.DeleteAssetAsync(id, includeChildren);
+            return ok ? Ok(new { ok = true, deleted }) : BadRequest(new { error, deleted });
+        }
+        catch (DexaServerException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPost("{id:int}/backup")]
     [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
     public async Task<IActionResult> ExecuteBackup(int id)

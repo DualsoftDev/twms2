@@ -28,6 +28,18 @@ type AmS2CReplyUpdateAssetParameter(query: AmC2SRequestUpdateAssetParameter, vie
     member val ViewAsset: ViewAsset = viewAsset with get, set
     private new() = AmS2CReplyUpdateAssetParameter(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
 
+// 자산 생성 응답. ViewAsset 은 DEXA 타입이라 래퍼로 복사되지 않으므로
+// 생성된 ID 는 DB 재조회로 얻어야 한다.
+[<AllowNullLiteral>]
+type AmS2CReplyRegisterAsset() =
+    inherit AmReply()
+
+// 자산 삭제 응답. 서버가 내부 예외를 삼키고도 이 응답을 보내므로
+// 실제 삭제 여부는 DB 재조회로 확인해야 한다.
+[<AllowNullLiteral>]
+type AmS2CReplyDeleteAsset() =
+    inherit AmReply()
+
 // Connected peers reply (ServerConfig page)
 [<AllowNullLiteral>]
 type AmS2CReplyConnectedPeers() =

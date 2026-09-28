@@ -166,6 +166,13 @@ public class PingDbService
         )).AsList();
     }
 
+    /// <summary>자산 삭제 시 현재 핑 상태 제거. 이력(TwmsPingLog)은 보존기간 잡이 정리한다.</summary>
+    public async Task DeletePingResultAsync(int assetId)
+    {
+        using var conn = _db.Create();
+        await conn.ExecuteAsync("DELETE FROM TwmsPingResult WHERE DexaAssetId = @Id", new { Id = assetId });
+    }
+
     /// <summary>보존기간을 초과한 핑 상태전환 이력 삭제. 삭제된 행 수 반환.</summary>
     public async Task<int> DeleteOldPingLogsAsync(int retentionDays)
     {

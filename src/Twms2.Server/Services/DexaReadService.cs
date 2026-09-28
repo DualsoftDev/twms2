@@ -129,6 +129,33 @@ public class DexaReadService
     }
 
     /// <summary>
+    /// 등록된 프로젝트 파일의 체크섬 → 사용 중인 자산명. 업로드 파일 중복 경고에 쓴다.
+    /// 현장 검증: 25건 모두 체크섬이 서로 달랐다 — 같은 파일이 두 자산에 걸리면 복붙 실수일 가능성이 높다.
+    /// </summary>
+    public async Task<Dictionary<string, string>> GetProjectFileChecksumsAsync()
+    {
+        try
+        {
+            using var conn = _dexaDb.Create();
+            var rows = await conn.QueryAsync<(string checksum, string parameter)>("""
+                SELECT pf.checksum, a.parameter
+                FROM projectFile pf
+                JOIN asset a ON a.projectFileId = pf.id AND a.deleted = 0
+                """);
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in rows)
+                if (!string.IsNullOrEmpty(r.checksum))
+                    map[r.checksum] = new Models.Dexa.ViewAsset { AssetParameter = r.parameter }.Name ?? "";
+            return map;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "프로젝트 파일 체크섬 조회 실패");
+            return [];
+        }
+    }
+
+    /// <summary>
     /// 자산 타입 목록 조회
     /// </summary>
     public async Task<List<AssetType>> GetAssetTypesAsync()

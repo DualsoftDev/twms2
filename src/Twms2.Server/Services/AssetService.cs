@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using DEX.Core.Actor;
+using Twms2.Dexa;
 using Twms2.Server.HOCON;
 using Twms2.Server.Models.Dexa;
 
@@ -17,14 +18,16 @@ public class AssetService
     private readonly TwmDbService _twmDb;
     private readonly LayoutDbService _layoutDb;
     private readonly DexaServerClient _dexa;
+    private readonly PingDbService _pingDb;
     private readonly ILogger<AssetService> _logger;
 
-    public AssetService(DexaReadService dexaRead, TwmDbService twmDb, LayoutDbService layoutDb, DexaServerClient dexa, ILogger<AssetService> logger)
+    public AssetService(DexaReadService dexaRead, TwmDbService twmDb, LayoutDbService layoutDb, DexaServerClient dexa, PingDbService pingDb, ILogger<AssetService> logger)
     {
         _dexaRead = dexaRead;
         _twmDb = twmDb;
         _layoutDb = layoutDb;
         _dexa = dexa;
+        _pingDb = pingDb;
         _logger = logger;
     }
 
@@ -417,6 +420,314 @@ public class AssetService
     {
         await _dexaRead.UpdateAssetDescriptionAsync(dexaAssetId, description);
         InvalidateAssetCache();
+    }
+
+    // ── 자산 등록 ────────────────────────────────────────────
+
+    /// <summary>등록 시 만드는 타입 폴더 이름. 기존 트리 관례(PLC/HMI/INV)를 따른다.</summary>
+    private static string TypeFolderName(int assetTypeId) => assetTypeId switch
+    {
+        4 => "INV",
+        5 => "HMI",
+        6 => "PLC",
+        7 => "SERVO",
+        _ => throw new ArgumentException($"등록을 지원하지 않는 자산 타입입니다: {assetTypeId}"),
+    };
+
+    /// <summary>경로 세그먼트로 쓸 수 없는 문자를 치환. 라인명 'E/ROOM' 같은 값이 실제로 있다.</summary>
+    private static string SanitizeSegment(string name)
+    {
+        var cleaned = new string((name ?? "").Select(c =>
+            Path.GetInvalidFileNameChars().Contains(c) ? '-' : c).ToArray());
+        return cleaned.Trim().TrimEnd('.');
+    }
+
+    public record RegisterAssetRequest(
+        int AssetTypeId,
+        string Name,
+        int LineId,
+        string? Ip = null,
+        string? Description = null,
+        string? Agent = null,
+        string? ProjectFileToken = null);
+
+    /// <summary>프로젝트 파일이 반드시 있어야 하는 타입 (PLC, 서보).</summary>
+    public static bool RequiresProjectFile(int assetTypeId) => assetTypeId is 6 or 7;
+
+    /// <summary>업로드된 프로젝트 파일 임시 보관 위치.</summary>
+    public static string ProjectTempDir => Path.Combine(TwmsDataPath.Base, "project-tmp");
+
+    /// <summary>
+    /// DEXA 자산 신규 등록 — CreateNewAsset(Akka) 경유. 상위 폴더부터 차례로 만든다.
+    ///
+    /// ImportAssets 는 폴더를 자동 생성해 주지만 쓰지 않는다. 그 핸들러가 전체 자산의
+    /// 경로로 Dictionary 를 만드는데, 구버전 TWM 에서 올라온 환경에는 레이아웃 그룹용
+    /// 동명 폴더가 남아 있어 거기서 그대로 터진다
+    /// ("An item with the same key has already been added." — 실측 확인).
+    /// CreateNewAsset 은 중복 검사에 Count() 를 써서 그 영향을 받지 않는다.
+    ///
+    /// 경로: /twms/{라인ID}_{정규화 라인명}/{타입폴더}/{자산명}
+    /// 실패는 예외가 아니라 항목별 에러 문자열로 돌아온다(부분 성공이 정상 동작).
+    /// </summary>
+    public async Task<(bool Ok, string? Error, int? AssetId)> RegisterAssetAsync(RegisterAssetRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Name))
+            return (false, "자산명이 비어 있습니다.", null);
+
+        // PLC/서보는 등록 시점에 프로젝트 파일이 없으면 **나중에 붙일 수 없다**
+        // (교체 로직이 기존 projectFileId 를 재사용하는데 NULL 이면 깨진다).
+        // 백업이 영영 불가능한 자산이 생기므로 여기서 막는다.
+        if (RequiresProjectFile(req.AssetTypeId) && string.IsNullOrWhiteSpace(req.ProjectFileToken))
+            return (false, "PLC·서보는 프로젝트 파일이 필요합니다. 먼저 업로드한 뒤 토큰을 함께 보내세요.", null);
+
+        var types = await _dexaRead.GetAssetTypesAsync();
+        var type = types.FirstOrDefault(t => t.Id == req.AssetTypeId);
+        if (type is null)
+            return (false, $"자산 타입 {req.AssetTypeId} 를 찾을 수 없습니다.", null);
+
+        var lines = await _layoutDb.GetTwmsLayoutLineMapAsync();
+        if (!lines.TryGetValue(req.LineId, out var lineName))
+            return (false, $"라인 {req.LineId} 을 찾을 수 없습니다.", null);
+
+        var all = await _dexaRead.GetViewAssetsAsync();
+
+        // 전역 동명 경고 — 서버는 같은 폴더 안만 보므로 TWMS 가 넓게 확인한다.
+        var dup = all.FirstOrDefault(a => a.IsRealAsset &&
+            string.Equals((a.Name ?? "").Trim(), req.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (dup != null)
+            return (false, $"같은 이름의 자산이 이미 있습니다 (ID {dup.AssetId}).", null);
+
+        // 폴더 체인: 루트 → twms → {ID}_{라인명} → {타입폴더}
+        var rootAsset = all.FirstOrDefault(a => a.AssetTypeId == 1);
+        if (rootAsset is null)
+            return (false, "DEXA 루트 폴더를 찾을 수 없습니다.", null);
+        var rootId = rootAsset.AssetId;
+        var lineSeg = FindLineFolderName(all, req.LineId)
+                      ?? $"{req.LineId:D2}_{SanitizeSegment(lineName)}";
+
+        int twmsId, lineId2, typeId2;
+        try
+        {
+            twmsId  = await EnsureFolderAsync(rootId, RootFolderName);
+            lineId2 = await EnsureFolderAsync(twmsId, lineSeg);
+            typeId2 = await EnsureFolderAsync(lineId2, TypeFolderName(req.AssetTypeId));
+        }
+        catch (DexaServerException ex)
+        {
+            return (false, $"폴더 생성 실패: {ex.Message}", null);
+        }
+
+        // 프로젝트 파일: 등록이 확인될 때까지 임시 파일을 지우지 않는다(실패 시 재시도 가능).
+        string? tempPath = null, projectFileName = null;
+        byte[]? projectBytes = null;
+        if (!string.IsNullOrWhiteSpace(req.ProjectFileToken))
+        {
+            tempPath = FindProjectTempFile(req.ProjectFileToken!);
+            if (tempPath is null)
+                return (false, "업로드한 프로젝트 파일을 찾을 수 없습니다. 다시 업로드해 주세요.", null);
+
+            projectBytes = await File.ReadAllBytesAsync(tempPath);
+            // projectFile.path 는 NVARCHAR(128) — 원본 파일명만 넣는다.
+            projectFileName = Path.GetFileName(tempPath).Split("__", 2).Last();
+        }
+
+        // 타입 템플릿에서 파라미터 생성
+        var p = new Parameter(type.Parameter);
+        SetItem(p, "name", req.Name);
+        if (!string.IsNullOrWhiteSpace(req.Ip)) SetItem(p, "IP", req.Ip!);
+        if (req.Description != null) SetItem(p, "description", req.Description);
+        // DEXA GUI 는 이 필드로 프로젝트 파일 경로를 표시하고 편집 시 거기서 파일을 읽는다.
+        // 템플릿 기본값(C:\Temp\drive.xgwx)을 두면 존재하지 않는 경로가 남는다.
+        if (projectFileName != null) SetItem(p, "project", projectFileName);
+        var parameter = Parameter.Buildup(p.Items.SelectMany(it => it.ToKeyValuePairs()));
+
+        var create = new AmC2SRequestCreateNewAsset(req.AssetTypeId, req.Agent, parameter, typeId2);
+        if (projectBytes != null)
+        {
+            create.ProjectFileContents = projectBytes;
+            create.ProjectFileChecksum = Md5Hex(projectBytes);
+            create.ProjectPath = projectFileName;
+        }
+
+        var reply = await _dexa.AskOrThrowAsync<AmS2CReplyRegisterAsset>(
+            create, TimeSpan.FromSeconds(180));
+        if (reply is null)
+            return (false, "DEXA 서버 응답이 없습니다.", null);
+
+        // 서버가 성공을 보고해도 실제 반영은 재조회로 확인한다.
+        _dexaRead.InvalidateCache();
+        var created = (await _dexaRead.GetViewAssetsAsync())
+            .FirstOrDefault(a => a.AssetParentId == typeId2 &&
+                string.Equals(a.Name, req.Name, StringComparison.Ordinal));
+
+        if (created is null)
+            return (false, "등록 응답은 성공이지만 DB 에서 자산을 찾지 못했습니다.", null);
+
+        // TWMS 확장정보: 라인 배정. DEXA 경로는 등록 시점 스냅샷이고,
+        // 화면의 라인 표시는 TwmsAsset.AugLineId 를 본다 — 둘 다 써야 한다.
+        //
+        // 실패해도 등록을 실패로 돌리지 않는다 — DEXA 자산은 이미 만들어졌고,
+        // 여기서 예외를 올리면 "실패했다"면서 실제로는 자산이 생긴 상태가 남는다.
+        // 라인은 나중에 자산 편집에서 다시 지정할 수 있다.
+        try
+        {
+            await _twmDb.UpsertTwmsAssetAsync(new Models.Twm.TwmsAsset
+            {
+                DexaId    = created.AssetId,
+                AugLineId = req.LineId,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "자산 {AssetId} 등록됨, 라인 배정 실패 — 편집에서 라인을 다시 지정해야 함", created.AssetId);
+        }
+
+        // 등록이 DB 로 확인된 뒤에야 임시 파일을 지운다.
+        if (tempPath is not null)
+        {
+            try { File.Delete(tempPath); }
+            catch (Exception ex) { _logger.LogWarning(ex, "임시 프로젝트 파일 삭제 실패: {Path}", tempPath); }
+        }
+
+        return (true, null, created.AssetId);
+    }
+
+    /// <summary>토큰으로 임시 파일 찾기. 파일명은 "{토큰}__{원본이름}" 형식.</summary>
+    public static string? FindProjectTempFile(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Any(Path.GetInvalidFileNameChars().Contains))
+            return null;
+        if (!Directory.Exists(ProjectTempDir)) return null;
+        return Directory.EnumerateFiles(ProjectTempDir, token + "__*").FirstOrDefault();
+    }
+
+    /// <summary>DEXA 가 쓰는 체크섬 형식 — MD5 소문자 hex.</summary>
+    public static string Md5Hex(byte[] bytes) =>
+        Convert.ToHexString(System.Security.Cryptography.MD5.HashData(bytes)).ToLowerInvariant();
+
+    /// <summary>
+    /// DEXA 자산/폴더 삭제 — Akka 경유(DeleteAssetById).
+    ///
+    /// 서버는 soft delete(deleted=1)만 하고 **자식을 따라가지 않는다.**
+    /// 그래서 자식을 모아 깊은 것부터 지운다 — 부모를 먼저 지우면 고아가 남는다.
+    /// 백업 파일과 이력은 보존되고, 라이선스 슬롯은 반환된다(카운트가 deleted=0 만 센다).
+    /// 서버가 내부 예외를 삼키고도 성공 응답을 보내므로 건마다 재조회로 확인한다.
+    /// </summary>
+    public async Task<(bool Ok, string? Error, int Deleted)> DeleteAssetAsync(
+        int assetId, bool includeChildren = false)
+    {
+        var all = await _dexaRead.GetViewAssetsAsync();
+        var target = all.FirstOrDefault(a => a.AssetId == assetId);
+        if (target is null)
+            return (false, $"자산 {assetId} 를 찾을 수 없습니다.", 0);
+        if (target.IsSystemRootFolder)
+            return (false, "시스템 루트 폴더는 삭제할 수 없습니다.", 0);
+
+        // 자식 먼저 담아 leaf-first 순서를 만든다.
+        var order = new List<ViewAsset>();
+        void Collect(ViewAsset node)
+        {
+            foreach (var child in all.Where(a => a.AssetParentId == node.AssetId))
+                Collect(child);
+            order.Add(node);
+        }
+        Collect(target);
+
+        if (order.Count > 1 && !includeChildren)
+            return (false, $"하위에 {order.Count - 1}개가 있습니다. 함께 지우려면 includeChildren 을 켜세요.", 0);
+
+        var deleted = 0;
+        foreach (var node in order)
+        {
+            var reply = await _dexa.AskOrThrowAsync<AmS2CReplyDeleteAsset>(
+                new AmC2SRequestDeleteAssetById(node.AssetId), TimeSpan.FromSeconds(60));
+            if (reply is null)
+                return (false, $"자산 {node.AssetId} 삭제: DEXA 서버 응답이 없습니다.", deleted);
+
+            _dexaRead.InvalidateCache();
+            if ((await _dexaRead.GetViewAssetsAsync()).Any(a => a.AssetId == node.AssetId))
+                return (false, $"자산 {node.AssetId}: 삭제 응답은 성공이지만 DB 에 그대로 남아 있습니다.", deleted);
+
+            await CleanupTwmsRowsAsync(node.AssetId);
+            deleted++;
+        }
+
+        return (true, null, deleted);
+    }
+
+    /// <summary>
+    /// 자산이 사라진 뒤 TWMS 쪽에 남는 행 정리(확장정보·연결정보·도면배치·핑상태).
+    ///
+    /// 실패해도 삭제를 중단하지 않는다 — DEXA 삭제는 이미 커밋됐고 되돌릴 수 없는데,
+    /// 여기서 예외를 올리면 "실패했다"고 보고하면서 실제로는 지워진 상태가 남는다.
+    /// 남은 행은 자산이 없으니 조회에 걸리지 않아 무해하고, 나중에 정리할 수 있다.
+    /// </summary>
+    private async Task CleanupTwmsRowsAsync(int assetId)
+    {
+        try
+        {
+            await _twmDb.DeleteTwmsAssetAsync(assetId);
+            await _twmDb.DeleteTwmsAssetConnAsync(assetId);
+            await _layoutDb.DeleteAssetPlacementAsync(assetId);
+            await _pingDb.DeletePingResultAsync(assetId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "자산 {AssetId} 삭제 후 TWMS 정리 실패 — DEXA 삭제는 완료됨. 남은 행은 수동 정리 필요",
+                assetId);
+        }
+    }
+
+    private const string RootFolderName = "twms";
+
+    /// <summary>
+    /// 같은 부모 아래 동명 폴더가 있으면 그 ID 를, 없으면 새로 만들어 ID 를 돌려준다.
+    /// 폴더는 TypeId=2 라 서버의 라이선스 검사를 타지 않는다.
+    /// </summary>
+    private async Task<int> EnsureFolderAsync(int parentId, string folderName)
+    {
+        var existing = (await _dexaRead.GetViewAssetsAsync())
+            .FirstOrDefault(a => a.IsFolder && a.AssetParentId == parentId &&
+                string.Equals(a.Name, folderName, StringComparison.Ordinal));
+        if (existing != null) return existing.AssetId;
+
+        // DEXA GUI 가 쓰는 폴더 파라미터 형식(키는 임의, 값이 이름)
+        var quoted = (char)34 + folderName + (char)34;
+        var parameter = string.Join(Environment.NewLine,
+            "Folder1.name.type = String",
+            "Folder1.name.value = " + quoted);
+        var reply = await _dexa.AskOrThrowAsync<AmS2CReplyRegisterAsset>(
+            new AmC2SRequestCreateNewAsset(2, null, parameter, parentId),
+            TimeSpan.FromSeconds(60));
+        if (reply is null)
+            throw new InvalidOperationException($"폴더 '{folderName}' 생성: DEXA 서버 응답이 없습니다.");
+
+        _dexaRead.InvalidateCache();
+        var created = (await _dexaRead.GetViewAssetsAsync())
+            .FirstOrDefault(a => a.IsFolder && a.AssetParentId == parentId &&
+                string.Equals(a.Name, folderName, StringComparison.Ordinal));
+        return created?.AssetId
+               ?? throw new InvalidOperationException($"폴더 '{folderName}' 를 만들었지만 DB 에서 찾지 못했습니다.");
+    }
+
+    /// <summary>라인 폴더는 "{ID}_" 접두로 찾아 재사용한다 (라인 이름이 바뀌어도 쪼개지지 않게).</summary>
+    private static string? FindLineFolderName(List<ViewAsset> all, int lineId)
+    {
+        var twms = all.FirstOrDefault(a => a.IsFolder &&
+            string.Equals(a.Name, RootFolderName, StringComparison.Ordinal));
+        if (twms is null) return null;
+        var prefix = $"{lineId:D2}_";
+        return all.FirstOrDefault(a => a.IsFolder && a.AssetParentId == twms.AssetId &&
+            (a.Name ?? "").StartsWith(prefix, StringComparison.Ordinal))?.Name;
+    }
+
+    private static void SetItem(Parameter p, string key, string value)
+    {
+        var item = p.Items.FirstOrDefault(it =>
+            it.Key.Equals(key, StringComparison.OrdinalIgnoreCase) && it.DataType != DataType.Button);
+        if (item != null) item.Value = value;
     }
 
     // ── CSV Export / Import ──────────────────────────────────

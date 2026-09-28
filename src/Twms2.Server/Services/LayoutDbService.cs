@@ -357,6 +357,14 @@ public class LayoutDbService
             """, group);
     }
 
+    /// <summary>자산 삭제 시 남는 배치 흔적 정리 (도면 위치 + 배치 그룹 멤버).</summary>
+    public async Task DeleteAssetPlacementAsync(int assetId)
+    {
+        using var conn = _db.Create();
+        await conn.ExecuteAsync("DELETE FROM TwmsAssetPosition WHERE AssetId = @Id", new { Id = assetId });
+        await conn.ExecuteAsync("DELETE FROM TwmsPlacementGroupMember WHERE AssetId = @Id", new { Id = assetId });
+    }
+
     public async Task DeletePlacementGroupAsync(int groupId)
     {
         using var conn = _db.Create();
