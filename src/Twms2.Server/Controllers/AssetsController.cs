@@ -279,6 +279,11 @@ public class AssetsController : ControllerBase
         if (!_dexaClient.IsConnected)
             return StatusCode(503, new { error = "DEXA 서버에 연결되어 있지 않습니다. 등록은 서버가 필요합니다." });
 
+        // 드라이브 모델 버전은 백업에 쓸 파라미터 맵을 고르는 값이다. 비워두면 템플릿 기본값(1.00)이
+        // 그대로 남는데, 그렇게 만들어진 백업은 실패하지 않고 조용히 어긋나므로 여기서 막는다.
+        if (req.AssetTypeId == AssetService.DriveTypeId && string.IsNullOrWhiteSpace(req.ModelVersion))
+            return BadRequest(new { error = "드라이브는 모델 버전이 필요합니다." });
+
         try
         {
             var (ok, error, assetId) = await _assets.RegisterAssetAsync(req);
@@ -306,6 +311,40 @@ public class AssetsController : ControllerBase
         {
             var (ok, error, deleted) = await _assets.DeleteAssetAsync(id, includeChildren);
             return ok ? Ok(new { ok = true, deleted }) : BadRequest(new { error, deleted });
+        }
+        catch (DexaServerException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>선택 삭제 요청. 표에서 체크한 행들의 자산 id.</summary>
+    public record DeleteAssetsRequest(int[] AssetIds, bool IncludeChildren = false);
+
+    /// <summary>
+    /// 자산 여러 건 삭제 (Admin 전용). 건별로 진행하며 중간에 실패해도 나머지를 계속한다 —
+    /// DEXA 삭제는 건마다 개별 커밋이라 전체를 되돌릴 수 없고, 되돌리는 척하는 편이 더 위험하다.
+    /// 그래서 전체 성공/실패 대신 건별 결과를 돌려준다.
+    /// </summary>
+    [HttpPost("delete")]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    public async Task<IActionResult> DeleteMany([FromBody] DeleteAssetsRequest req)
+    {
+        if (req?.AssetIds is null || req.AssetIds.Length == 0)
+            return BadRequest(new { error = "삭제할 자산을 선택해주세요." });
+        if (!_dexaClient.IsConnected)
+            return StatusCode(503, new { error = "DEXA 서버에 연결되어 있지 않습니다. 삭제는 서버가 필요합니다." });
+
+        try
+        {
+            var results = await _assets.DeleteAssetsAsync(req.AssetIds, req.IncludeChildren);
+            return Ok(new
+            {
+                ok      = results.All(r => r.Ok),
+                success = results.Count(r => r.Ok),
+                fail    = results.Count(r => !r.Ok),
+                results = results.Select(r => new { assetId = r.AssetId, success = r.Ok, error = r.Error }),
+            });
         }
         catch (DexaServerException ex)
         {

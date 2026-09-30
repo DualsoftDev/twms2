@@ -259,6 +259,7 @@
 
     bindCellEvents();
     bindSort();
+    bindSelection();
     renderPager(pages, rows.length);
   }
 
@@ -513,6 +514,278 @@
   }
 
   /* ── 이벤트 바인딩 ── */
+  /* ── 선택 ─────────────────────────────────────────────────────────
+     행 체크박스는 일괄 편집이 쓰던 것을 그대로 쓴다. 선택 수를 삭제 버튼에 반영. */
+  function bindSelection() {
+    const table = $('t-table');
+    if (!table) return;
+    table.querySelectorAll('.sel-check').forEach(c => c.addEventListener('change', updateSelCount));
+    updateSelCount();
+  }
+
+  function updateSelCount() {
+    const btn = $('t-del');
+    if (!btn) return;
+    const n = selectedIds().length;
+    btn.disabled = n === 0;
+    btn.style.opacity = n === 0 ? '0.45' : '';
+    btn.innerHTML = '<span class="material-symbols-outlined">delete</span>선택 삭제' + (n ? ' (' + n + ')' : '');
+  }
+
+  /* ── 삭제 ───────────────────────────────────────────────────────── */
+  function openConfirmDelete() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    const rows = ids.map(id => S.rows.find(r => r.assetId === id)).filter(Boolean);
+    $('cfm-msg').textContent = '선택한 자산 ' + ids.length + '건을 삭제합니다.';
+    $('cfm-list').innerHTML =
+      rows.slice(0, 20).map(r =>
+        '<div>' + esc(cur(r, 'name')) + ' <span class="reg-hint">· ' + esc(r.typeName) + ' · #' + r.assetId + '</span></div>'
+      ).join('') +
+      (rows.length > 20 ? '<div class="reg-hint">… 외 ' + (rows.length - 20) + '건</div>' : '');
+    $('cfm-overlay').classList.add('open');
+    $('cfm-box').classList.add('open');
+  }
+
+  function closeConfirm() {
+    $('cfm-overlay').classList.remove('open');
+    $('cfm-box').classList.remove('open');
+  }
+
+  async function doDelete() {
+    const ids = selectedIds();
+    closeConfirm();
+    if (!ids.length) return;
+
+    hideAlert();
+    setProgress(30);
+    try {
+      const res = await fetch('/api/assets/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetIds: ids }),
+      });
+      const d = await res.json().catch(() => ({}));
+      setProgress(90);
+      if (!res.ok) { showAlert('err', 'error', d.error || '삭제에 실패했습니다.'); return; }
+
+      if (d.fail > 0) {
+        const first = (d.results || []).find(r => !r.success);
+        showAlert('warn', 'warning',
+          d.success + '건 삭제, ' + d.fail + '건 실패' + (first && first.error ? ' — ' + first.error : ''));
+      } else {
+        showAlert('ok', 'check_circle', d.success + '건을 삭제했습니다.', true);
+      }
+      await load();
+    } catch (e) {
+      showAlert('err', 'error', '삭제 중 오류: ' + e.message);
+    } finally {
+      setProgress(0);
+    }
+  }
+
+  /* ── 등록 (단건) ─────────────────────────────────────────────────── */
+  const REG = { token: null, fileName: null };
+
+  // PLC(6)·서보(7)는 프로젝트 파일이 필수다 — 등록 후에는 붙일 수 없다.
+  function isFileType(typeId) { return typeId === 6 || typeId === 7; }
+  // 드라이브(4)만 모델·버전과 경유 연결이 DEXA 파라미터로 들어간다.
+  function isDriveType(typeId) { return typeId === 4; }
+
+  // DEXA "LS Drive" 타입 템플릿의 modelName candidates 와 같은 목록.
+  const DRIVE_MODELS = ['iS7', 'S100', 'H100', 'G100', 'S300'];
+  // 입력 보조용 제안 목록일 뿐이다 — 직접 입력도 된다.
+  const DRIVE_VERSIONS = ['1.00', '1.02', '1.04', '1.05', '1.06', '1.10'];
+
+  function regAlert(msg) {
+    $('reg-alert-msg').textContent = msg;
+    $('reg-alert').style.display = '';
+  }
+
+  function syncRegType() {
+    const raw = $('reg-type').value;
+    const t = raw === '' ? 0 : +raw;
+    const file = isFileType(t);
+    const drive = isDriveType(t);
+
+    $('reg-file-box').style.display = file ? '' : 'none';
+    $('reg-drive-box').style.display = drive ? '' : 'none';
+    // 경유는 드라이브와 PLC/서보가 함께 쓴다 — 저장되는 곳만 다르다.
+    $('reg-via-box').style.display = (file || drive) ? '' : 'none';
+    $('reg-robot-box').style.display = t === 6 ? '' : 'none';
+    $('reg-file').setAttribute('accept', t === 7 ? '.xpj' : '.xgwx');
+
+    $('reg-via-hint').textContent = drive
+      ? '드라이브는 대개 PLC 를 거쳐 접속합니다. 실제 백업 경로이므로 실물과 맞춰주세요.'
+      : '상태 표시(핑)에만 쓰입니다. 백업 접속 경로는 프로젝트 파일을 따릅니다.';
+    $('reg-ip-hint').textContent = file
+      ? '상태 표시(핑)에 쓰는 주소입니다. 백업 접속 대상은 프로젝트 파일에서 읽습니다.'
+      : '백업 대상 주소입니다.';
+  }
+
+  function syncViaUse() {
+    const on = $('reg-via-use').checked;
+    ['reg-via', 'reg-base', 'reg-slot'].forEach(id => { $(id).disabled = !on; });
+  }
+
+  function openReg() {
+    REG.token = null; REG.fileName = null;
+    ['reg-name', 'reg-desc', 'reg-ip', 'reg-agent', 'reg-via', 'reg-slot', 'reg-modelver']
+      .forEach(id => { $(id).value = ''; });
+    $('reg-base').value = '0';
+    $('reg-via-use').checked = false;
+    $('reg-robot').checked = false;
+    $('reg-file').value = '';
+    $('reg-file-name').textContent = '선택된 파일 없음';
+    $('reg-file-warn').style.display = 'none';
+    $('reg-alert').style.display = 'none';
+    $('reg-name-err').textContent = '';
+
+    // 등록 가능한 타입만 — FTP/SFTP 는 현재 범위에서 제외
+    const regTypes = TYPES.filter(t => [4, 5, 6, 7].indexOf(t.id) >= 0);
+    // 타입 탭에서 열었으면 그 타입을 미리 고른다. '전체' 탭에서는 고르지 않는다 —
+    // 기본값을 몰래 정해두면 타입을 선택한 줄 모르고 엉뚱한 자산을 등록하게 된다.
+    const preset = regTypes.some(t => t.id === S.activeType) ? S.activeType : null;
+    $('reg-type').innerHTML =
+      (preset === null ? '<option value="" selected>-- 자산 타입 선택 --</option>' : '') +
+      regTypes.map(t =>
+        '<option value="' + t.id + '"' + (t.id === preset ? ' selected' : '') + '>' + esc(t.name) + '</option>').join('');
+
+    $('reg-model').innerHTML = DRIVE_MODELS.map(m => '<option value="' + m + '">' + m + '</option>').join('');
+    $('reg-ver-list').innerHTML = DRIVE_VERSIONS.map(v => '<option value="' + v + '">').join('');
+    $('reg-line').innerHTML = '<option value="">-- 선택 --</option>' +
+      S.lineOptions.map(o => '<option value="' + o.id + '">' + esc(o.name) + '</option>').join('');
+
+    syncRegType();
+    syncViaUse();
+    $('reg-overlay').classList.add('open');
+    $('reg-panel').classList.add('open');
+    $('reg-name').focus();
+  }
+
+  function closeReg() {
+    $('reg-overlay').classList.remove('open');
+    $('reg-panel').classList.remove('open');
+  }
+
+  async function uploadProjectFile(f) {
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('file', f);
+    $('reg-file-name').textContent = '업로드 중…';
+    try {
+      const res = await fetch('/api/assets/project-file', { method: 'POST', body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        $('reg-file-name').textContent = '선택된 파일 없음';
+        regAlert(d.error || '업로드에 실패했습니다.');
+        return;
+      }
+      REG.token = d.token; REG.fileName = d.fileName;
+      $('reg-file-name').textContent =
+        d.fileName + ' · ' + (d.size / 1024).toFixed(1) + 'KB · md5 ' + String(d.md5).slice(0, 8) + '…';
+      if (d.warning) {
+        $('reg-file-warn-msg').textContent = d.warning;
+        $('reg-file-warn').style.display = '';
+      } else {
+        $('reg-file-warn').style.display = 'none';
+      }
+    } catch (e) {
+      $('reg-file-name').textContent = '선택된 파일 없음';
+      regAlert('업로드 중 오류: ' + e.message);
+    }
+  }
+
+  async function submitReg() {
+    const typeRaw = $('reg-type').value;
+    if (typeRaw === '') { regAlert('자산 타입을 선택해주세요.'); return; }
+    const typeId = +typeRaw;
+    const name = $('reg-name').value.trim();
+    const lineRaw = $('reg-line').value;
+    const ip = $('reg-ip').value.trim();
+
+    const nameErr = winNameError(name);
+    $('reg-name-err').textContent = nameErr || '';
+    if (nameErr) return;
+    if (!lineRaw) { regAlert('라인을 선택해주세요.'); return; }
+    if (isFileType(typeId) && !REG.token) { regAlert('PLC·서보는 프로젝트 파일이 필요합니다.'); return; }
+    if (!ip) { regAlert('IP 를 입력해주세요.'); return; }
+
+    // 드라이브는 모델·버전이 백업 파라미터 맵을 고른다 — 비워두면 템플릿 기본값(iS7 1.00)이 남는다.
+    const modelVer = $('reg-modelver').value.trim();
+    if (isDriveType(typeId)) {
+      if (!modelVer) { regAlert('드라이브는 모델 버전이 필요합니다. 비워두면 백업 내용이 어긋납니다.'); return; }
+      if (!/^\d+\.\d+$/.test(modelVer)) { regAlert('모델 버전은 1.04 처럼 입력해주세요.'); return; }
+    }
+
+    // 전역 동명 확인 — 서버도 막지만 왕복 전에 알려준다(대소문자·공백 무시)
+    const dup = S.rows.find(r => String(cur(r, 'name') || '').trim().toLowerCase() === name.toLowerCase());
+    if (dup) { regAlert('같은 이름의 자산이 이미 있습니다 (#' + dup.assetId + ').'); return; }
+
+    const viaUse = $('reg-via-use').checked;
+    const body = {
+      assetTypeId: typeId,
+      name: name,
+      lineId: parseInt(lineRaw, 10),
+      ip: ip,
+      description: $('reg-desc').value.trim() || null,
+      agent: $('reg-agent').value.trim() || null,
+      projectFileToken: REG.token,
+      connIpVia: viaUse ? ($('reg-via').value.trim() || null) : null,
+      connBase: viaUse ? (parseInt($('reg-base').value, 10) || 0) : 0,
+      connSlot: viaUse && $('reg-slot').value !== '' ? parseInt($('reg-slot').value, 10) : null,
+      isRobotPlc: $('reg-robot').checked,
+      modelName: isDriveType(typeId) ? $('reg-model').value : null,
+      modelVersion: isDriveType(typeId) ? modelVer : null,
+    };
+
+    $('reg-submit').disabled = true;
+    hideAlert();
+    setProgress(30);
+    try {
+      const res = await fetch('/api/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json().catch(() => ({}));
+      setProgress(90);
+      if (!res.ok || !d.ok) { regAlert(d.error || '등록에 실패했습니다.'); return; }
+
+      closeReg();
+      showAlert('ok', 'check_circle', name + ' 을(를) 등록했습니다 (#' + d.assetId + ').', true);
+      await load();
+    } catch (e) {
+      regAlert('등록 중 오류: ' + e.message);
+    } finally {
+      $('reg-submit').disabled = false;
+      setProgress(0);
+    }
+  }
+
+  function bindRegistrationAndDelete() {
+    if (!$('t-add')) return;   // 마크업이 없는 페이지면 건너뛴다
+
+    $('t-add').addEventListener('click', openReg);
+    $('t-del').addEventListener('click', openConfirmDelete);
+
+    $('reg-close').addEventListener('click', closeReg);
+    $('reg-cancel').addEventListener('click', closeReg);
+    $('reg-overlay').addEventListener('click', closeReg);
+    $('reg-type').addEventListener('change', syncRegType);
+    $('reg-via-use').addEventListener('change', syncViaUse);
+    $('reg-file-btn').addEventListener('click', () => $('reg-file').click());
+    $('reg-file').addEventListener('change', (e) => uploadProjectFile(e.target.files[0]));
+    $('reg-submit').addEventListener('click', submitReg);
+    $('reg-name').addEventListener('input', () => {
+      $('reg-name-err').textContent = winNameError($('reg-name').value.trim()) || '';
+    });
+
+    $('cfm-cancel').addEventListener('click', closeConfirm);
+    $('cfm-overlay').addEventListener('click', closeConfirm);
+    $('cfm-ok').addEventListener('click', doDelete);
+  }
+
   function bind() {
     $('t-search').addEventListener('input', (e) => { S.search = e.target.value; S.page = 0; render(); });
     $('t-save').addEventListener('click', save);
@@ -523,6 +796,7 @@
     $('t-csv').addEventListener('click', exportCsv);
     $('t-batch').addEventListener('click', openBatch);
     $('t-alert-close').addEventListener('click', hideAlert);
+    bindRegistrationAndDelete();
 
     $('batch-close').addEventListener('click', closeBatch);
     $('batch-cancel').addEventListener('click', closeBatch);

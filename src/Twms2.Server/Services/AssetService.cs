@@ -449,7 +449,20 @@ public class AssetService
         string? Ip = null,
         string? Description = null,
         string? Agent = null,
-        string? ProjectFileToken = null);
+        string? ProjectFileToken = null,
+        // 경유(Via) 연결. 가는 곳이 타입마다 다르다.
+        //   드라이브   : DEXA HOCON 의 connections."Via Connections"."1 depth" — 실제 백업 접속 경로
+        //   PLC/서보   : TWMS 핑 경로(TwmsAssetConn). DEXA 는 이 값을 쓰지 않는다.
+        string? ConnIpVia = null,
+        int ConnBase = 0,
+        int? ConnSlot = null,
+        bool IsRobotPlc = false,
+        // 드라이브 전용 — DriveView 파라미터 맵을 고르는 키다. 틀리면 백업 내용이 어긋난다.
+        string? ModelName = null,
+        string? ModelVersion = null);
+
+    /// <summary>LS Drive 자산 타입 id. 모델·버전과 경유 연결이 DEXA HOCON 으로 가는 유일한 타입이다.</summary>
+    public const int DriveTypeId = 4;
 
     /// <summary>프로젝트 파일이 반드시 있어야 하는 타입 (PLC, 서보).</summary>
     public static bool RequiresProjectFile(int assetTypeId) => assetTypeId is 6 or 7;
@@ -534,11 +547,35 @@ public class AssetService
         // 타입 템플릿에서 파라미터 생성
         var p = new Parameter(type.Parameter);
         SetItem(p, "name", req.Name);
-        if (!string.IsNullOrWhiteSpace(req.Ip)) SetItem(p, "IP", req.Ip!);
+        // IP 가 가는 곳이 타입마다 다르다.
+        //   HMI/드라이브 : DEXA HOCON 의 connections.IP — 백업 대상 주소
+        //   PLC/서보     : DEXA 는 접속 대상을 프로젝트 파일에서 얻으므로 HOCON 에 넣지 않고,
+        //                  TWMS 핑용으로 TwmsAssetConn 에 따로 저장한다(아래).
+        if (!string.IsNullOrWhiteSpace(req.Ip) && !RequiresProjectFile(req.AssetTypeId))
+            SetItem(p, "IP", req.Ip!);
         if (req.Description != null) SetItem(p, "description", req.Description);
         // DEXA GUI 는 이 필드로 프로젝트 파일 경로를 표시하고 편집 시 거기서 파일을 읽는다.
         // 템플릿 기본값(C:\Temp\drive.xgwx)을 두면 존재하지 않는 경로가 남는다.
         if (projectFileName != null) SetItem(p, "project", projectFileName);
+
+        // 드라이브 — 모델/버전과 경유 연결은 DEXA HOCON 에 들어가야 한다.
+        // 템플릿 기본값(iS7 / 1.00, 경유 visible=false)을 그대로 두면 백업이 어긋난다.
+        if (req.AssetTypeId == DriveTypeId)
+        {
+            if (!string.IsNullOrWhiteSpace(req.ModelName))    SetItem(p, "modelName", req.ModelName!);
+            if (!string.IsNullOrWhiteSpace(req.ModelVersion)) SetItem(p, "modelVersion", req.ModelVersion!);
+
+            // 경유 PLC 를 통한 접속. 이 현장 드라이브는 사실상 전부 이 경로를 쓴다.
+            // visible 플래그를 켜지 않으면 DEXA 가 경유 구간을 무시한다.
+            if (!string.IsNullOrWhiteSpace(req.ConnIpVia))
+            {
+                SetItem(p, "connection", req.ConnIpVia!);
+                SetItem(p, "base number", req.ConnBase.ToString());
+                SetItem(p, "slot number", (req.ConnSlot ?? 0).ToString());
+                SetVisible(p, ViaSectionPathKey, "True");
+            }
+        }
+
         var parameter = Parameter.Buildup(p.Items.SelectMany(it => it.ToKeyValuePairs()));
 
         var create = new AmC2SRequestCreateNewAsset(req.AssetTypeId, req.Agent, parameter, typeId2);
@@ -581,6 +618,29 @@ public class AssetService
         {
             _logger.LogWarning(ex,
                 "자산 {AssetId} 등록됨, 라인 배정 실패 — 편집에서 라인을 다시 지정해야 함", created.AssetId);
+        }
+
+        // PLC/서보의 감시용 연결정보. AugIp 가 NOT NULL 이라 IP 가 없으면 행을 만들지 않는다
+        // (핑 대상에서 빠질 뿐 등록·백업에는 영향 없음).
+        if (RequiresProjectFile(req.AssetTypeId) && !string.IsNullOrWhiteSpace(req.Ip))
+        {
+            try
+            {
+                await _twmDb.UpsertTwmsAssetConnAsync(new Models.Twm.TwmsAssetConn
+                {
+                    DexaId        = created.AssetId,
+                    AugIp         = req.Ip!,
+                    AugIpVia      = string.IsNullOrWhiteSpace(req.ConnIpVia) ? null : req.ConnIpVia,
+                    AugBaseNumber = req.ConnBase,
+                    AugSlotNumber = req.ConnSlot,
+                    AugIsRobotPLC = req.IsRobotPlc ? 1 : null,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "자산 {AssetId} 등록됨, 연결정보 저장 실패 — 편집에서 IP 를 다시 지정해야 함", created.AssetId);
+            }
         }
 
         // 등록이 DB 로 확인된 뒤에야 임시 파일을 지운다.
@@ -657,6 +717,49 @@ public class AssetService
     }
 
     /// <summary>
+    /// 여러 자산 삭제. 건별 결과를 돌려주고 중간에 실패해도 나머지를 계속 진행한다.
+    ///
+    /// 자산 관리 표에서 선택하는 행은 항상 말단이다(실자산을 부모로 갖는 자산은 없다).
+    /// 그래도 앞선 삭제에 자식으로 딸려간 경우를 대비해 건마다 존재를 다시 확인한다.
+    /// </summary>
+    public async Task<List<(int AssetId, bool Ok, string? Error)>> DeleteAssetsAsync(
+        IEnumerable<int> assetIds,
+        bool includeChildren = false,
+        IProgress<(int completed, int total)>? progress = null)
+    {
+        var ids = assetIds.Distinct().ToList();
+        var results = new List<(int, bool, string?)>();
+        var completed = 0;
+
+        foreach (var id in ids)
+        {
+            try
+            {
+                // 앞 건의 자식으로 이미 사라졌으면 성공으로 본다.
+                if (!(await _dexaRead.GetViewAssetsAsync()).Any(a => a.AssetId == id))
+                {
+                    results.Add((id, true, null));
+                }
+                else
+                {
+                    var (ok, error, _) = await DeleteAssetAsync(id, includeChildren);
+                    results.Add((id, ok, error));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "자산 {AssetId} 삭제 실패", id);
+                results.Add((id, false, ex.Message));
+            }
+
+            completed++;
+            progress?.Report((completed, ids.Count));
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// 자산이 사라진 뒤 TWMS 쪽에 남는 행 정리(확장정보·연결정보·도면배치·핑상태).
     ///
     /// 실패해도 삭제를 중단하지 않는다 — DEXA 삭제는 이미 커밋됐고 되돌릴 수 없는데,
@@ -721,6 +824,17 @@ public class AssetService
         var prefix = $"{lineId:D2}_";
         return all.FirstOrDefault(a => a.IsFolder && a.AssetParentId == twms.AssetId &&
             (a.Name ?? "").StartsWith(prefix, StringComparison.Ordinal))?.Name;
+    }
+
+    /// <summary>드라이브 경유 연결 구간의 HOCON 경로. 이 구간의 visible 이 켜져야 DEXA 가 경유로 접속한다.</summary>
+    private const string ViaSectionPathKey = "connections.Via Connections.1 depth";
+
+    /// <summary>구간(Button 항목)의 visible 플래그를 바꾼다. EditableAsset.SetSectionVisible 의 Parameter 판.</summary>
+    private static void SetVisible(Parameter p, string pathKey, string visible)
+    {
+        var item = p.Items.FirstOrDefault(it =>
+            it.PathKey.Equals(pathKey, StringComparison.OrdinalIgnoreCase));
+        if (item != null) item.Visible = visible;
     }
 
     private static void SetItem(Parameter p, string key, string value)

@@ -258,6 +258,14 @@
       box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
     }
     .hist-input::placeholder { color: var(--c-outline); }
+    select.hist-input {
+      cursor: pointer;
+      appearance: none; -webkit-appearance: none;
+      padding-right: 34px;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23888' d='M0 0h10L5 6z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 13px center;
+    }
     .hist-search { display: inline-flex; align-items: center; gap: 8px; padding-left: 12px; }
     .hist-search .material-symbols-outlined { color: var(--c-outline); font-size: 20px; }
     .hist-search input { background: transparent; border: none; outline: none; color: var(--c-on-surface); font-size: 13px; width: 200px; }
@@ -273,6 +281,28 @@
     .hist-btn:active:not(:disabled) { box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light); }
     .hist-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .hist-btn .material-symbols-outlined { font-size: 18px; }
+    .hist-btn-danger { color: var(--health-failed); }
+
+    /* 자산 등록 폼 (batch-panel 재사용) */
+    .reg-field { display: flex; flex-direction: column; gap: 5px; }
+    .reg-field > span { font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); }
+    .reg-req { color: var(--health-failed); }
+    .reg-err { font-size: 12px; color: var(--health-failed); min-height: 15px; }
+    .reg-hint { font-size: 12px; color: var(--c-on-surface-variant); line-height: 1.5; }
+    .reg-drop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px;
+      border-radius: 12px; border: 1px dashed var(--c-outline-variant); }
+    .reg-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* 확인 모달 */
+    .cfm-box { position: fixed; z-index: 62; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 470px; max-width: 92vw; background: var(--c-surface); border-radius: 16px;
+      padding: 22px 24px; box-shadow: 0 12px 32px rgba(0,0,0,0.3); display: none; }
+    .cfm-box.open { display: block; }
+    .cfm-title { font-weight: 800; font-size: 1.05rem; margin-bottom: 10px; }
+    .cfm-msg { font-size: 13px; color: var(--c-on-surface-variant); line-height: 1.6; }
+    .cfm-list { margin: 12px 0; max-height: 170px; overflow-y: auto; font-size: 13px;
+      border-radius: 10px; padding: 10px 12px; background: var(--c-surface-container-low); }
+    .cfm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
     .hist-btn-primary { color: var(--c-primary); }
     .hist-count { font-size: 13px; color: var(--c-on-surface-variant); margin-bottom: 10px; font-weight: 600; }
     .hist-table-wrap {
@@ -396,6 +426,8 @@
       <div class="hist-filter" style="margin-bottom:14px;">
         <span class="hist-count" id="t-summary" style="margin:0;"></span>
         <span class="hist-spacer"></span>
+        <button class="hist-btn hist-btn-primary" id="t-add"><span class="material-symbols-outlined">add</span>자산 등록</button>
+        <button class="hist-btn hist-btn-danger" id="t-del"><span class="material-symbols-outlined">delete</span>선택 삭제</button>
         <button class="hist-btn" id="t-batch"><span class="material-symbols-outlined">edit_note</span>일괄 편집</button>
         <button class="hist-btn" id="t-csv"><span class="material-symbols-outlined">file_download</span>CSV 내보내기</button>
         <button class="hist-btn" id="t-refresh"><span class="material-symbols-outlined">refresh</span>새로고침</button>
@@ -789,6 +821,106 @@
       <button class="hist-btn hist-btn-primary" id="batch-apply"><span class="material-symbols-outlined">done_all</span>적용</button>
     </div>
   </aside>
+
+  <!-- 자산 등록 (단건). 일괄 편집과 같은 우측 패널 패턴. -->
+  <div class="batch-overlay" id="reg-overlay"></div>
+  <aside class="batch-panel" id="reg-panel">
+    <div class="batch-head">
+      <span class="material-symbols-outlined" style="color:var(--c-primary);">add_circle</span>
+      <span class="panel-title">자산 등록</span>
+      <span class="material-symbols-outlined close" id="reg-close">close</span>
+    </div>
+    <div class="batch-body">
+      <div class="hist-alert err" id="reg-alert" style="display:none;">
+        <span class="material-symbols-outlined">error</span><span id="reg-alert-msg"></span>
+      </div>
+
+      <div class="batch-section">기본</div>
+      <label class="reg-field"><span>자산 타입 <i class="reg-req">*</i></span>
+        <select class="hist-input" id="reg-type"></select></label>
+      <label class="reg-field"><span>자산명 <i class="reg-req">*</i></span>
+        <input class="hist-input" id="reg-name" placeholder="예: UB1 #121~134 LINE CPU" />
+        <small class="reg-err" id="reg-name-err"></small></label>
+      <label class="reg-field"><span>라인 <i class="reg-req">*</i></span>
+        <select class="hist-input" id="reg-line"></select></label>
+      <label class="reg-field"><span>설명</span>
+        <input class="hist-input" id="reg-desc" placeholder="선택" /></label>
+
+      <!-- PLC/서보 전용: 프로젝트 파일 -->
+      <div id="reg-file-box" style="display:none;">
+        <div class="batch-section">프로젝트 파일 <i class="reg-req">*</i></div>
+        <p class="reg-hint">PLC 는 <b>.xgwx</b>, 서보는 <b>.xpj</b>. 백업 접속 대상 정보가 이 파일에 들어 있습니다.
+          <b>등록 후에는 붙일 수 없으니</b> 지금 올려야 합니다.</p>
+        <div class="reg-drop">
+          <input type="file" id="reg-file" accept=".xgwx,.xpj" style="display:none;" />
+          <button type="button" class="hist-btn" id="reg-file-btn"><span class="material-symbols-outlined">upload_file</span>파일 선택</button>
+          <span class="reg-hint" id="reg-file-name">선택된 파일 없음</span>
+        </div>
+        <div class="hist-alert warn" id="reg-file-warn" style="display:none;">
+          <span class="material-symbols-outlined">warning</span><span id="reg-file-warn-msg"></span>
+        </div>
+      </div>
+
+      <div class="batch-section" id="reg-conn-title">연결</div>
+      <label class="reg-field"><span id="reg-ip-label">IP <i class="reg-req">*</i></span>
+        <input class="hist-input" id="reg-ip" placeholder="192.168.0.1" />
+        <small class="reg-hint" id="reg-ip-hint"></small></label>
+
+      <!-- 드라이브 전용: 모델·버전. DriveView 파라미터 맵을 고르는 키다. -->
+      <div id="reg-drive-box" style="display:none;">
+        <div class="reg-row2">
+          <label class="reg-field"><span>모델명 <i class="reg-req">*</i></span>
+            <select class="hist-input" id="reg-model"></select></label>
+          <label class="reg-field"><span>모델 버전 <i class="reg-req">*</i></span>
+            <input class="hist-input" id="reg-modelver" list="reg-ver-list" placeholder="예: 1.04" />
+            <datalist id="reg-ver-list"></datalist></label>
+        </div>
+        <small class="reg-hint">백업에 쓸 파라미터 맵을 고르는 값입니다.
+          <b>틀리면 백업 내용이 어긋나므로</b> 드라이브 실물 기준으로 넣어주세요.</small>
+      </div>
+
+      <!-- 경유 연결 — 드라이브는 DEXA 접속 경로, PLC/서보는 TWMS 핑 경로 -->
+      <div id="reg-via-box" style="display:none;">
+        <label class="batch-field"><input type="checkbox" id="reg-via-use" />
+          <span class="reg-hint">경유 연결 사용</span></label>
+        <small class="reg-hint" id="reg-via-hint"></small>
+        <label class="reg-field"><span>경유 IP</span>
+          <input class="hist-input" id="reg-via" placeholder="경유 PLC IP" disabled /></label>
+        <div class="reg-row2">
+          <label class="reg-field"><span>Base</span>
+            <input class="hist-input" id="reg-base" type="number" min="0" value="0" disabled /></label>
+          <label class="reg-field"><span>Slot</span>
+            <input class="hist-input" id="reg-slot" type="number" min="0" disabled /></label>
+        </div>
+        <label class="batch-field" id="reg-robot-box"><input type="checkbox" id="reg-robot" />
+          <span class="reg-hint">로봇 PLC (아이콘·통계 분류에 반영)</span></label>
+      </div>
+
+      <div class="batch-section">기타</div>
+      <label class="reg-field"><span>에이전트</span>
+        <input class="hist-input" id="reg-agent" placeholder="비우면 자동 선택" /></label>
+    </div>
+    <div class="batch-foot">
+      <button class="hist-btn" id="reg-cancel">취소</button>
+      <button class="hist-btn hist-btn-primary" id="reg-submit"><span class="material-symbols-outlined">add</span>등록</button>
+    </div>
+  </aside>
+
+  <!-- 선택 자산 삭제 확인 -->
+  <div class="batch-overlay" id="cfm-overlay"></div>
+  <div class="cfm-box" id="cfm-box">
+    <div class="cfm-title" id="cfm-title">자산 삭제</div>
+    <div class="cfm-msg" id="cfm-msg"></div>
+    <div class="cfm-list" id="cfm-list"></div>
+    <div class="cfm-msg">
+      DEXA 목록에서 제거됩니다. <b>백업 파일과 이력은 보존</b>되고, 라이선스 슬롯은 반환됩니다.
+    </div>
+    <div class="cfm-actions">
+      <button class="hist-btn" id="cfm-cancel">취소</button>
+      <button class="hist-btn hist-btn-danger" id="cfm-ok"><span class="material-symbols-outlined">delete</span>삭제</button>
+    </div>
+  </div>
+
 
   <script src="/app/shell.js"></script>
   <!-- 로고 업로드 시 PNG/JPG → SVG 변환 (Blazor SettingsGeneral 와 동일한 logoConverter) -->
