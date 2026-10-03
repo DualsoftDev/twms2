@@ -29,6 +29,7 @@ public class AssetsController : ControllerBase
     private readonly ManualDbService _manualDb;
     private readonly PingDbService _pingDb;
     private readonly DexaServerClient _dexaClient;
+    private readonly AssetConnectionChecker _checker;
 
     public AssetsController(
         AssetService assets,
@@ -36,8 +37,10 @@ public class AssetsController : ControllerBase
         DexaReadService dexaRead,
         ManualDbService manualDb,
         PingDbService pingDb,
-        DexaServerClient dexaClient)
+        DexaServerClient dexaClient,
+        AssetConnectionChecker checker)
     {
+        _checker = checker;
         _assets = assets;
         _status = status;
         _dexaRead = dexaRead;
@@ -316,6 +319,20 @@ public class AssetsController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// 등록 전 연결 확인 (Admin 전용). HMI/PLC/서보는 핑, 드라이브는 실제 접속해 기종·버전까지 읽는다.
+    /// DEXA 서버 연결은 필요 없다 — 순수 네트워크 작업이라 서버가 꺼져 있어도 동작한다.
+    /// 닿지 않는 것도 확인 결과이므로 200 으로 돌려준다. 400 은 요청 자체가 잘못된 경우뿐이다.
+    /// </summary>
+    [HttpPost("connection-check")]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    public async Task<IActionResult> ConnectionCheck([FromBody] ConnectionCheckRequest req, CancellationToken ct)
+    {
+        if (req is null || string.IsNullOrWhiteSpace(req.Ip))
+            return BadRequest(new { error = "IP 를 입력해주세요." });
+        return Ok(await _checker.CheckAsync(req, ct));
     }
 
     /// <summary>선택 삭제 요청. 표에서 체크한 행들의 자산 id.</summary>

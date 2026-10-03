@@ -288,8 +288,8 @@ public class PingService
         });
     }
 
-    /// <summary>ICMP ping 실행</summary>
-    private async Task<PingStatus> PingHostAsync(string host)
+    /// <summary>ICMP ping 실행 (연결 확인에서도 쓴다)</summary>
+    public async Task<PingStatus> PingHostAsync(string host)
     {
         try
         {

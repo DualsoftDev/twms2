@@ -585,7 +585,7 @@
   }
 
   /* ── 등록 (단건) ─────────────────────────────────────────────────── */
-  const REG = { token: null, fileName: null };
+  const REG = { token: null, fileName: null, identified: null };
 
   // PLC(6)·서보(7)는 프로젝트 파일이 필수다 — 등록 후에는 붙일 수 없다.
   function isFileType(typeId) { return typeId === 6 || typeId === 7; }
@@ -621,6 +621,10 @@
     $('reg-ip-hint').textContent = file
       ? '상태 표시(핑)에 쓰는 주소입니다. 백업 접속 대상은 프로젝트 파일에서 읽습니다.'
       : '백업 대상 주소입니다.';
+    $('reg-check-hint').textContent = drive
+      ? '드라이브에 접속해 기종·버전을 읽어 모델명·버전을 채웁니다.'
+      : (file ? '핑으로 확인합니다 (경유가 있으면 경유 PLC 를 통해).' : '핑으로 확인합니다.');
+    clearCheck();
   }
 
   function syncViaUse() {
@@ -763,6 +767,109 @@
     }
   }
 
+  /* ── 연결 확인 ─────────────────────────────────────────────────────
+     입력한 연결 정보로 실제 접속해 본다. HMI/PLC/서보는 핑(경유면 DeepPing),
+     드라이브는 Modbus 로 기종코드·모델버전을 읽어 폼에 채운다 —
+     DEXA 템플릿 기본값(iS7 1.00)이 조용히 남아 백업이 어긋나는 일을 막는 게 목적이다.
+     채우되 숨기지 않는다: 읽은 값을 보여주고 등록은 여전히 사용자가 누른다. */
+  function showCheck(kind, icon, html) {
+    const box = $('reg-check-result');
+    box.className = 'hist-alert ' + kind;
+    $('reg-check-icon').textContent = icon;
+    $('reg-check-msg').innerHTML = html;
+    box.style.display = '';
+  }
+
+  function clearCheck() {
+    REG.identified = null;
+    const box = $('reg-check-result');
+    if (box) box.style.display = 'none';
+  }
+
+  async function checkConnection() {
+    const typeRaw = $('reg-type').value;
+    if (typeRaw === '') { regAlert('자산 타입을 먼저 선택해주세요.'); return; }
+    const typeId = +typeRaw;
+    const ip = $('reg-ip').value.trim();
+    if (!ip) { regAlert('IP 를 입력해주세요.'); return; }
+
+    const viaUse = $('reg-via-use').checked && (isDriveType(typeId) || isFileType(typeId));
+    const viaIp = viaUse ? $('reg-via').value.trim() : '';
+    if (viaUse && !viaIp) { regAlert('경유 IP 를 입력해주세요.'); return; }
+
+    const btn = $('reg-check');
+    btn.disabled = true;
+    $('reg-alert').style.display = 'none';
+    showCheck('info', 'hourglass_top', isDriveType(typeId) ? '드라이브에 접속해 기종·버전을 읽는 중…' : '연결 확인 중…');
+    try {
+      const res = await fetch('/api/assets/connection-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetTypeId: typeId,
+          ip: ip,
+          viaIp: viaUse ? viaIp : null,
+          viaBase: viaUse ? (parseInt($('reg-base').value, 10) || 0) : 0,
+          viaSlot: viaUse && $('reg-slot').value !== '' ? parseInt($('reg-slot').value, 10) : null,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { showCheck('err', 'error', esc(d.error || '확인에 실패했습니다.')); return; }
+      renderCheck(typeId, d);
+    } catch (e) {
+      showCheck('err', 'error', '확인 중 오류: ' + esc(e.message));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderCheck(typeId, d) {
+    const rtt = d.rttMs != null ? ' · ' + d.rttMs + 'ms' : '';
+    if (!d.reachable) {
+      const viaPath = d.method === 'xgt-tunnel' || d.method === 'deep-ping';
+      showCheck('err', 'link_off',
+        '연결 실패' + (d.error ? ' — ' + esc(d.error) : '') +
+        '<br><small>' + (viaPath ? '경유 PLC 주소·Base·Slot 과 장비 IP 를 확인하세요.' : 'IP 와 네트워크 경로를 확인하세요.') + '</small>');
+      return;
+    }
+    if (!isDriveType(typeId) || !d.drive) {
+      showCheck('ok', 'check_circle', '연결 확인됨' + rtt);
+      return;
+    }
+
+    const dr = d.drive;
+    const ver = dr.modelVersion || '';
+    if (!dr.dexaSupported) {
+      showCheck('warn', 'warning',
+        '접속은 되지만 <b>' + esc(dr.series) + '</b>(코드 ' + dr.modelCode + ')은 DEXA 가 지원하지 않는 기종입니다.' +
+        (ver ? ' 버전 ' + esc(ver) : '') + rtt);
+      return;
+    }
+    if (!ver) {
+      showCheck('warn', 'warning', '<b>' + esc(dr.modelName) + '</b> 로 읽혔지만 모델버전을 읽지 못했습니다. 버전은 직접 입력해주세요.' + rtt);
+      $('reg-model').value = dr.modelName;
+      return;
+    }
+
+    // DEXA 가 후보를 늘렸는데 폼 목록에 없으면 추가해서 고른다
+    const sel = $('reg-model');
+    if (!Array.from(sel.options).some(o => o.value === dr.modelName)) {
+      const o = document.createElement('option'); o.value = o.textContent = dr.modelName; sel.appendChild(o);
+    }
+    sel.value = dr.modelName;
+    $('reg-modelver').value = ver;
+    REG.identified = { modelName: dr.modelName, modelVersion: ver };
+
+    let msg = '<b>' + esc(dr.modelName) + ' ' + esc(ver) + '</b> 로 읽혔습니다 — 모델명·버전을 채웠습니다' + rtt;
+    if (dr.invSwVersion) msg += '<br><small>인버터 SW 버전 ' + esc(dr.invSwVersion) + ' (백업에는 모델버전을 씁니다)</small>';
+    if (dr.inCatalog === false) {
+      showCheck('warn', 'warning', msg +
+        '<br><small><b>DriveView 9 에 ' + esc(dr.modelName) + ' ' + esc(ver) + ' 정의(.INV)가 없습니다.</b> 이대로 등록하면 백업이 실패할 수 있습니다.</small>');
+      return;
+    }
+    showCheck('ok', 'check_circle', msg);
+  }
+
   function bindRegistrationAndDelete() {
     if (!$('t-add')) return;   // 마크업이 없는 페이지면 건너뛴다
 
@@ -774,6 +881,10 @@
     $('reg-overlay').addEventListener('click', closeReg);
     $('reg-type').addEventListener('change', syncRegType);
     $('reg-via-use').addEventListener('change', syncViaUse);
+    $('reg-check').addEventListener('click', checkConnection);
+    // 연결 정보가 바뀌면 이전 확인 결과는 더 이상 그 입력에 대한 것이 아니다
+    ['reg-ip', 'reg-via', 'reg-base', 'reg-slot'].forEach(id => $(id).addEventListener('input', clearCheck));
+    $('reg-via-use').addEventListener('change', clearCheck);
     $('reg-file-btn').addEventListener('click', () => $('reg-file').click());
     $('reg-file').addEventListener('change', (e) => uploadProjectFile(e.target.files[0]));
     $('reg-submit').addEventListener('click', submitReg);

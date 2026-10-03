@@ -120,6 +120,7 @@ builder.Services.AddScoped<PingDbService>();
 builder.Services.AddScoped<ManualDbService>();
 builder.Services.AddScoped<AssetStatusService>();
 builder.Services.AddScoped<PingService>();
+builder.Services.AddScoped<AssetConnectionChecker>();
 builder.Services.AddSingleton<AppSettingsEditor>();
 builder.Services.AddScoped<DexaFileImportService>();
 
