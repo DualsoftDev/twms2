@@ -870,7 +870,404 @@
     showCheck('ok', 'check_circle', msg);
   }
 
+  /* ── 일괄 등록 (HMI·드라이브) ─────────────────────────────────────
+     CSV 로 받아 검증 표에 올리고, 행마다 연결 확인으로 드라이브 모델·버전을 실물에서 채운 뒤
+     건별로 등록한다. PLC/서보는 프로젝트 파일이 있어야 해서 여기선 받지 않는다.
+     되돌리기는 없다 — DEXA 등록은 건마다 커밋이라 롤백이 불가능하고, 대신 실패 행만 남겨 다시 올린다. */
+  const BULK = { rows: [], seq: 0, checking: false, submitting: false };
+  const BULK_TYPES = [5, 4];   // HMI, 드라이브 — 표에 보이는 순서
+
+  // 헤더 별칭 — DriveScanner 서식(영문)과 TWMS 서식(한글)을 모두 받는다. 공백·밑줄·괄호는 무시.
+  const BULK_COLS = {
+    type:    ['타입', 'type', 'assettype', '자산타입'],
+    name:    ['이름', 'name', '자산명'],
+    line:    ['라인', 'line', 'linename', '라인명'],
+    ip:      ['ip', 'ip주소', '주소', 'driveip'],
+    viaUse:  ['viause', '경유사용', '경유'],
+    viaIp:   ['경유ip', 'viaip', 'via', '경유plc', '경유plcip'],
+    base:    ['base', 'viabase', '베이스'],
+    slot:    ['slot', 'viaslot', '슬롯'],
+    model:   ['모델명', 'modelname', 'model', 'series', '기종'],
+    ver:     ['모델버전', 'modelversion', 'version', '버전'],
+    desc:    ['설명', 'description', 'desc', 'memo'],
+    agent:   ['에이전트', 'agent'],
+    enabled: ['enabled', '사용', '사용여부'],
+  };
+  const normHeader = (h) => String(h == null ? '' : h).trim().toLowerCase().replace(/[\s_\-()\[\]]/g, '');
+
+  function bulkAlert(msg) {
+    $('bulk-alert-msg').textContent = msg;
+    $('bulk-alert').style.display = msg ? '' : 'none';
+  }
+
+  function inferType(raw, viaUse, ver, model) {
+    const s = normHeader(raw);
+    if (s) {
+      if (/^(4|드라이브|drive|inverter|인버터|lsdrive)$/.test(s)) return 4;
+      if (/^(5|hmi|xp|lsxpseries|xp시리즈)$/.test(s)) return 5;
+      if (/^(6|plc|xgt|lsxgtplc)$/.test(s)) return 6;
+      if (/^(7|servo|서보|lsservo)$/.test(s)) return 7;
+    }
+    // 타입 열이 없으면 경유·모델·버전이 있는 행을 드라이브로 본다 — DriveScanner 파일에는 타입이 없다
+    return (viaUse || ver || model) ? 4 : 5;
+  }
+
+  function resolveLine(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    const byName = S.lineOptions.find(o => String(o.name).trim().toLowerCase() === s.toLowerCase());
+    if (byName) return String(byName.id);
+    if (/^\d+$/.test(s) && S.lineOptions.some(o => String(o.id) === s)) return s;
+    return '';
+  }
+
+  function newBulkRow(d) {
+    return {
+      id: ++BULK.seq, typeId: d.typeId || 5,
+      name: d.name || '', lineRaw: d.lineRaw || '', lineId: resolveLine(d.lineRaw),
+      ip: d.ip || '', viaIp: d.viaIp || '', base: d.base || '0', slot: d.slot || '',
+      model: d.model || '', ver: d.ver || '', desc: d.desc || '', agent: d.agent || '',
+      status: null,   // 연결 확인 결과 {kind, icon, msg}
+      result: null,   // 등록 결과 {success, assetId, error}
+    };
+  }
+
+  /* CSV 파싱 — 큰따옴표 안의 구분자 보호, 첫 줄이 탭을 품으면 탭 구분(Excel 붙여넣기). */
+  function parseCsvText(text) {
+    const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'));
+    if (!lines.length) return [];
+    const delim = lines[0].includes('\t') ? '\t' : ',';
+    const split = (line) => {
+      const out = []; let cur = '', q = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+        else if (c === delim && !q) { out.push(cur); cur = ''; }
+        else cur += c;
+      }
+      out.push(cur);
+      return out.map(v => v.trim());
+    };
+    const header = split(lines[0]).map(normHeader);
+    const idx = {};
+    Object.keys(BULK_COLS).forEach(k => {
+      const i = header.findIndex(h => BULK_COLS[k].includes(h));
+      if (i >= 0) idx[k] = i;
+    });
+    if (idx.name == null || idx.ip == null)
+      throw new Error('헤더에 "이름"과 "IP" 열이 있어야 합니다. 서식을 내려받아 확인하세요.');
+
+    const rows = [];
+    for (let li = 1; li < lines.length; li++) {
+      const c = split(lines[li]);
+      const g = (k) => (idx[k] != null ? (c[idx[k]] == null ? '' : c[idx[k]]) : '');
+      if (/^(0|false|no|n|x|아니오)$/i.test(g('enabled'))) continue;   // DriveScanner 의 Enabled=0
+      const viaIp = g('viaIp');
+      const viaUse = viaIp !== '' && !/^(0|false|no|n)$/i.test(g('viaUse') || '1');
+      rows.push(newBulkRow({
+        typeId: inferType(g('type'), viaUse, g('ver'), g('model')),
+        name: g('name'), lineRaw: g('line'), ip: g('ip'),
+        viaIp: viaUse ? viaIp : '', base: g('base') || '0', slot: g('slot'),
+        model: g('model'), ver: g('ver'), desc: g('desc'), agent: g('agent'),
+      }));
+    }
+    return rows;
+  }
+
+  function parseBulk() {
+    bulkAlert('');
+    let rows;
+    try { rows = parseCsvText($('bulk-text').value); }
+    catch (e) { bulkAlert(e.message); return; }
+    if (!rows.length) { bulkAlert('불러올 행이 없습니다.'); return; }
+    BULK.rows = rows;
+    $('bulk-progress').textContent = '';
+    renderBulk();
+  }
+
+  function readBulkFile(f) {
+    if (!f) return;
+    const read = (enc) => new Promise((res, rej) => {
+      const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(f, enc);
+    });
+    // Excel 이 저장한 한글 CSV 는 CP949 인 경우가 많다 — UTF-8 로 깨지면 다시 읽는다
+    read('utf-8').then(t => (t.includes('�') ? read('euc-kr') : t))
+      .then(t => { $('bulk-text').value = t; parseBulk(); })
+      .catch(e => bulkAlert('파일 읽기 실패: ' + e.message));
+  }
+
+  function downloadBulkTemplate() {
+    const line = S.lineOptions[0] ? S.lineOptions[0].name : 'BB';
+    const csv = [
+      '타입,이름,라인,IP,경유IP,Base,Slot,모델명,모델버전,설명,에이전트',
+      '드라이브,UB1 #121 INV,' + line + ',200.19.8.142,120.200.200.190,0,8,iS7,1.04,선택,',
+      'HMI,UB1 HMI,' + line + ',192.168.0.10,,,,,,,',
+      '# 로 시작하는 줄은 무시됩니다. 드라이브 모델명·버전은 비워두고 "전체 연결 확인" 으로 실물에서 채워도 됩니다.',
+    ].join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });   // BOM: Excel 한글 깨짐 방지
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'twms-자산-일괄등록-서식.csv'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  /* ── 표 ── */
+  function bulkRowClass(r) {
+    if (r.result) return r.result.success ? 'bulk-ok' : 'bulk-err';
+    return r.status ? 'bulk-' + r.status.kind : '';
+  }
+  function bulkStatusHtml(r) {
+    if (r.result) {
+      return r.result.success
+        ? '<span class="bulk-status"><span class="material-symbols-outlined">check_circle</span>등록됨 #' + r.result.assetId + '</span>'
+        : '<span class="bulk-status"><span class="material-symbols-outlined">error</span>' + esc(r.result.error || '실패') + '</span>';
+    }
+    if (r.status)
+      return '<span class="bulk-status"><span class="material-symbols-outlined">' + r.status.icon + '</span>' + esc(r.status.msg) + '</span>';
+    return '';
+  }
+  function bulkRowEl(r) { return $('bulk-rows').querySelector('tr[data-id="' + r.id + '"]'); }
+  function setBulkStatus(r, kind, icon, msg) {
+    r.status = { kind, icon, msg };
+    const tr = bulkRowEl(r);
+    if (!tr) return;
+    tr.className = bulkRowClass(r);
+    tr.querySelector('.bulk-st').innerHTML = bulkStatusHtml(r);
+  }
+  function syncBulkRowInputs(r) {
+    const tr = bulkRowEl(r);
+    if (!tr) return;
+    const sel = tr.querySelector('[data-k="model"]');
+    if (sel) {
+      if (r.model && !Array.from(sel.options).some(o => o.value === r.model)) {
+        const o = document.createElement('option'); o.value = o.textContent = r.model; sel.appendChild(o);
+      }
+      sel.value = r.model;
+    }
+    const ver = tr.querySelector('[data-k="ver"]');
+    if (ver) ver.value = r.ver;
+  }
+
+  function renderBulk() {
+    const typeOpts = (sel) => BULK_TYPES.map(id => {
+      const t = TYPES.find(x => x.id === id);
+      return '<option value="' + id + '"' + (sel === id ? ' selected' : '') + '>' + esc(t ? t.name : id) + '</option>';
+    }).join('');
+    const lineOpts = (sel) => '<option value="">-- 라인 --</option>' +
+      S.lineOptions.map(o => '<option value="' + o.id + '"' + (String(o.id) === String(sel) ? ' selected' : '') + '>' + esc(o.name) + '</option>').join('');
+    const modelOpts = (sel) => {
+      const list = DRIVE_MODELS.concat(sel && DRIVE_MODELS.indexOf(sel) < 0 ? [sel] : []);
+      return '<option value="">--</option>' + list.map(m => '<option value="' + esc(m) + '"' + (m === sel ? ' selected' : '') + '>' + esc(m) + '</option>').join('');
+    };
+
+    $('bulk-rows').innerHTML = BULK.rows.map((r, i) => {
+      const drive = r.typeId === 4;
+      const done = !!(r.result && r.result.success);
+      const dis = done ? ' disabled' : '';
+      return '<tr data-id="' + r.id + '" class="' + bulkRowClass(r) + '">' +
+        '<td>' + (i + 1) + '</td>' +
+        '<td><select class="hist-input" data-k="typeId"' + dis + '>' + typeOpts(r.typeId) + '</select></td>' +
+        '<td><input class="hist-input bulk-w-l" data-k="name" value="' + esc(r.name) + '"' + dis + ' /></td>' +
+        '<td><select class="hist-input" data-k="lineId"' + dis + '>' + lineOpts(r.lineId) + '</select>' +
+          (r.lineRaw && !r.lineId ? '<div class="reg-err">"' + esc(r.lineRaw) + '" 라인 없음</div>' : '') + '</td>' +
+        '<td><input class="hist-input" data-k="ip" value="' + esc(r.ip) + '"' + dis + ' /></td>' +
+        '<td><input class="hist-input" data-k="viaIp" value="' + esc(r.viaIp) + '" placeholder="없으면 직접"' + dis + ' /></td>' +
+        '<td><input class="hist-input bulk-w-s" data-k="base" type="number" min="0" value="' + esc(r.base) + '"' + dis + ' /></td>' +
+        '<td><input class="hist-input bulk-w-s" data-k="slot" type="number" min="0" value="' + esc(r.slot) + '"' + dis + ' /></td>' +
+        '<td>' + (drive ? '<select class="hist-input" data-k="model"' + dis + '>' + modelOpts(r.model) + '</select>' : '<span class="reg-hint">—</span>') + '</td>' +
+        '<td>' + (drive ? '<input class="hist-input bulk-w-s" data-k="ver" value="' + esc(r.ver) + '" placeholder="1.04"' + dis + ' />' : '<span class="reg-hint">—</span>') + '</td>' +
+        '<td><input class="hist-input" data-k="desc" value="' + esc(r.desc) + '"' + dis + ' /></td>' +
+        '<td class="bulk-st">' + bulkStatusHtml(r) + '</td>' +
+        '<td>' + (done ? '' :
+          '<span class="material-symbols-outlined bulk-rowbtn" data-act="check" title="이 행 연결 확인">network_check</span> ' +
+          '<span class="material-symbols-outlined bulk-rowbtn" data-act="del" title="행 제거">close</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+
+    const pending = BULK.rows.filter(r => !(r.result && r.result.success)).length;
+    $('bulk-empty').style.display = BULK.rows.length ? 'none' : '';
+    $('bulk-count').textContent = BULK.rows.length ? BULK.rows.length + '행' : '';
+    $('bulk-submit').disabled = pending === 0 || BULK.checking || BULK.submitting;
+    $('bulk-check-all').disabled = pending === 0 || BULK.checking || BULK.submitting;
+    $('bulk-keep-failed').style.display = BULK.rows.some(r => r.result) ? '' : 'none';
+    $('bulk-foot-hint').textContent = pending ? pending + '건 등록 대기' : '';
+  }
+
+  function onBulkEdit(e) {
+    const el = e.target.closest('[data-k]');
+    const tr = e.target.closest('tr[data-id]');
+    if (!el || !tr) return;
+    const r = BULK.rows.find(x => String(x.id) === tr.dataset.id);
+    if (!r) return;
+    const k = el.dataset.k;
+    if (k === 'typeId') { r.typeId = +el.value; r.status = null; renderBulk(); return; }   // 모델·버전 칸이 바뀌므로 다시 그린다
+    r[k] = el.value;
+    if (k === 'ip' || k === 'viaIp' || k === 'base' || k === 'slot') {
+      // 연결 정보가 바뀌면 이전 확인 결과는 더 이상 그 입력에 대한 것이 아니다
+      r.status = null; tr.className = bulkRowClass(r); tr.querySelector('.bulk-st').innerHTML = '';
+    }
+  }
+
+  function onBulkClick(e) {
+    const btn = e.target.closest('.bulk-rowbtn');
+    const tr = e.target.closest('tr[data-id]');
+    if (!btn || !tr) return;
+    const r = BULK.rows.find(x => String(x.id) === tr.dataset.id);
+    if (!r) return;
+    if (btn.dataset.act === 'del') { BULK.rows = BULK.rows.filter(x => x !== r); renderBulk(); }
+    else if (btn.dataset.act === 'check') checkBulkRow(r);
+  }
+
+  /* ── 연결 확인 — 단건 폼과 같은 API, 결과를 행에 쓴다 ── */
+  async function checkBulkRow(r) {
+    if (!r.ip) { setBulkStatus(r, 'err', 'error', 'IP 없음'); return; }
+    setBulkStatus(r, 'info', 'hourglass_top', r.typeId === 4 ? '기종·버전 읽는 중…' : '확인 중…');
+    try {
+      const res = await fetch('/api/assets/connection-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetTypeId: r.typeId, ip: r.ip.trim(),
+          viaIp: r.viaIp.trim() || null,
+          viaBase: parseInt(r.base, 10) || 0,
+          viaSlot: String(r.slot).trim() !== '' ? parseInt(r.slot, 10) : null,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setBulkStatus(r, 'err', 'error', d.error || '확인 실패'); return; }
+      const rtt = d.rttMs != null ? ' · ' + d.rttMs + 'ms' : '';
+      if (!d.reachable) { setBulkStatus(r, 'err', 'link_off', '연결 실패' + (d.error ? ' — ' + d.error : '')); return; }
+      if (r.typeId !== 4 || !d.drive) { setBulkStatus(r, 'ok', 'check_circle', '연결됨' + rtt); return; }
+
+      const dr = d.drive;
+      if (!dr.dexaSupported) { setBulkStatus(r, 'warn', 'warning', dr.series + ' — DEXA 미지원 기종'); return; }
+      if (dr.modelName) r.model = dr.modelName;
+      if (dr.modelVersion) r.ver = dr.modelVersion;
+      syncBulkRowInputs(r);
+      if (!dr.modelVersion) { setBulkStatus(r, 'warn', 'warning', dr.modelName + ' — 버전을 못 읽음, 직접 입력'); return; }
+      if (dr.inCatalog === false) { setBulkStatus(r, 'warn', 'warning', dr.modelName + ' ' + dr.modelVersion + ' — DriveView9 에 .INV 없음, 백업 실패 가능'); return; }
+      setBulkStatus(r, 'ok', 'check_circle', dr.modelName + ' ' + dr.modelVersion + ' 읽음' + rtt);
+    } catch (e) {
+      setBulkStatus(r, 'err', 'error', '오류: ' + e.message);
+    }
+  }
+
+  async function checkAllBulk() {
+    if (BULK.checking) return;
+    const targets = BULK.rows.filter(r => !(r.result && r.result.success));
+    if (!targets.length) return;
+    BULK.checking = true; renderBulk();
+    let done = 0;
+    const prog = () => { $('bulk-progress').textContent = '연결 확인 ' + done + ' / ' + targets.length; };
+    prog();
+    // 같은 경유 PLC 의 터널 슬롯을 다투므로 동시에 3개까지만
+    const queue = targets.slice();
+    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+      while (queue.length) { const r = queue.shift(); await checkBulkRow(r); done++; prog(); }
+    }));
+    BULK.checking = false;
+    const bad = targets.filter(r => r.status && r.status.kind === 'err').length;
+    $('bulk-progress').textContent = '연결 확인 완료 — ' + (targets.length - bad) + '건 성공' + (bad ? ', ' + bad + '건 실패' : '');
+    renderBulk();
+  }
+
+  /* ── 등록 ── */
+  async function submitBulk() {
+    if (BULK.submitting || BULK.checking) return;
+    bulkAlert('');
+    const targets = BULK.rows.filter(r => !(r.result && r.result.success));
+    if (!targets.length) return;
+
+    // 서버에 보내기 전에 걸러낸다 — 건마다 커밋이라 중간 거부는 앞선 건들이 이미 만들어진 뒤다
+    const seen = Object.create(null);
+    const existing = Object.create(null);
+    S.rows.forEach(x => { existing[String(cur(x, 'name') || '').trim().toLowerCase()] = x.assetId; });
+    let bad = 0;
+    targets.forEach(r => {
+      const name = r.name.trim();
+      let err = winNameError(name);
+      if (!err && seen[name.toLowerCase()]) err = '같은 배치 안에 같은 이름';
+      if (!err && existing[name.toLowerCase()]) err = '이미 있는 이름 (#' + existing[name.toLowerCase()] + ')';
+      if (!err && !r.lineId) err = '라인을 선택하세요';
+      if (!err && !r.ip.trim()) err = 'IP 없음';
+      if (!err && r.typeId === 4) {
+        if (!r.model) err = '모델명 없음 — 연결 확인으로 채우거나 직접 고르세요';
+        else if (!/^\d+\.\d+$/.test(r.ver.trim())) err = '모델버전은 1.04 처럼';
+      }
+      seen[name.toLowerCase()] = true;
+      if (err) { bad++; setBulkStatus(r, 'err', 'error', err); }
+    });
+    if (bad) { bulkAlert(bad + '건에 문제가 있습니다. 상태 열을 확인하세요.'); return; }
+
+    BULK.submitting = true; renderBulk();
+    $('bulk-progress').textContent = targets.length + '건 등록 중…';
+    try {
+      const items = targets.map(r => ({
+        assetTypeId: r.typeId, name: r.name.trim(), lineId: parseInt(r.lineId, 10),
+        ip: r.ip.trim(), description: r.desc.trim() || null, agent: r.agent.trim() || null,
+        connIpVia: r.viaIp.trim() || null,
+        connBase: parseInt(r.base, 10) || 0,
+        connSlot: String(r.slot).trim() !== '' ? parseInt(r.slot, 10) : null,
+        modelName: r.typeId === 4 ? r.model : null,
+        modelVersion: r.typeId === 4 ? r.ver.trim() : null,
+      }));
+      const res = await fetch('/api/assets/register-bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { bulkAlert(d.error || '등록에 실패했습니다.'); return; }
+      (d.results || []).forEach(x => { const r = targets[x.index]; if (r) r.result = { success: x.success, assetId: x.assetId, error: x.error }; });
+      $('bulk-progress').textContent = '등록 완료 — ' + d.success + '건 성공' + (d.fail ? ', ' + d.fail + '건 실패' : '');
+      if (d.fail) showAlert('warn', 'warning', '일괄 등록: ' + d.success + '건 성공, ' + d.fail + '건 실패 — 패널의 상태 열을 확인하세요.');
+      else showAlert('ok', 'check_circle', d.success + '건을 등록했습니다.', true);
+      await load();
+    } catch (e) {
+      bulkAlert('등록 중 오류: ' + e.message);
+    } finally {
+      BULK.submitting = false; renderBulk();
+    }
+  }
+
+  function keepFailedBulk() {
+    BULK.rows = BULK.rows.filter(r => !(r.result && r.result.success));
+    BULK.rows.forEach(r => { r.result = null; });
+    $('bulk-progress').textContent = '';
+    renderBulk();
+  }
+
+  function openBulk() {
+    BULK.rows = []; BULK.checking = false; BULK.submitting = false;
+    $('bulk-text').value = ''; $('bulk-file').value = ''; $('bulk-progress').textContent = '';
+    bulkAlert('');
+    renderBulk();
+    $('bulk-overlay').classList.add('open');
+    $('bulk-panel').classList.add('open');
+  }
+  function closeBulk() {
+    $('bulk-overlay').classList.remove('open');
+    $('bulk-panel').classList.remove('open');
+  }
+
+  function bindBulk() {
+    if (!$('t-bulk')) return;
+    $('t-bulk').addEventListener('click', openBulk);
+    $('bulk-close').addEventListener('click', closeBulk);
+    $('bulk-cancel').addEventListener('click', closeBulk);
+    $('bulk-overlay').addEventListener('click', closeBulk);
+    $('bulk-file-btn').addEventListener('click', () => $('bulk-file').click());
+    $('bulk-file').addEventListener('change', (e) => readBulkFile(e.target.files[0]));
+    $('bulk-template').addEventListener('click', downloadBulkTemplate);
+    $('bulk-parse').addEventListener('click', parseBulk);
+    $('bulk-addrow').addEventListener('click', () => { BULK.rows.push(newBulkRow({ typeId: 5 })); renderBulk(); });
+    $('bulk-check-all').addEventListener('click', checkAllBulk);
+    $('bulk-keep-failed').addEventListener('click', keepFailedBulk);
+    $('bulk-submit').addEventListener('click', submitBulk);
+    $('bulk-rows').addEventListener('input', onBulkEdit);
+    $('bulk-rows').addEventListener('change', onBulkEdit);
+    $('bulk-rows').addEventListener('click', onBulkClick);
+  }
+
   function bindRegistrationAndDelete() {
+    bindBulk();   // 일괄 등록은 마크업 유무를 스스로 확인한다
     if (!$('t-add')) return;   // 마크업이 없는 페이지면 건너뛴다
 
     $('t-add').addEventListener('click', openReg);

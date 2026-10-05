@@ -335,6 +335,34 @@ public class AssetsController : ControllerBase
         return Ok(await _checker.CheckAsync(req, ct));
     }
 
+    public record RegisterBulkRequest(AssetService.RegisterAssetRequest[] Items);
+
+    /// <summary>
+    /// 일괄 등록 (Admin 전용). HMI·드라이브처럼 연결 정보만으로 되는 타입만 받는다 —
+    /// PLC/서보는 프로젝트 파일이 있어야 해서 단건 경로로만. 건별 결과를 돌려주고 중간에 실패해도
+    /// 나머지를 계속한다(일괄 삭제와 같은 이유 — 건마다 커밋이라 되돌릴 수 없다).
+    /// </summary>
+    [HttpPost("register-bulk")]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    public async Task<IActionResult> RegisterBulk([FromBody] RegisterBulkRequest req)
+    {
+        if (req?.Items is null || req.Items.Length == 0)
+            return BadRequest(new { error = "등록할 자산이 없습니다." });
+        if (req.Items.Length > 500)
+            return BadRequest(new { error = "한 번에 500건까지 등록할 수 있습니다." });
+        if (!_dexaClient.IsConnected)
+            return StatusCode(503, new { error = "DEXA 서버에 연결되어 있지 않습니다. 등록은 서버가 필요합니다." });
+
+        var results = await _assets.RegisterAssetsAsync(req.Items);
+        return Ok(new
+        {
+            ok      = results.All(r => r.Ok),
+            success = results.Count(r => r.Ok),
+            fail    = results.Count(r => !r.Ok),
+            results = results.Select(r => new { index = r.Index, success = r.Ok, assetId = r.AssetId, error = r.Error }),
+        });
+    }
+
     /// <summary>선택 삭제 요청. 표에서 체크한 행들의 자산 id.</summary>
     public record DeleteAssetsRequest(int[] AssetIds, bool IncludeChildren = false);
 

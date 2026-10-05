@@ -717,6 +717,61 @@ public class AssetService
     }
 
     /// <summary>
+    /// 여러 자산 등록 — HMI·드라이브처럼 연결 정보만으로 만들 수 있는 타입만 받는다.
+    /// PLC/서보는 프로젝트 파일이 있어야 해서 단건 경로로만 등록한다.
+    ///
+    /// 건별로 진행하고 중간에 실패해도 나머지를 계속한다 — DEXA 등록은 건마다 개별 커밋이라
+    /// 전체를 되돌릴 수 없다. 동명(배치 안끼리, 기존 자산과)은 서버에 보내기 전에 걸러낸다.
+    /// DEXA 도 거부하긴 하지만, 거부된 시점에는 앞선 건들이 이미 만들어져 있어 뒤늦다.
+    /// </summary>
+    public async Task<List<(int Index, bool Ok, int? AssetId, string? Error)>> RegisterAssetsAsync(
+        IReadOnlyList<RegisterAssetRequest> items,
+        IProgress<(int completed, int total)>? progress = null)
+    {
+        var results = new List<(int, bool, int?, string?)>();
+        var existing = new HashSet<string>(
+            (await _dexaRead.GetViewAssetsAsync()).Where(a => a.IsRealAsset).Select(a => (a.Name ?? "").Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            var req = items[i];
+            var name = (req.Name ?? string.Empty).Trim();
+            string? reject =
+                RequiresProjectFile(req.AssetTypeId) ? "PLC·서보는 프로젝트 파일이 필요해 단건 등록만 됩니다." :
+                name.Length == 0                      ? "이름이 비어 있습니다." :
+                !seen.Add(name)                       ? "같은 배치 안에 같은 이름이 있습니다." :
+                existing.Contains(name)               ? "같은 이름의 자산이 이미 있습니다." :
+                req.AssetTypeId == DriveTypeId && string.IsNullOrWhiteSpace(req.ModelVersion)
+                                                      ? "드라이브는 모델 버전이 필요합니다." :
+                null;
+
+            if (reject is null)
+            {
+                try
+                {
+                    var (ok, error, assetId) = await RegisterAssetAsync(req);
+                    results.Add((i, ok, assetId, error));
+                    if (ok) existing.Add(name);
+                }
+                catch (Exception ex)
+                {
+                    // DexaServerException 이면 서버가 거부한 사유(라이선스·중복·Lock)가 그대로 메시지다
+                    _logger.LogWarning(ex, "일괄 등록 {Index} '{Name}' 실패", i, name);
+                    results.Add((i, false, null, ex.Message));
+                }
+            }
+            else
+            {
+                results.Add((i, false, null, reject));
+            }
+            progress?.Report((i + 1, items.Count));
+        }
+        return results;
+    }
+
+    /// <summary>
     /// 여러 자산 삭제. 건별 결과를 돌려주고 중간에 실패해도 나머지를 계속 진행한다.
     ///
     /// 자산 관리 표에서 선택하는 행은 항상 말단이다(실자산을 부모로 갖는 자산은 없다).

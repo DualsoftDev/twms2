@@ -203,6 +203,28 @@
     .batch-section { font-size: 12px; font-weight: 700; color: var(--c-on-surface-variant); margin-top: 4px; }
     .batch-note { font-size: 12px; color: var(--c-on-surface-variant); line-height: 1.5; }
       .reg-check { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 10px; }
+    /* 일괄 등록 패널 — 표가 들어가므로 넓다 */
+    .bulk-panel { width: 1120px; max-width: 96vw; }
+    .bulk-paste { width: 100%; resize: vertical; font-family: var(--font-mono, monospace); font-size: 12px; box-sizing: border-box; }
+    .bulk-wrap { overflow: auto; border: 1px solid var(--c-outline-variant); border-radius: 10px; max-height: 52vh; }
+    .bulk-table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px; }
+    .bulk-table th, .bulk-table td { padding: 4px 6px; border-bottom: 1px solid var(--c-outline-variant); white-space: nowrap; text-align: left; vertical-align: middle; }
+    .bulk-table th { position: sticky; top: 0; background: var(--c-surface); font-weight: 700; color: var(--c-on-surface-variant); z-index: 1; }
+    .bulk-table .hist-input { padding: 4px 8px; font-size: 12px; border-radius: 7px; }
+    .bulk-table input.hist-input { width: 112px; }
+    .bulk-table input.bulk-w-s { width: 58px; }
+    .bulk-table input.bulk-w-l { width: 170px; }
+    .bulk-table select.hist-input { padding-right: 26px; background-position: right 8px center; }
+    .bulk-table tr.bulk-ok td { background: rgba(76,175,80,0.08); }
+    .bulk-table tr.bulk-err td { background: rgba(244,67,54,0.08); }
+    .bulk-table tr.bulk-warn td { background: rgba(255,152,0,0.10); }
+    .bulk-table tr.bulk-info td { background: rgba(33,150,243,0.07); }
+    .bulk-status { display: inline-flex; align-items: center; gap: 4px; max-width: 280px; white-space: normal; line-height: 1.3; }
+    .bulk-status .material-symbols-outlined { font-size: 16px; }
+    .bulk-rowbtn { cursor: pointer; color: var(--c-on-surface-variant); font-size: 18px; vertical-align: middle; }
+    .bulk-rowbtn:hover { color: var(--c-primary); }
+    .bulk-empty { padding: 14px; text-align: center; }
+    #bulk-count { margin-left: 8px; }
 </style>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -221,6 +243,7 @@
       <div class="hist-filter" style="margin:0;">
         <span class="hist-count" id="t-summary" style="margin:0;"></span>
         <button class="hist-btn hist-btn-primary" id="t-add"><span class="material-symbols-outlined">add</span>자산 등록</button>
+        <button class="hist-btn" id="t-bulk"><span class="material-symbols-outlined">playlist_add</span>일괄 등록</button>
         <button class="hist-btn hist-btn-danger" id="t-del"><span class="material-symbols-outlined">delete</span>선택 삭제</button>
         <button class="hist-btn" id="t-batch"><span class="material-symbols-outlined">edit_note</span>일괄 편집</button>
         <button class="hist-btn" id="t-csv"><span class="material-symbols-outlined">file_download</span>CSV 내보내기</button>
@@ -381,6 +404,59 @@
     <div class="batch-foot">
       <button class="hist-btn" id="reg-cancel">취소</button>
       <button class="hist-btn hist-btn-primary" id="reg-submit"><span class="material-symbols-outlined">add</span>등록</button>
+    </div>
+  </aside>
+
+  <!-- 일괄 등록 (HMI·드라이브). CSV 로 받아 검증 표에서 연결 확인·자동완성한 뒤 건별로 등록한다.
+       PLC/서보는 프로젝트 파일이 필요해 여기선 받지 않는다. -->
+  <div class="batch-overlay" id="bulk-overlay"></div>
+  <aside class="batch-panel bulk-panel" id="bulk-panel">
+    <div class="batch-head">
+      <span class="material-symbols-outlined" style="color:var(--c-primary);">playlist_add</span>
+      <span class="panel-title">자산 일괄 등록</span>
+      <span class="reg-hint" id="bulk-count"></span>
+      <span class="material-symbols-outlined close" id="bulk-close">close</span>
+    </div>
+    <div class="batch-body">
+      <div class="hist-alert err" id="bulk-alert" style="display:none;">
+        <span class="material-symbols-outlined">error</span><span id="bulk-alert-msg"></span>
+      </div>
+
+      <div class="batch-section">1. 입력</div>
+      <p class="reg-hint">HMI 와 드라이브만 됩니다 — PLC·서보는 프로젝트 파일이 필요해 단건 등록을 쓰세요.
+        열 순서는 상관없고 헤더 이름으로 찾습니다. DriveScanner 내보내기 파일도 그대로 됩니다(Series → 모델명).
+        타입 열이 없으면 경유·모델·버전이 있는 행을 드라이브로 봅니다.</p>
+      <textarea class="hist-input bulk-paste" id="bulk-text" rows="5"
+        placeholder="CSV 를 붙여넣거나 (Excel 에서 복사한 탭 구분도 됩니다) 파일을 선택하세요&#10;타입,이름,라인,IP,경유IP,Base,Slot,모델명,모델버전,설명,에이전트"></textarea>
+      <div class="reg-check">
+        <input type="file" id="bulk-file" accept=".csv,.txt" style="display:none;" />
+        <button type="button" class="hist-btn" id="bulk-file-btn"><span class="material-symbols-outlined">upload_file</span>파일 선택</button>
+        <button type="button" class="hist-btn" id="bulk-template"><span class="material-symbols-outlined">download</span>서식 다운로드</button>
+        <button type="button" class="hist-btn hist-btn-primary" id="bulk-parse"><span class="material-symbols-outlined">table_rows</span>표로 불러오기</button>
+        <button type="button" class="hist-btn" id="bulk-addrow"><span class="material-symbols-outlined">add</span>빈 행 추가</button>
+      </div>
+
+      <div class="batch-section">2. 검증 — 연결 확인으로 드라이브 모델·버전을 실물에서 채웁니다</div>
+      <div class="reg-check">
+        <button type="button" class="hist-btn" id="bulk-check-all"><span class="material-symbols-outlined">network_check</span>전체 연결 확인</button>
+        <button type="button" class="hist-btn" id="bulk-keep-failed" style="display:none;"><span class="material-symbols-outlined">filter_alt</span>실패 행만 남기기</button>
+        <small class="reg-hint" id="bulk-progress"></small>
+      </div>
+      <div class="bulk-wrap">
+        <table class="bulk-table" id="bulk-table">
+          <thead><tr>
+            <th>#</th><th>타입</th><th>이름</th><th>라인</th><th>IP</th><th>경유IP</th><th>Base</th><th>Slot</th>
+            <th>모델명</th><th>모델버전</th><th>설명</th><th>상태</th><th></th>
+          </tr></thead>
+          <tbody id="bulk-rows"></tbody>
+        </table>
+        <div class="reg-hint bulk-empty" id="bulk-empty">불러온 행이 없습니다.</div>
+      </div>
+    </div>
+    <div class="batch-foot">
+      <span class="reg-hint" id="bulk-foot-hint" style="margin-right:auto;"></span>
+      <button class="hist-btn" id="bulk-cancel">닫기</button>
+      <button class="hist-btn hist-btn-primary" id="bulk-submit" disabled><span class="material-symbols-outlined">playlist_add_check</span>등록</button>
     </div>
   </aside>
 
