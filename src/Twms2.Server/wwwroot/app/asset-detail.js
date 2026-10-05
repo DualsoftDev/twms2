@@ -469,6 +469,10 @@
     conn.push(editField('Station', numInput('stationNumber')));
     if (t === 4) {
       conn.push(`<div class="ad-row2">${editField('모델명', textInput('modelName'))}${editField('버전', textInput('modelVersion'))}</div>`);
+      conn.push(`<div class="ad-field">
+        <button class="ad-btn" id="ad-conn-check" type="button"><span class="material-symbols-outlined">network_check</span>연결 정보 검사</button>
+        <div class="ad-check-result" id="ad-check-result" style="display:none;"><span class="material-symbols-outlined" id="ad-check-icon"></span><span id="ad-check-msg"></span></div>
+      </div>`);
     }
     if (t === 6) {
       conn.push(`<div class="ad-field"><label class="ad-check"><input type="checkbox" data-ek="connIsRobot"${r.connIsRobot === 1 ? ' checked' : ''} />로봇 PLC</label></div>`);
@@ -573,8 +577,108 @@
       });
     }
 
+    const checkBtn = $('ad-conn-check');
+    if (checkBtn) checkBtn.addEventListener('click', () => checkDriveConnection(syncSave));
+
     $('ad-edit-cancel').addEventListener('click', cancelEdit);
     saveBtn.addEventListener('click', saveEdit);
+  }
+
+  /* ── 드라이브 연결 정보 검사 ─────────────────────────────────────
+     편집 폼에 입력된 IP·경유 설정으로 실제 접속해 기종·모델버전을 읽고 모델명·버전 칸을 채운다.
+     (asset-table.js 등록 폼 checkConnection 과 같은 API·판정) 채우기만 하고 반영은 사용자가 저장으로 한다. */
+  function showDriveCheck(kind, icon, html) {
+    const box = $('ad-check-result');
+    if (!box) return;
+    box.className = 'ad-check-result ' + kind;
+    $('ad-check-icon').textContent = icon;
+    $('ad-check-msg').innerHTML = html;
+    box.style.display = '';
+  }
+
+  function setEditInput(key, value) {
+    EDIT.row[key] = value;
+    const el = $('ad-root').querySelector(`[data-ek="${key}"]`);
+    if (el) el.value = value;
+  }
+
+  async function checkDriveConnection(syncSave) {
+    const r = EDIT.row;
+    const ip = String(r.displayIp ?? '').trim();
+    if (!ip) { showDriveCheck('err', 'error', 'IP 를 입력해주세요.'); return; }
+    const via = !!r.connViaEnabled;
+    const viaIp = via ? String(r.connIpVia ?? '').trim() : '';
+    if (via && !viaIp) { showDriveCheck('err', 'error', '경유 IP 를 입력해주세요.'); return; }
+
+    const btn = $('ad-conn-check');
+    btn.disabled = true;
+    showDriveCheck('info', 'hourglass_top', '드라이브에 접속해 기종·버전을 읽는 중…');
+    try {
+      const res = await fetch('/api/assets/connection-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetTypeId: 4,
+          ip: ip,
+          viaIp: via ? viaIp : null,
+          viaBase: via ? (r.connBase || 0) : 0,
+          viaSlot: via && r.connSlot != null ? r.connSlot : null,
+        }),
+      });
+      if (!EDIT.on || EDIT.row !== r) return; // 검사 중 편집을 취소/저장했으면 버린다
+      if (res.status === 401 || res.status === 403) { showDriveCheck('err', 'error', '관리자 로그인이 필요합니다.'); return; }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { showDriveCheck('err', 'error', esc(d.error || '검사에 실패했습니다.')); return; }
+      renderDriveCheck(d);
+      syncSave();
+    } catch (e) {
+      if (EDIT.on) showDriveCheck('err', 'error', '검사 중 오류: ' + esc(e.message));
+    } finally {
+      if (EDIT.on && btn.isConnected) btn.disabled = false;
+    }
+  }
+
+  function renderDriveCheck(d) {
+    const rtt = d.rttMs != null ? ' · ' + d.rttMs + 'ms' : '';
+    if (!d.reachable || !d.drive) {
+      const viaPath = d.method === 'xgt-tunnel';
+      showDriveCheck('err', 'link_off',
+        '연결 실패' + (d.error ? ' — ' + esc(d.error) : '') +
+        '<br><small>' + (viaPath ? '경유 PLC 주소·Base·Slot 과 장비 IP 를 확인하세요.' : 'IP 와 네트워크 경로를 확인하세요.') + '</small>');
+      return;
+    }
+
+    const dr = d.drive;
+    const ver = dr.modelVersion || '';
+    if (!dr.dexaSupported) {
+      showDriveCheck('warn', 'warning',
+        '접속은 되지만 <b>' + esc(dr.series) + '</b>(코드 ' + dr.modelCode + ')은 DEXA 가 지원하지 않는 기종입니다.' +
+        (ver ? ' 버전 ' + esc(ver) : '') + rtt + '<br><small>모델명·버전은 바꾸지 않았습니다.</small>');
+      return;
+    }
+
+    const o = EDIT.orig;
+    const before = esc((o.modelName || '-') + ' ' + (o.modelVersion || '-'));
+    if (!ver) {
+      setEditInput('modelName', dr.modelName);
+      showDriveCheck('warn', 'warning', '<b>' + esc(dr.modelName) + '</b> 로 읽혔지만 모델버전을 읽지 못했습니다. 버전은 직접 입력해주세요.' + rtt);
+      return;
+    }
+
+    setEditInput('modelName', dr.modelName);
+    setEditInput('modelVersion', ver);
+    const after = esc(dr.modelName + ' ' + ver);
+    const same = valEq(dr.modelName, o.modelName) && valEq(ver, o.modelVersion);
+    let msg = same
+      ? '일치 — <b>' + after + '</b> (변경 없음)' + rtt
+      : '<b>' + before + ' → ' + after + '</b> 로 채웠습니다' + rtt + '<br><small>저장을 눌러야 반영됩니다.</small>';
+    if (dr.invSwVersion) msg += '<br><small>인버터 SW 버전 ' + esc(dr.invSwVersion) + ' (백업에는 모델버전을 씁니다)</small>';
+    if (dr.inCatalog === false) {
+      showDriveCheck('warn', 'warning', msg +
+        '<br><small><b>DriveView 9 에 ' + after + ' 정의(.INV)가 없습니다.</b> 이 값으로도 백업이 실패할 수 있습니다.</small>');
+      return;
+    }
+    showDriveCheck('ok', 'check_circle', msg);
   }
 
   function cancelEdit() {
@@ -607,11 +711,12 @@
     EDIT.saving = true;
     const saveBtn = $('ad-edit-save');
     saveBtn.disabled = true;
+    const payload = buildEditPayload();
     try {
       const res = await fetch('/api/assets/table', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: [buildEditPayload()] }),
+        body: JSON.stringify({ rows: [payload] }),
       });
       if (res.status === 401 || res.status === 403) { toast('관리자 로그인이 필요합니다.'); return; }
       if (!res.ok) {
@@ -625,10 +730,15 @@
         toast('저장 실패' + (err && err.error ? ': ' + err.error : ''));
         return;
       }
-      toast('저장되었습니다.');
       EDIT.on = false;
       EDIT.row = EDIT.orig = null;
       await load();
+      // DEXA 는 내부 예외를 삼키고도 성공을 응답하므로, 모델명·버전은 다시 읽은 값으로 반영 여부를 확인한다.
+      const unapplied = ['modelName', 'modelVersion']
+        .filter(k => k in payload && LAST && (LAST[k] ?? '') !== payload[k]);
+      toast(unapplied.length
+        ? '저장 응답은 성공했지만 모델명·버전이 반영되지 않았습니다. 잠시 후 새로고침해 확인하세요.'
+        : '저장되었습니다.');
     } catch (e) {
       toast('저장 오류: ' + e.message);
     } finally {

@@ -75,6 +75,18 @@
     .ad-btn-primary { color: var(--c-on-primary); background: var(--c-primary); }
     .ad-btn-primary:hover { color: var(--c-on-primary); }
     .ad-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* 드라이브 연결 정보 검사 결과 */
+    .ad-check-result {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 10px 14px; border-radius: 12px; margin-top: 4px; font-size: 13px; font-weight: 600; line-height: 1.5;
+      box-shadow: inset 2px 2px 5px var(--nm-dark), inset -2px -2px 5px var(--nm-light);
+    }
+    .ad-check-result .material-symbols-outlined { font-size: 20px; }
+    .ad-check-result small { font-weight: 500; }
+    .ad-check-result.ok { color: var(--health-backedup); }
+    .ad-check-result.warn { color: var(--health-inprogress); }
+    .ad-check-result.err { color: var(--health-failed); }
+    .ad-check-result.info { color: var(--c-primary); }
     .ad-edit-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
     .ad-edit-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--c-primary); }
     .ad-edit-badge .material-symbols-outlined { font-size: 16px; }
