@@ -94,13 +94,13 @@
   async function load() {
     if (EDIT.on) return; // 편집 중 폴링/새로고침이 폼을 덮어쓰지 않도록
     if (ASSET_ID == null) {
-      $('ad-root').innerHTML = `<div class="ad-empty">잘못된 자산 주소입니다.</div>`;
+      $('adt-root').innerHTML = `<div class="adt-empty">잘못된 자산 주소입니다.</div>`;
       return;
     }
     try {
       const res = await fetch(`/api/assets/${ASSET_ID}`, { headers: { 'Accept': 'application/json' } });
       if (res.status === 404) {
-        $('ad-root').innerHTML = `<div class="ad-empty">자산을 찾을 수 없습니다. (#${ASSET_ID})</div>`;
+        $('adt-root').innerHTML = `<div class="adt-empty">자산을 찾을 수 없습니다. (#${ASSET_ID})</div>`;
         return;
       }
       if (!res.ok) return;
@@ -134,7 +134,7 @@
     const empty = value == null || value === '';
     if (empty && opts.hideEmpty) return '';
     const shown = empty ? (opts.dash || '-') : value;
-    return `<div class="ad-field"><div class="ad-field-label">${esc(label)}</div><div class="ad-field-value">${esc(shown)}</div></div>`;
+    return `<div class="adt-field"><div class="adt-field-label">${esc(label)}</div><div class="adt-field-value">${esc(shown)}</div></div>`;
   }
 
   function basicInfo(d) {
@@ -156,19 +156,19 @@
     const showVia = (d.ipVia != null && d.ipVia !== '') && (!isDrive || d.viaEnabled === true);
 
     if (isDrive && d.viaEnabled === true) {
-      rows.push(`<div class="ad-field"><div class="ad-field-value" style="text-align:center;color:var(--health-unchanged);font-weight:700;">경유 연결 (2단)</div></div>`);
+      rows.push(`<div class="adt-field"><div class="adt-field-value" style="text-align:center;color:var(--health-unchanged);font-weight:700;">경유 연결 (2단)</div></div>`);
     }
     if (showVia) rows.push(field('경유 IP', d.ipVia));
     rows.push(field('IP', d.ip));
     if (showVia) {
-      rows.push(`<div class="ad-row2">
+      rows.push(`<div class="adt-row2">
         ${field('Base', d.baseNumber == null ? '-' : d.baseNumber)}
         ${field('Slot', d.slotNumber == null ? '-' : d.slotNumber)}
       </div>`);
     }
     if (d.stationNumber != null) rows.push(field('Station', d.stationNumber));
     if ((d.modelName != null && d.modelName !== '') || (d.modelVersion != null && d.modelVersion !== '')) {
-      rows.push(`<div class="ad-row2">
+      rows.push(`<div class="adt-row2">
         ${field('모델명', d.modelName || '-')}
         ${field('버전', d.modelVersion || '-')}
       </div>`);
@@ -182,12 +182,12 @@
     const all = d.allManuals || [];
     let html = '';
     if (matched.length > 0) {
-      html += `<div class="ad-section-title"><span class="material-symbols-outlined">menu_book</span>매뉴얼</div>`;
+      html += `<div class="adt-section-title"><span class="material-symbols-outlined">menu_book</span>매뉴얼</div>`;
       html += matched.map(m => manualRow(m, true)).join('');
-      html += `<div class="ad-divider"></div>`;
+      html += `<div class="adt-divider"></div>`;
     }
     if (all.length > 0) {
-      html += `<details class="ad-manuals-all">
+      html += `<details class="adt-manuals-all">
         <summary><span class="material-symbols-outlined">folder_open</span>전체 매뉴얼 목록 <span class="chip chip-default">${all.length}</span></summary>
         ${all.map(m => manualRow(m, false)).join('')}
       </details>`;
@@ -196,10 +196,10 @@
   }
   function manualRow(m, primary) {
     const chipCls = primary ? 'chip-success' : 'chip-default';
-    return `<div class="ad-manual-row">
+    return `<div class="adt-manual-row">
       <span class="chip ${chipCls}">${esc(m.keyword)}</span>
-      <span class="ad-manual-name">${esc(m.fileName)}</span>
-      <a class="ad-btn" href="/manuals/${encodeURIComponent(m.storedFileName)}" target="_blank">
+      <span class="adt-manual-name">${esc(m.fileName)}</span>
+      <a class="adt-btn" href="/manuals/${encodeURIComponent(m.storedFileName)}" target="_blank">
         <span class="material-symbols-outlined">picture_as_pdf</span>보기
       </a>
     </div>`;
@@ -207,7 +207,7 @@
 
   function backupTable(d) {
     const all = d.backupHistory || [];
-    if (all.length === 0) return `<div class="ad-empty">백업 이력이 없습니다.</div>`;
+    if (all.length === 0) return `<div class="adt-empty">백업 이력이 없습니다.</div>`;
     // 페이지 클램프 (폴링으로 건수가 줄어도 유효 범위 유지)
     const pages = Math.max(1, Math.ceil(all.length / BK.size));
     if (BK.page >= pages) BK.page = pages - 1;
@@ -224,11 +224,11 @@
         let color = 'var(--health-unchanged)', title = `현재 백업 v${a.version} 다운로드`;
         if (a.result === 'backedup') { color = 'var(--health-backedup)'; title = `v${a.version} 새 백업 다운로드`; }
         else if (!a.isSuccess) { color = 'var(--health-failed)'; title = `마지막 성공 백업 v${a.downloadableVersion} 다운로드`; }
-        dl = `<a class="ad-iconbtn" href="/api/download/backup/${ASSET_ID}/${a.downloadableVersion}" target="_blank" title="${title}" style="color:${color};"><span class="material-symbols-outlined">download</span></a>`;
+        dl = `<a class="adt-iconbtn" href="/api/download/backup/${ASSET_ID}/${a.downloadableVersion}" target="_blank" title="${title}" style="color:${color};"><span class="material-symbols-outlined">download</span></a>`;
       }
       const report = a.hasReport
-        ? `<a class="ad-iconbtn" href="/report/${ASSET_ID}/${a.version}/index.html" target="_blank" title="리포트 보기"><span class="material-symbols-outlined">open_in_new</span></a>` : '';
-      const log = `<button class="ad-iconbtn" data-log="${a.id}" title="로그 보기"><span class="material-symbols-outlined">article</span></button>`;
+        ? `<a class="adt-iconbtn" href="/report/${ASSET_ID}/${a.version}/index.html" target="_blank" title="리포트 보기"><span class="material-symbols-outlined">open_in_new</span></a>` : '';
+      const log = `<button class="adt-iconbtn" data-log="${a.id}" title="로그 보기"><span class="material-symbols-outlined">article</span></button>`;
       return `<tr>
         <td>${verCell}</td>
         <td>${fmtDateTime(a.started)}</td>
@@ -239,13 +239,13 @@
         <td>${log}</td>
       </tr>`;
     }).join('');
-    // 페이저 — 버튼 핸들러는 ad-root 위임(data-bkpage)으로 처리 (재렌더에도 유지)
-    const pager = pages > 1 ? `<div class="ad-pager">
-      <button class="ad-iconbtn" data-bkpage="prev" title="이전 페이지"${BK.page <= 0 ? ' disabled' : ''}><span class="material-symbols-outlined">chevron_left</span></button>
+    // 페이저 — 버튼 핸들러는 adt-root 위임(data-bkpage)으로 처리 (재렌더에도 유지)
+    const pager = pages > 1 ? `<div class="adt-pager">
+      <button class="adt-iconbtn" data-bkpage="prev" title="이전 페이지"${BK.page <= 0 ? ' disabled' : ''}><span class="material-symbols-outlined">chevron_left</span></button>
       <span>${BK.page + 1} / ${pages} <span style="opacity:0.6;">(${all.length}건)</span></span>
-      <button class="ad-iconbtn" data-bkpage="next" title="다음 페이지"${BK.page >= pages - 1 ? ' disabled' : ''}><span class="material-symbols-outlined">chevron_right</span></button>
+      <button class="adt-iconbtn" data-bkpage="next" title="다음 페이지"${BK.page >= pages - 1 ? ' disabled' : ''}><span class="material-symbols-outlined">chevron_right</span></button>
     </div>` : '';
-    return `<div class="ad-table-wrap"><table class="nm-table">
+    return `<div class="adt-table-wrap"><table class="nm-table">
       <thead><tr><th>버전</th><th>작업 시작</th><th>작업 종료</th><th>결과</th><th>다운로드</th><th>리포트</th><th>로그</th></tr></thead>
       <tbody>${body}</tbody>
     </table></div>${pager}`;
@@ -287,17 +287,17 @@
       badges.push(`<span class="chip chip-ghost" style="border-color:var(--health-unchanged);color:var(--health-unchanged);">v${d.latestVersion}</span>`);
 
     const dlBtn = d.latestVersion != null
-      ? `<a class="ad-btn" href="/api/download/backup/${ASSET_ID}/${d.latestVersion}" target="_blank"><span class="material-symbols-outlined">download</span>다운로드</a>`
-      : `<button class="ad-btn" disabled style="opacity:0.45;cursor:not-allowed;"><span class="material-symbols-outlined">download</span>다운로드</button>`;
+      ? `<a class="adt-btn" href="/api/download/backup/${ASSET_ID}/${d.latestVersion}" target="_blank"><span class="material-symbols-outlined">download</span>다운로드</a>`
+      : `<button class="adt-btn" disabled style="opacity:0.45;cursor:not-allowed;"><span class="material-symbols-outlined">download</span>다운로드</button>`;
 
     // 이 자산을 경유 게이트웨이로 사용하는 자산이 있으면 다이얼로그 진입 버튼 노출.
     const viaBtn = VIA_ASSETS.length > 0
-      ? `<button class="ad-btn" id="ad-via-btn" style="color:var(--c-primary);"><span class="material-symbols-outlined">hub</span>경유 자산 ${VIA_ASSETS.length}</button>`
+      ? `<button class="adt-btn" id="adt-via-btn" style="color:var(--c-primary);"><span class="material-symbols-outlined">hub</span>경유 자산 ${VIA_ASSETS.length}</button>`
       : '';
 
     // admin 로그인 시에만 편집 버튼 (shell:auth 이벤트로 로그인/로그아웃 시 재렌더)
     const editBtn = (window.Shell && Shell.isAuthenticated && Shell.isAdmin)
-      ? `<button class="ad-btn ad-btn-primary" id="ad-edit-btn"><span class="material-symbols-outlined">edit</span>편집</button>`
+      ? `<button class="adt-btn adt-btn-primary" id="adt-edit-btn"><span class="material-symbols-outlined">edit</span>편집</button>`
       : '';
 
     // 관련 링크 (백업 이력 — 이름 검색으로 통합조회 진입; AssetDetail.GoToBackupHistory 이식)
@@ -305,63 +305,63 @@
     const today = (() => { const t = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`; })();
     const histUrl = `/history?tab=1&q=${nameQ}&mode=contains&start=2000-01-01&end=${today}`;
 
-    $('ad-root').innerHTML = `
-      <div class="ad-header">
-        <div class="ad-icon">${iconHtml}</div>
+    $('adt-root').innerHTML = `
+      <div class="adt-header">
+        <div class="adt-icon">${iconHtml}</div>
         <div style="flex:1;min-width:0;">
-          <div class="ad-chips">
-            <span class="ad-title">${esc(d.name)}</span>
+          <div class="adt-chips">
+            <span class="adt-title">${esc(d.name)}</span>
             ${healthChip}${pingChip}
           </div>
-          <div class="ad-subtitle">${esc(d.typeName || '')} | ID: ${d.assetId}</div>
+          <div class="adt-subtitle">${esc(d.typeName || '')} | ID: ${d.assetId}</div>
         </div>
       </div>
 
-      <div class="ad-actions">
+      <div class="adt-actions">
         ${badges.join('')}
         ${viaBtn}
         ${dlBtn}
-        <a class="ad-btn" href="${histUrl}"><span class="material-symbols-outlined">history</span>백업 정보</a>
+        <a class="adt-btn" href="${histUrl}"><span class="material-symbols-outlined">history</span>백업 정보</a>
         ${editBtn}
       </div>
 
-      <div class="ad-divider"></div>
+      <div class="adt-divider"></div>
 
       ${manualBlock(d)}
 
-      <div class="ad-grid2">
+      <div class="adt-grid2">
         <div>
-          <div class="ad-section-title"><span class="material-symbols-outlined">info</span>자산 정보</div>
+          <div class="adt-section-title"><span class="material-symbols-outlined">info</span>자산 정보</div>
           ${basicInfo(d)}
           <div style="margin-top:8px;">${agentChip}</div>
         </div>
         <div>
-          <div class="ad-section-title"><span class="material-symbols-outlined">lan</span>연결 정보</div>
+          <div class="adt-section-title"><span class="material-symbols-outlined">lan</span>연결 정보</div>
           ${connInfo(d)}
         </div>
       </div>
 
       ${d.description ? `<div style="margin-top:8px;">${field('설명', d.description)}</div>` : ''}
 
-      <div class="ad-divider"></div>
+      <div class="adt-divider"></div>
 
-      <div class="ad-section-title"><span class="material-symbols-outlined">history</span>백업 이력</div>
-      <div id="ad-backup-block">${backupTable(d)}</div>
+      <div class="adt-section-title"><span class="material-symbols-outlined">history</span>백업 이력</div>
+      <div id="adt-backup-block">${backupTable(d)}</div>
 
-      <div class="ad-divider"></div>
+      <div class="adt-divider"></div>
 
-      <div class="ad-section-title"><span class="material-symbols-outlined">link</span>관련 링크</div>
-      <div class="ad-links">
-        <a class="ad-btn" href="${histUrl}"><span class="material-symbols-outlined">history</span>이 자산의 백업 이력</a>
-        <a class="ad-btn" href="/history?tab=2&q=${nameQ}&mode=contains"><span class="material-symbols-outlined">wifi</span>통신 이력</a>
-        <a class="ad-btn" href="/assets"><span class="material-symbols-outlined">grid_view</span>전체 자산 목록</a>
+      <div class="adt-section-title"><span class="material-symbols-outlined">link</span>관련 링크</div>
+      <div class="adt-links">
+        <a class="adt-btn" href="${histUrl}"><span class="material-symbols-outlined">history</span>이 자산의 백업 이력</a>
+        <a class="adt-btn" href="/history?tab=2&q=${nameQ}&mode=contains"><span class="material-symbols-outlined">wifi</span>통신 이력</a>
+        <a class="adt-btn" href="/assets"><span class="material-symbols-outlined">grid_view</span>전체 자산 목록</a>
       </div>
     `;
 
-    // render() 는 폴링마다 ad-root 를 재생성하므로 버튼 핸들러를 매번 다시 연결.
-    const viaBtnEl = $('ad-via-btn');
+    // render() 는 폴링마다 adt-root 를 재생성하므로 버튼 핸들러를 매번 다시 연결.
+    const viaBtnEl = $('adt-via-btn');
     if (viaBtnEl) viaBtnEl.addEventListener('click', () => openViaDialog(d));
-    const editBtnEl = $('ad-edit-btn');
+    const editBtnEl = $('adt-edit-btn');
     if (editBtnEl) editBtnEl.addEventListener('click', enterEdit);
   }
 
@@ -411,15 +411,15 @@
   }
 
   function editField(label, inner) {
-    return `<div class="ad-field"><div class="ad-field-label">${esc(label)}</div>${inner}</div>`;
+    return `<div class="adt-field"><div class="adt-field-label">${esc(label)}</div>${inner}</div>`;
   }
   function textInput(key, placeholder, disabled) {
     const v = EDIT.row[key];
-    return `<input class="ad-input" type="text" data-ek="${key}" value="${esc(v ?? '')}" placeholder="${esc(placeholder || '-')}"${disabled ? ' disabled' : ''} />`;
+    return `<input class="adt-input" type="text" data-ek="${key}" value="${esc(v ?? '')}" placeholder="${esc(placeholder || '-')}"${disabled ? ' disabled' : ''} />`;
   }
   function numInput(key, disabled) {
     const v = EDIT.row[key];
-    return `<input class="ad-input" type="number" data-ek="${key}" data-num="1" value="${v == null ? '' : v}" placeholder="-"${disabled ? ' disabled' : ''} />`;
+    return `<input class="adt-input" type="number" data-ek="${key}" data-num="1" value="${v == null ? '' : v}" placeholder="-"${disabled ? ' disabled' : ''} />`;
   }
 
   function renderEdit() {
@@ -435,16 +435,16 @@
     if (EDIT.agents.length > 0) {
       const names = EDIT.agents.slice();
       if (r.agent && !names.includes(r.agent)) names.unshift(r.agent);
-      agentField = `<select class="ad-input" data-ek="agent"><option value="">-</option>` +
+      agentField = `<select class="adt-input" data-ek="agent"><option value="">-</option>` +
         names.map(n => `<option value="${esc(n)}"${n === r.agent ? ' selected' : ''}>${esc(n)}</option>`).join('') + `</select>`;
     } else {
       agentField = textInput('agent', '에이전트 이름');
     }
     const basic = [
       // 자산명: Windows 파일명 규칙 위반 시 실시간 안내 (DEXA 백업 경로에 사용)
-      editField('자산명', textInput('name', '자산명') + `<div class="ad-field-err" id="ad-name-err" style="display:none;"></div>`),
-      editField('자산 타입', `<div class="ad-field-value">${esc(r.typeName || d.typeName || '')}</div>`),
-      editField('라인', `<select class="ad-input" data-ek="lineId" data-line="1">${lineOpts}</select>`),
+      editField('자산명', textInput('name', '자산명') + `<div class="adt-field-err" id="adt-name-err" style="display:none;"></div>`),
+      editField('자산 타입', `<div class="adt-field-value">${esc(r.typeName || d.typeName || '')}</div>`),
+      editField('라인', `<select class="adt-input" data-ek="lineId" data-line="1">${lineOpts}</select>`),
       editField('제조사', textInput('vendor')),
       editField('사양', textInput('spec')),
       editField('에이전트', agentField),
@@ -454,7 +454,7 @@
     const conn = [];
     if (t === 4) {
       const off = !r.connViaEnabled;
-      conn.push(`<div class="ad-field"><label class="ad-check"><input type="checkbox" id="ad-via-enable"${r.connViaEnabled ? ' checked' : ''} />경유 연결 사용 (2단)</label></div>`);
+      conn.push(`<div class="adt-field"><label class="adt-check"><input type="checkbox" id="adt-via-enable"${r.connViaEnabled ? ' checked' : ''} />경유 연결 사용 (2단)</label></div>`);
       conn.push(editField('경유 IP', textInput('connIpVia', '경유 IP', off)));
     } else if (t === 6 || t === 7) {
       conn.push(editField('경유 IP', textInput('connIpVia', '경유 IP')));
@@ -462,20 +462,20 @@
     conn.push(editField('IP', textInput('displayIp', 'IP')));
     if (t === 4) {
       const off = !r.connViaEnabled;
-      conn.push(`<div class="ad-row2">${editField('Base', numInput('connBase', off))}${editField('Slot', numInput('connSlot', off))}</div>`);
+      conn.push(`<div class="adt-row2">${editField('Base', numInput('connBase', off))}${editField('Slot', numInput('connSlot', off))}</div>`);
     } else if (t === 6 || t === 7) {
-      conn.push(`<div class="ad-row2">${editField('Base', numInput('connBase'))}${editField('Slot', numInput('connSlot'))}</div>`);
+      conn.push(`<div class="adt-row2">${editField('Base', numInput('connBase'))}${editField('Slot', numInput('connSlot'))}</div>`);
     }
     conn.push(editField('Station', numInput('stationNumber')));
     if (t === 4) {
-      conn.push(`<div class="ad-row2">${editField('모델명', textInput('modelName'))}${editField('버전', textInput('modelVersion'))}</div>`);
-      conn.push(`<div class="ad-field">
-        <button class="ad-btn" id="ad-conn-check" type="button"><span class="material-symbols-outlined">network_check</span>연결 정보 검사</button>
-        <div class="ad-check-result" id="ad-check-result" style="display:none;"><span class="material-symbols-outlined" id="ad-check-icon"></span><span id="ad-check-msg"></span></div>
+      conn.push(`<div class="adt-row2">${editField('모델명', textInput('modelName'))}${editField('버전', textInput('modelVersion'))}</div>`);
+      conn.push(`<div class="adt-field">
+        <button class="adt-btn" id="adt-conn-check" type="button"><span class="material-symbols-outlined">network_check</span>연결 정보 검사</button>
+        <div class="adt-check-result" id="adt-check-result" style="display:none;"><span class="material-symbols-outlined" id="adt-check-icon"></span><span id="adt-check-msg"></span></div>
       </div>`);
     }
     if (t === 6) {
-      conn.push(`<div class="ad-field"><label class="ad-check"><input type="checkbox" data-ek="connIsRobot"${r.connIsRobot === 1 ? ' checked' : ''} />로봇 PLC</label></div>`);
+      conn.push(`<div class="adt-field"><label class="adt-check"><input type="checkbox" data-ek="connIsRobot"${r.connIsRobot === 1 ? ' checked' : ''} />로봇 PLC</label></div>`);
     }
 
     // 헤더는 조회 화면과 동일 톤 유지 (아이콘 + 이름 + 편집중 배지)
@@ -483,39 +483,39 @@
       ? `<img src="/images/icons/${esc(d.iconName)}" alt="" />`
       : `<span class="material-symbols-outlined">devices</span>`;
 
-    $('ad-root').innerHTML = `
-      <div class="ad-header">
-        <div class="ad-icon">${iconHtml}</div>
+    $('adt-root').innerHTML = `
+      <div class="adt-header">
+        <div class="adt-icon">${iconHtml}</div>
         <div style="flex:1;min-width:0;">
-          <div class="ad-chips">
-            <span class="ad-title">${esc(r.name || d.name || '')}</span>
-            <span class="ad-edit-badge"><span class="material-symbols-outlined">edit</span>편집 중</span>
+          <div class="adt-chips">
+            <span class="adt-title">${esc(r.name || d.name || '')}</span>
+            <span class="adt-edit-badge"><span class="material-symbols-outlined">edit</span>편집 중</span>
           </div>
-          <div class="ad-subtitle">${esc(r.typeName || d.typeName || '')} | ID: ${ASSET_ID}</div>
+          <div class="adt-subtitle">${esc(r.typeName || d.typeName || '')} | ID: ${ASSET_ID}</div>
         </div>
       </div>
 
-      <div class="ad-divider"></div>
+      <div class="adt-divider"></div>
 
-      <div class="ad-grid2">
+      <div class="adt-grid2">
         <div>
-          <div class="ad-section-title"><span class="material-symbols-outlined">info</span>자산 정보</div>
+          <div class="adt-section-title"><span class="material-symbols-outlined">info</span>자산 정보</div>
           ${basic}
         </div>
         <div>
-          <div class="ad-section-title"><span class="material-symbols-outlined">lan</span>연결 정보</div>
+          <div class="adt-section-title"><span class="material-symbols-outlined">lan</span>연결 정보</div>
           ${conn.join('')}
         </div>
       </div>
 
-      <div class="ad-field" style="margin-top:8px;">
-        <div class="ad-field-label">설명</div>
-        <textarea class="ad-textarea" data-ek="description" placeholder="이 자산에 대한 설명을 입력하세요...">${esc(r.description ?? '')}</textarea>
+      <div class="adt-field" style="margin-top:8px;">
+        <div class="adt-field-label">설명</div>
+        <textarea class="adt-textarea" data-ek="description" placeholder="이 자산에 대한 설명을 입력하세요...">${esc(r.description ?? '')}</textarea>
       </div>
 
-      <div class="ad-edit-foot">
-        <button class="ad-btn" id="ad-edit-cancel"><span class="material-symbols-outlined">close</span>취소</button>
-        <button class="ad-btn ad-btn-primary" id="ad-edit-save" disabled><span class="material-symbols-outlined">save</span>저장</button>
+      <div class="adt-edit-foot">
+        <button class="adt-btn" id="adt-edit-cancel"><span class="material-symbols-outlined">close</span>취소</button>
+        <button class="adt-btn adt-btn-primary" id="adt-edit-save" disabled><span class="material-symbols-outlined">save</span>저장</button>
       </div>
     `;
 
@@ -527,8 +527,8 @@
   }
 
   function bindEditEvents() {
-    const root = $('ad-root');
-    const saveBtn = $('ad-edit-save');
+    const root = $('adt-root');
+    const saveBtn = $('adt-edit-save');
     // 변경 없음 / 자산명 규칙 위반이면 저장 비활성
     const syncSave = () => { saveBtn.disabled = EDIT.saving || !editModified() || !!winNameError(EDIT.row.name); };
 
@@ -554,7 +554,7 @@
           EDIT.row.name = el.value;
           const err = winNameError(el.value);
           el.classList.toggle('invalid', !!err);
-          const hint = $('ad-name-err');
+          const hint = $('adt-name-err');
           if (hint) { hint.textContent = err || ''; hint.style.display = err ? '' : 'none'; }
           syncSave();
         });
@@ -564,7 +564,7 @@
     });
 
     // Drive(4): 경유 연결 스위치 — 켜고 끌 때 경유 IP/Base/Slot 활성화 토글
-    const viaEnable = $('ad-via-enable');
+    const viaEnable = $('adt-via-enable');
     if (viaEnable) {
       viaEnable.addEventListener('change', () => {
         EDIT.row.connViaEnabled = viaEnable.checked;
@@ -577,10 +577,10 @@
       });
     }
 
-    const checkBtn = $('ad-conn-check');
+    const checkBtn = $('adt-conn-check');
     if (checkBtn) checkBtn.addEventListener('click', () => checkDriveConnection(syncSave));
 
-    $('ad-edit-cancel').addEventListener('click', cancelEdit);
+    $('adt-edit-cancel').addEventListener('click', cancelEdit);
     saveBtn.addEventListener('click', saveEdit);
   }
 
@@ -588,17 +588,17 @@
      편집 폼에 입력된 IP·경유 설정으로 실제 접속해 기종·모델버전을 읽고 모델명·버전 칸을 채운다.
      (asset-table.js 등록 폼 checkConnection 과 같은 API·판정) 채우기만 하고 반영은 사용자가 저장으로 한다. */
   function showDriveCheck(kind, icon, html) {
-    const box = $('ad-check-result');
+    const box = $('adt-check-result');
     if (!box) return;
-    box.className = 'ad-check-result ' + kind;
-    $('ad-check-icon').textContent = icon;
-    $('ad-check-msg').innerHTML = html;
+    box.className = 'adt-check-result ' + kind;
+    $('adt-check-icon').textContent = icon;
+    $('adt-check-msg').innerHTML = html;
     box.style.display = '';
   }
 
   function setEditInput(key, value) {
     EDIT.row[key] = value;
-    const el = $('ad-root').querySelector(`[data-ek="${key}"]`);
+    const el = $('adt-root').querySelector(`[data-ek="${key}"]`);
     if (el) el.value = value;
   }
 
@@ -610,7 +610,7 @@
     const viaIp = via ? String(r.connIpVia ?? '').trim() : '';
     if (via && !viaIp) { showDriveCheck('err', 'error', '경유 IP 를 입력해주세요.'); return; }
 
-    const btn = $('ad-conn-check');
+    const btn = $('adt-conn-check');
     btn.disabled = true;
     showDriveCheck('info', 'hourglass_top', '드라이브에 접속해 기종·버전을 읽는 중…');
     try {
@@ -709,7 +709,7 @@
     const nameErr = winNameError(EDIT.row.name);
     if (nameErr) { toast('자산명 오류: ' + nameErr); return; }
     EDIT.saving = true;
-    const saveBtn = $('ad-edit-save');
+    const saveBtn = $('adt-edit-save');
     saveBtn.disabled = true;
     const payload = buildEditPayload();
     try {
@@ -750,40 +750,40 @@
 
   // "경유 자산" 다이얼로그: 이 자산을 게이트웨이로 거쳐 연결되는 자산 목록 + 바로가기.
   function openViaDialog(d) {
-    const sub = $('ad-via-sub');
+    const sub = $('adt-via-sub');
     if (sub) sub.innerHTML = `<strong>${esc(d.name)}</strong> (${esc(d.ip || '-')}) 을(를) 경유 IP 로 사용하는 자산 ${VIA_ASSETS.length}개입니다.`;
-    $('ad-via-list').innerHTML = VIA_ASSETS.map(a => {
+    $('adt-via-list').innerHTML = VIA_ASSETS.map(a => {
       const icon = typeIcon(a);
       const iconHtml = icon
         ? `<img src="/images/icons/${icon}" alt="" />`
         : `<span class="material-symbols-outlined">devices</span>`;
       const meta = [
         a.typeName ? `<span>${esc(a.typeName)}</span>` : '',
-        a.ip ? `<span class="ad-via-ip">${esc(a.ip)}</span>` : '',
+        a.ip ? `<span class="adt-via-ip">${esc(a.ip)}</span>` : '',
         a.baseNumber != null ? `<span>Base ${esc(a.baseNumber)}</span>` : '',
         a.slotNumber != null ? `<span>Slot ${esc(a.slotNumber)}</span>` : '',
         a.lineName ? `<span>${esc(a.lineName)}</span>` : '',
       ].filter(Boolean).join('');
       return `
-      <div class="ad-via-row">
-        <div class="ad-via-icon">${iconHtml}</div>
-        <div class="ad-via-info">
-          <div class="ad-via-name">${esc(a.name) || ('자산 #' + a.assetId)}</div>
-          <div class="ad-via-meta">${meta}</div>
+      <div class="adt-via-row">
+        <div class="adt-via-icon">${iconHtml}</div>
+        <div class="adt-via-info">
+          <div class="adt-via-name">${esc(a.name) || ('자산 #' + a.assetId)}</div>
+          <div class="adt-via-meta">${meta}</div>
         </div>
-        <a class="ad-btn" href="/assets/${a.assetId}"><span class="material-symbols-outlined">arrow_forward</span>바로 가기</a>
+        <a class="adt-btn" href="/assets/${a.assetId}"><span class="material-symbols-outlined">arrow_forward</span>바로 가기</a>
       </div>`;
     }).join('');
-    $('ad-via-modal').classList.add('show');
+    $('adt-via-modal').classList.add('show');
   }
-  function closeViaModal() { $('ad-via-modal').classList.remove('show'); }
+  function closeViaModal() { $('adt-via-modal').classList.remove('show'); }
 
   /* ── 백업 로그 다이얼로그 (history.js openLogModal 이식 — 자산은 현재 페이지로 고정) ── */
   async function openLogModal(actionId) {
-    $('ad-log-title').textContent = `액션 #${actionId} 로그`;
-    $('ad-log-sub').textContent = '불러오는 중…';
-    $('ad-log-body').innerHTML = '';
-    $('ad-log-modal').classList.add('show');
+    $('adt-log-title').textContent = `액션 #${actionId} 로그`;
+    $('adt-log-sub').textContent = '불러오는 중…';
+    $('adt-log-body').innerHTML = '';
+    $('adt-log-modal').classList.add('show');
     await fetchLogs(actionId, false);
   }
 
@@ -794,21 +794,21 @@
       const d = await res.json();
       renderLogs(d.logs || [], d.total || 0, all, actionId);
     } catch (e) {
-      $('ad-log-sub').textContent = '';
-      $('ad-log-body').innerHTML = `<div class="ad-empty">로그를 불러오지 못했습니다.</div>`;
+      $('adt-log-sub').textContent = '';
+      $('adt-log-body').innerHTML = `<div class="adt-empty">로그를 불러오지 못했습니다.</div>`;
     }
   }
 
   function renderLogs(logs, total, all, actionId) {
     if (logs.length === 0) {
-      $('ad-log-sub').textContent = '';
-      $('ad-log-body').innerHTML = `<div class="ad-empty">로그가 없습니다.</div>`;
+      $('adt-log-sub').textContent = '';
+      $('adt-log-body').innerHTML = `<div class="adt-empty">로그가 없습니다.</div>`;
       return;
     }
     const showAll = !all && total > logs.length;
-    $('ad-log-sub').innerHTML =
+    $('adt-log-sub').innerHTML =
       `<span>로그 ${logs.length} / ${total} 건</span>` +
-      (showAll ? `<button class="ad-btn" id="ad-log-all"><span class="material-symbols-outlined">unfold_more</span>전체 보기 (${total}건)</button>` : '');
+      (showAll ? `<button class="adt-btn" id="adt-log-all"><span class="material-symbols-outlined">unfold_more</span>전체 보기 (${total}건)</button>` : '');
     const rows = logs.map(l => {
       const cls = LOG_LEVEL[l.level] || 'chip-default';
       return `<tr>
@@ -817,9 +817,9 @@
         <td style="white-space:pre-wrap;word-break:break-word;">${esc(l.message)}</td>
       </tr>`;
     }).join('');
-    $('ad-log-body').innerHTML =
+    $('adt-log-body').innerHTML =
       `<table class="nm-table"><thead><tr><th style="width:110px;">시간</th><th style="width:90px;">레벨</th><th>메시지</th></tr></thead><tbody>${rows}</tbody></table>`;
-    const allBtn = $('ad-log-all');
+    const allBtn = $('adt-log-all');
     if (allBtn) allBtn.addEventListener('click', () => {
       allBtn.disabled = true;
       allBtn.innerHTML = '<span class="material-symbols-outlined">hourglass_top</span>불러오는 중…';
@@ -827,14 +827,14 @@
     });
   }
 
-  function closeLogModal() { $('ad-log-modal').classList.remove('show'); }
+  function closeLogModal() { $('adt-log-modal').classList.remove('show'); }
 
   document.addEventListener('DOMContentLoaded', async () => {
     if (window.Shell) await Shell.init({ active: '' });
     ASSET_ID = readId();
 
     // 경유 자산 다이얼로그 닫기: 배경 클릭 / 닫기 버튼 / ESC
-    const viaModal = $('ad-via-modal');
+    const viaModal = $('adt-via-modal');
     if (viaModal) {
       viaModal.addEventListener('click', (e) => {
         if (e.target === viaModal || e.target.closest('[data-close]')) closeViaModal();
@@ -842,19 +842,19 @@
     }
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeViaModal(); closeLogModal(); } });
 
-    // 백업 이력 "로그"/페이저 버튼 — render() 가 폴링마다 테이블을 재생성하므로 ad-root 에 위임
-    $('ad-root').addEventListener('click', (e) => {
+    // 백업 이력 "로그"/페이저 버튼 — render() 가 폴링마다 테이블을 재생성하므로 adt-root 에 위임
+    $('adt-root').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-log]');
       if (btn) { openLogModal(+btn.getAttribute('data-log')); return; }
       const pg = e.target.closest('[data-bkpage]');
       if (pg && !pg.disabled && LAST && !EDIT.on) {
         BK.page += pg.getAttribute('data-bkpage') === 'next' ? 1 : -1;
-        const block = $('ad-backup-block');
+        const block = $('adt-backup-block');
         if (block) block.innerHTML = backupTable(LAST);
       }
     });
     // 로그 다이얼로그 닫기: 배경 클릭 / 닫기 버튼
-    const logModal = $('ad-log-modal');
+    const logModal = $('adt-log-modal');
     if (logModal) {
       logModal.addEventListener('click', (e) => {
         if (e.target === logModal || e.target.closest('[data-close]')) closeLogModal();
