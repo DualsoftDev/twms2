@@ -38,6 +38,8 @@ public sealed record ConnectionCheckResult(
 ///   드라이브     : 실제로 Modbus 로 접속해 기종코드·모델버전을 읽는다. 접속 자체가 연결 확인이고,
 ///                  읽은 값으로 폼의 모델명·버전을 채운다 — 템플릿 기본값(iS7 1.00)이 조용히 남아
 ///                  백업이 어긋나는 일을 막는 게 목적이다.
+///                  단, 실험 기능(Features:DriveIdentify)이 꺼져 있으면 드라이브도 다른 타입처럼 핑만 한다 —
+///                  식별 레지스터 읽기는 현장 세팅 때만 쓰는 기능이라 평소에는 서버 차원에서 닫아 둔다.
 /// DEXA 서버 연결은 필요 없다. 순수 네트워크 작업이다.
 /// </summary>
 public sealed class AssetConnectionChecker
@@ -47,18 +49,21 @@ public sealed class AssetConnectionChecker
 
     private readonly PingService _ping;
     private readonly DexaReadService _dexaRead;
+    private readonly AppSettingsEditor _settings;
     private readonly ILogger<AssetConnectionChecker> _logger;
 
-    public AssetConnectionChecker(PingService ping, DexaReadService dexaRead, ILogger<AssetConnectionChecker> logger)
+    public AssetConnectionChecker(PingService ping, DexaReadService dexaRead, AppSettingsEditor settings, ILogger<AssetConnectionChecker> logger)
     {
         _ping = ping;
         _dexaRead = dexaRead;
+        _settings = settings;
         _logger = logger;
     }
 
     public async Task<ConnectionCheckResult> CheckAsync(ConnectionCheckRequest req, CancellationToken ct)
     {
-        if (req.AssetTypeId == AssetService.DriveTypeId)
+        // 버튼을 숨기는 것만으로는 부족하다 — API 가 열려 있으면 그대로 읽히므로 여기서 닫는다.
+        if (req.AssetTypeId == AssetService.DriveTypeId && _settings.DriveIdentify)
             return await CheckDriveAsync(req, ct).ConfigureAwait(false);
 
         bool via = !string.IsNullOrWhiteSpace(req.ViaIp);

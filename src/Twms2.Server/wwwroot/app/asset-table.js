@@ -43,7 +43,18 @@
     sort: { key: 'assetId', dir: 1 },
     page: 0, pageSize: 25,
     saving: false,
+    features: {},        // 서버 실험 기능 플래그 (/api/assets/table 의 features)
   };
+
+  /* 드라이브 기종·버전 자동 인식 — 실험 기능. 꺼져 있으면(기본) 드라이브 연결 확인도 핑으로만 동작하고
+     서버가 drive 결과를 주지 않으므로, 여기서는 안내 문구와 서식 설명만 그에 맞춘다. */
+  function driveIdentifyOn() { return !!(S.features && S.features.driveIdentify); }
+
+  function applyFeatureFlags() {
+    const on = driveIdentifyOn();
+    const t = $('bulk-verify-title');
+    if (t) t.textContent = on ? '2. 검증 — 연결 확인으로 드라이브 모델·버전을 실물에서 채웁니다' : '2. 검증 — 연결 확인';
+  }
 
   /* ── 유형별 컬럼 가시성 (AssetEditGrid 규칙) ── */
   function typeMeta(typeId) { return TYPES.find(t => t.id === typeId) || null; }
@@ -132,8 +143,10 @@
       const d = await res.json();
       S.rows = d.rows || [];
       S.lineOptions = d.lineOptions || [];
+      S.features = d.features || {};
       TYPES = d.types || [];
       S.edits = {};
+      applyFeatureFlags();
       renderTabs();
       render();
       updateSummary();
@@ -674,9 +687,9 @@
     $('reg-ip-hint').textContent = file
       ? '상태 표시(핑)에 쓰는 주소입니다. 백업 접속 대상은 프로젝트 파일에서 읽습니다.'
       : '백업 대상 주소입니다.';
-    $('reg-check-hint').textContent = drive
+    $('reg-check-hint').textContent = (drive && driveIdentifyOn())
       ? '드라이브에 접속해 기종·버전을 읽어 모델명·버전을 채웁니다.'
-      : (file ? '핑으로 확인합니다 (경유가 있으면 경유 PLC 를 통해).' : '핑으로 확인합니다.');
+      : ((file || drive) ? '핑으로 확인합니다 (경유가 있으면 경유 PLC 를 통해).' : '핑으로 확인합니다.');
     clearCheck();
   }
 
@@ -867,7 +880,7 @@
     const btn = $('reg-check');
     btn.disabled = true;
     $('reg-alert').style.display = 'none';
-    showCheck('info', 'hourglass_top', isDriveType(typeId) ? '드라이브에 접속해 기종·버전을 읽는 중…' : '연결 확인 중…');
+    showCheck('info', 'hourglass_top', (isDriveType(typeId) && driveIdentifyOn()) ? '드라이브에 접속해 기종·버전을 읽는 중…' : '연결 확인 중…');
     try {
       const res = await fetch('/api/assets/connection-check', {
         method: 'POST',
@@ -1069,7 +1082,9 @@
       '타입,이름,라인,IP,경유IP,Base,Slot,모델명,모델버전,설명,에이전트',
       '드라이브,UB1 #121 INV,' + line + ',200.19.8.142,120.200.200.190,0,8,iS7,1.04,선택,',
       'HMI,UB1 HMI,' + line + ',192.168.0.10,,,,,,,',
-      '# 로 시작하는 줄은 무시됩니다. 드라이브 모델명·버전은 비워두고 "전체 연결 확인" 으로 실물에서 채워도 됩니다.',
+      driveIdentifyOn()
+        ? '# 로 시작하는 줄은 무시됩니다. 드라이브 모델명·버전은 비워두고 "전체 연결 확인" 으로 실물에서 채워도 됩니다.'
+        : '# 로 시작하는 줄은 무시됩니다. 드라이브는 모델명(iS7/S100/H100/G100/S300)과 모델버전(1.04 형식)을 채워주세요.',
     ].join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });   // BOM: Excel 한글 깨짐 방지
     const a = document.createElement('a');
@@ -1187,7 +1202,7 @@
   /* ── 연결 확인 — 단건 폼과 같은 API, 결과를 행에 쓴다 ── */
   async function checkBulkRow(r) {
     if (!r.ip) { setBulkStatus(r, 'err', 'error', 'IP 없음'); return; }
-    setBulkStatus(r, 'info', 'hourglass_top', r.typeId === 4 ? '기종·버전 읽는 중…' : '확인 중…');
+    setBulkStatus(r, 'info', 'hourglass_top', (r.typeId === 4 && driveIdentifyOn()) ? '기종·버전 읽는 중…' : '확인 중…');
     try {
       const res = await fetch('/api/assets/connection-check', {
         method: 'POST',
@@ -1257,7 +1272,7 @@
       if (!err && !r.lineId) err = '라인을 선택하세요';
       if (!err && !r.ip.trim()) err = 'IP 없음';
       if (!err && r.typeId === 4) {
-        if (!r.model) err = '모델명 없음 — 연결 확인으로 채우거나 직접 고르세요';
+        if (!r.model) err = driveIdentifyOn() ? '모델명 없음 — 연결 확인으로 채우거나 직접 고르세요' : '모델명 없음 — 직접 고르세요';
         else if (!/^\d+\.\d+$/.test(r.ver.trim())) err = '모델버전은 1.04 처럼';
       }
       seen[name.toLowerCase()] = true;

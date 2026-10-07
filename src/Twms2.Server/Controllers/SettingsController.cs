@@ -10,6 +10,7 @@ namespace Twms2.Server.Controllers;
 /// - GET  /api/settings        : 일반(App 설정) + 라인 목록 + 매뉴얼 목록 1회 조회.
 /// - POST /api/settings/brand  : 사이드바 제목/부제 저장 (App:NavTitle/NavSubtitle).
 /// - POST /api/settings/security : 다운로드/리포트 로그인 요구 여부 저장 (App:RequireLoginForDownload).
+/// - POST /api/settings/features : 실험 기능 on/off 저장 (Features:DriveIdentify). 설정 > 일반 ?lab=1 전용.
 /// - POST /api/settings/lines  : 라인 추가/수정 (Upsert).
 /// - DELETE /api/settings/lines/{id} : 라인 삭제 (배정 자산 있으면 거부).
 /// - POST /api/settings/manuals: 매뉴얼(키워드+PDF) 업로드.
@@ -81,6 +82,8 @@ public class SettingsController : ControllerBase
                 navSubtitle = brand.Subtitle,
                 // 백업 ZIP·리포트 로그인 요구 여부 (기본 false = 개방)
                 requireLoginForDownload = _settings.RequireLoginForDownload,
+                // 실험 기능 — 드라이브 기종·버전 자동 인식 (기본 false, ?lab=1 로만 노출)
+                driveIdentify = _settings.DriveIdentify,
             },
             lines,
             manuals,
@@ -119,6 +122,19 @@ public class SettingsController : ControllerBase
     {
         await _settings.SaveRequireLoginForDownloadAsync(dto.RequireLoginForDownload);
         return Ok(new { ok = true, requireLoginForDownload = dto.RequireLoginForDownload });
+    }
+
+    // ──────────────── 실험 기능 ────────────────
+
+    public record FeaturesDto(bool DriveIdentify);
+
+    /// <summary>실험 기능 저장 (즉시 반영). 현재는 드라이브 기종·버전 자동 인식 하나.</summary>
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    [HttpPost("features")]
+    public async Task<IActionResult> SaveFeatures([FromBody] FeaturesDto dto)
+    {
+        await _settings.SaveDriveIdentifyAsync(dto.DriveIdentify);
+        return Ok(new { ok = true, driveIdentify = dto.DriveIdentify });
     }
 
     // ──────────────── 라인 관리 ────────────────

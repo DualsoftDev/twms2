@@ -398,7 +398,7 @@
           <span class="reg-hint">로봇 PLC (아이콘·통계 분류에 반영)</span></label>
       </div>
 
-      <!-- 연결 확인 — HMI/PLC/서보는 핑, 드라이브는 실제 접속해 기종·버전을 읽어 채운다 -->
+      <!-- 연결 확인 — 핑. 실험 기능(드라이브 자동 인식)이 켜져 있으면 드라이브는 실제 접속해 기종·버전을 읽어 채운다 -->
       <div class="reg-check">
         <button type="button" class="hist-btn" id="reg-check"><span class="material-symbols-outlined">network_check</span>연결 확인</button>
         <small class="reg-hint" id="reg-check-hint">입력한 연결 정보로 실제 접속해 봅니다.</small>
@@ -446,7 +446,7 @@
         <button type="button" class="hist-btn" id="bulk-addrow"><span class="material-symbols-outlined">add</span>빈 행 추가</button>
       </div>
 
-      <div class="batch-section">2. 검증 — 연결 확인으로 드라이브 모델·버전을 실물에서 채웁니다</div>
+      <div class="batch-section" id="bulk-verify-title">2. 검증 — 연결 확인</div>
       <div class="reg-check">
         <button type="button" class="hist-btn" id="bulk-check-all"><span class="material-symbols-outlined">network_check</span>전체 연결 확인</button>
         <button type="button" class="hist-btn" id="bulk-keep-failed" style="display:none;"><span class="material-symbols-outlined">filter_alt</span>실패 행만 남기기</button>

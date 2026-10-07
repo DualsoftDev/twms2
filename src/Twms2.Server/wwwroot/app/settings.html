@@ -582,6 +582,18 @@
 
           <div style="height:1px;background:var(--c-outline-variant);opacity:0.4;margin:4px 0 16px;"></div>
 
+          <!-- 실험 기능 — 평소엔 숨김. /settings?lab=1 로 들어왔을 때만 보인다 (settings.js). 값은 서버 appsettings.json Features 섹션. -->
+          <div id="lab-box" style="display:none;">
+            <h4 class="set-section-title" style="font-size:0.9rem;"><span class="material-symbols-outlined" style="font-size:18px;">science</span>실험 기능</h4>
+            <p class="set-hint">현장 세팅용 기능입니다. 켜면 모든 관리자 화면에 바로 반영되고, 서버 설정에 저장됩니다.</p>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px;user-select:none;">
+              <input type="checkbox" id="lab-drive-identify" style="width:16px;height:16px;accent-color:var(--c-primary);cursor:pointer;" />
+              <span>드라이브 기종·버전 자동 인식</span>
+            </label>
+            <p class="set-hint" style="margin-bottom:16px;">자산 등록·일괄 등록·자산 상세의 연결 확인에서 드라이브에 직접 접속해 모델명·모델버전을 읽어 채웁니다. 꺼져 있으면 드라이브도 핑으로만 확인합니다.</p>
+            <div style="height:1px;background:var(--c-outline-variant);opacity:0.4;margin:4px 0 16px;"></div>
+          </div>
+
           <div class="set-alert" style="align-items:flex-start;">
             <span class="material-symbols-outlined" style="color:var(--c-primary);">info</span>
             <span>변경 사항이 사이드바에 바로 보이지 않으면 브라우저를 <b>강력 새로고침</b> 하세요 (이미지·스타일 캐시 때문).<br>
@@ -930,7 +942,7 @@
           <span class="reg-hint">로봇 PLC (아이콘·통계 분류에 반영)</span></label>
       </div>
 
-      <!-- 연결 확인 — HMI/PLC/서보는 핑, 드라이브는 실제 접속해 기종·버전을 읽어 채운다 -->
+      <!-- 연결 확인 — 핑. 실험 기능(드라이브 자동 인식)이 켜져 있으면 드라이브는 실제 접속해 기종·버전을 읽어 채운다 -->
       <div class="reg-check">
         <button type="button" class="hist-btn" id="reg-check"><span class="material-symbols-outlined">network_check</span>연결 확인</button>
         <small class="reg-hint" id="reg-check-hint">입력한 연결 정보로 실제 접속해 봅니다.</small>
@@ -978,7 +990,7 @@
         <button type="button" class="hist-btn" id="bulk-addrow"><span class="material-symbols-outlined">add</span>빈 행 추가</button>
       </div>
 
-      <div class="batch-section">2. 검증 — 연결 확인으로 드라이브 모델·버전을 실물에서 채웁니다</div>
+      <div class="batch-section" id="bulk-verify-title">2. 검증 — 연결 확인</div>
       <div class="reg-check">
         <button type="button" class="hist-btn" id="bulk-check-all"><span class="material-symbols-outlined">network_check</span>전체 연결 확인</button>
         <button type="button" class="hist-btn" id="bulk-keep-failed" style="display:none;"><span class="material-symbols-outlined">filter_alt</span>실패 행만 남기기</button>

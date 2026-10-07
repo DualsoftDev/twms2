@@ -402,6 +402,7 @@
       EDIT.row = Object.assign({}, row);
       EDIT.lines = d.lineOptions || [];
       EDIT.agents = d.agents || [];
+      EDIT.features = d.features || {};
       EDIT.on = true;
       EDIT.saving = false;
       renderEdit();
@@ -469,10 +470,14 @@
     conn.push(editField('Station', numInput('stationNumber')));
     if (t === 4) {
       conn.push(`<div class="adt-row2">${editField('모델명', textInput('modelName'))}${editField('버전', textInput('modelVersion'))}</div>`);
-      conn.push(`<div class="adt-field">
-        <button class="adt-btn" id="adt-conn-check" type="button"><span class="material-symbols-outlined">network_check</span>연결 정보 검사</button>
-        <div class="adt-check-result" id="adt-check-result" style="display:none;"><span class="material-symbols-outlined" id="adt-check-icon"></span><span id="adt-check-msg"></span></div>
-      </div>`);
+      // 드라이브 기종·버전 자동 인식은 실험 기능 — 서버 플래그(Features:DriveIdentify)가 켜져 있을 때만 버튼을 둔다.
+      // 꺼져 있으면 서버도 식별을 하지 않으므로 버튼이 있어 봐야 "연결됨" 밖에 못 보여준다.
+      if (EDIT.features && EDIT.features.driveIdentify) {
+        conn.push(`<div class="adt-field">
+          <button class="adt-btn" id="adt-conn-check" type="button"><span class="material-symbols-outlined">network_check</span>연결 정보 검사</button>
+          <div class="adt-check-result" id="adt-check-result" style="display:none;"><span class="material-symbols-outlined" id="adt-check-icon"></span><span id="adt-check-msg"></span></div>
+        </div>`);
+      }
     }
     if (t === 6) {
       conn.push(`<div class="adt-field"><label class="adt-check"><input type="checkbox" data-ek="connIsRobot"${r.connIsRobot === 1 ? ' checked' : ''} />로봇 PLC</label></div>`);

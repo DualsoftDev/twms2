@@ -21,12 +21,14 @@ public class AssetTableController : ControllerBase
     private readonly AssetService _assetService;
     private readonly LayoutDbService _layoutDb;
     private readonly DexaReadService _dexaRead;
+    private readonly AppSettingsEditor _settings;
 
-    public AssetTableController(AssetService assetService, LayoutDbService layoutDb, DexaReadService dexaRead)
+    public AssetTableController(AssetService assetService, LayoutDbService layoutDb, DexaReadService dexaRead, AppSettingsEditor settings)
     {
         _assetService = assetService;
         _layoutDb = layoutDb;
         _dexaRead = dexaRead;
+        _settings = settings;
     }
 
     /// <summary>
@@ -104,6 +106,8 @@ public class AssetTableController : ControllerBase
             rows,
             lineOptions,
             agents,
+            // 실험 기능 플래그 — 등록 폼·일괄 등록·자산 상세가 드라이브 자동 인식 UI 를 보일지 결정한다.
+            features = new { driveIdentify = _settings.DriveIdentify },
             // 유형별 컬럼 가시성 규칙 (AssetEditGrid.HasIp/HasVia/HasVersion/HasRobot 이식)
             types = new object[]
             {

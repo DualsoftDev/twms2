@@ -52,6 +52,28 @@
     // 다운로드 보안 — 저장 직후 폴링이 이전 값으로 되돌리지 않도록 저장 중에는 건너뜀
     const dlChk = $('dl-auth-chk');
     if (dlChk && !_savingDlAuth) dlChk.checked = !!g.requireLoginForDownload;
+
+    // 실험 기능 (?lab=1 로만 보이는 블록) — 같은 이유로 저장 중엔 건너뜀
+    const labChk = $('lab-drive-identify');
+    if (labChk && !_savingLab) labChk.checked = !!g.driveIdentify;
+  }
+
+  // ──────────────── 실험 기능 ────────────────
+  let _savingLab = false;
+
+  async function saveDriveIdentify(e) {
+    const on = e.target.checked;
+    _savingLab = true;
+    e.target.disabled = true;
+    try {
+      const res = await postJson('/api/settings/features', { driveIdentify: on });
+      if (!res.ok) { e.target.checked = !on; toast(res.error || '저장 실패'); return; }
+      if (_state.general) _state.general.driveIdentify = on;
+      toast(on ? '드라이브 자동 인식을 켰습니다. 등록 폼을 다시 열면 반영됩니다.' : '드라이브 자동 인식을 껐습니다.');
+    } finally {
+      _savingLab = false;
+      e.target.disabled = false;
+    }
   }
 
   // ──────────────── 다운로드 보안 ────────────────
@@ -343,6 +365,7 @@
     $('brand-reset-btn').addEventListener('click', resetBrand);
     // 다운로드 보안
     $('dl-auth-chk').addEventListener('change', saveDownloadAuth);
+    $('lab-drive-identify').addEventListener('change', saveDriveIdentify);
     // 로고 업로드/삭제
     $('logo-pick-btn').addEventListener('click', () => $('logo-file-input').click());
     $('logo-file-input').addEventListener('change', onLogoPicked);
@@ -361,8 +384,11 @@
     if (window.Shell) await Shell.init({ active: 'settings' });
     bind();
     // 딥링크: /settings?tab=assets 등으로 특정 탭 직접 진입 (database 는 dexa 안 접이식으로 흡수)
-    let urlTab = new URLSearchParams(location.search).get('tab');
+    const qs = new URLSearchParams(location.search);
+    let urlTab = qs.get('tab');
     if (urlTab === 'database') urlTab = 'dexa';
+    // 숨은 진입로: /settings?lab=1 → 일반 탭의 실험 기능 블록을 보이고 그 탭으로 간다
+    if (qs.get('lab') === '1') { $('lab-box').style.display = ''; if (!urlTab) urlTab = 'general'; }
     if (urlTab && document.querySelector(`.set-panel[data-panel="${urlTab}"]`)) switchTab(urlTab);
     await load();
     setInterval(() => { if (!document.hidden) load(); }, 30000);

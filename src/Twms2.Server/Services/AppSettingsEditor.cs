@@ -25,6 +25,11 @@ public class AppSettingsEditor
     // 미들웨어가 요청마다 읽으므로 브랜드와 같은 이유로 메모리 캐시(저장 즉시 반영).
     private volatile bool _requireLoginForDownload;
 
+    // 실험 기능: 드라이브 기종·버전 자동 인식(연결 확인 때 Modbus 로 식별 레지스터를 읽는 것).
+    // 기본 꺼짐 — 현장 세팅 때만 쓰는 기능이라 평소엔 숨기고, 꺼져 있으면 드라이브 연결 확인도 핑으로만 동작한다.
+    // 설정 > 일반에 ?lab=1 로 들어가야 보이는 체크박스로 켠다. "App" 이 아니라 "Features" 섹션에 저장.
+    private volatile bool _driveIdentify;
+
     public const string DefaultNavTitle = "TWMS";
     public const string DefaultNavSubtitle = "Total Web Management System";
 
@@ -33,6 +38,16 @@ public class AppSettingsEditor
         _navTitle = config["App:NavTitle"] ?? DefaultNavTitle;
         _navSubtitle = config["App:NavSubtitle"] ?? DefaultNavSubtitle;
         _requireLoginForDownload = bool.TryParse(config["App:RequireLoginForDownload"], out var r) && r;
+        _driveIdentify = bool.TryParse(config["Features:DriveIdentify"], out var di) && di;
+    }
+
+    /// <summary>드라이브 기종·버전 자동 인식 사용 여부 (실험 기능, 기본 false). 저장 즉시 반영.</summary>
+    public bool DriveIdentify => _driveIdentify;
+
+    public Task SaveDriveIdentifyAsync(bool on)
+    {
+        _driveIdentify = on;
+        return UpdateSectionAsync("Features", f => f["DriveIdentify"] = on);
     }
 
     /// <summary>백업 ZIP 다운로드·DEXA 리포트 열람에 로그인을 요구할지. 저장 즉시 반영.</summary>
@@ -71,7 +86,9 @@ public class AppSettingsEditor
         });
     }
 
-    private async Task UpdateAppSectionAsync(Action<JsonObject> mutate)
+    private Task UpdateAppSectionAsync(Action<JsonObject> mutate) => UpdateSectionAsync("App", mutate);
+
+    private async Task UpdateSectionAsync(string section, Action<JsonObject> mutate)
     {
         var path = TwmsDataPath.LocalConfig;
         await _writeLock.WaitAsync();
@@ -79,9 +96,9 @@ public class AppSettingsEditor
         {
             var root = await ReadOrCreateRootAsync(path);
 
-            var appSection = root["App"]?.AsObject() ?? new JsonObject();
-            mutate(appSection);
-            root["App"] = appSection;
+            var obj = root[section]?.AsObject() ?? new JsonObject();
+            mutate(obj);
+            root[section] = obj;
 
             // 원자적 쓰기: 임시 파일에 기록 후 교체 → 부분 기록(torn write)으로 설정 로드가 깨지지 않도록.
             var tmp = path + ".tmp";
