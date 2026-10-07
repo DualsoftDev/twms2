@@ -104,3 +104,6 @@ src/Twms2.Server/manuals/
 src/DeepPinger/
 DEXA_Asset.md
 XGCommLib.md
+
+# Local tools (PLC templates / site-specific data, never publish)
+tools/
