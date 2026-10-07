@@ -178,6 +178,9 @@
     .hist-alert.err { color: var(--health-failed); }
     .hist-alert.info { color: var(--c-primary); }
     .hist-alert .close { margin-left: auto; cursor: pointer; opacity: 0.6; }
+    .hist-alert.reg-file-info { flex-wrap: wrap; font-weight: 500; }
+    .hist-alert.reg-file-info b { font-weight: 700; }
+    .hist-alert.reg-file-info .reg-file-reapply { margin-left: auto; font-size: 12px; }
     .hist-alert .close:hover { opacity: 1; }
     .hist-progress { height: 8px; border-radius: 9999px; background: var(--c-surface-container-low); overflow: hidden; margin-bottom: 12px;
       box-shadow: inset 2px 2px 4px var(--nm-dark), inset -2px -2px 4px var(--nm-light); }
@@ -350,6 +353,13 @@
         </div>
         <div class="hist-alert warn" id="reg-file-warn" style="display:none;">
           <span class="material-symbols-outlined">warning</span><span id="reg-file-warn-msg"></span>
+        </div>
+        <!-- 업로드 즉시 서버가 .xgwx 의 접속 설정(XGCommSettings)·기종을 읽어 폼을 채운다 -->
+        <div class="hist-alert info reg-file-info" id="reg-file-info" style="display:none;">
+          <span class="material-symbols-outlined">description</span><span id="reg-file-info-msg"></span>
+          <button type="button" class="hist-btn reg-file-reapply" id="reg-file-reapply"
+                  title="프로젝트 파일에 저장된 접속 설정으로 IP·경유 값을 다시 채웁니다">
+            <span class="material-symbols-outlined">restart_alt</span>파일 값 다시 불러오기</button>
         </div>
       </div>
 

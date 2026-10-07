@@ -476,6 +476,11 @@
     }
     if (t === 6) {
       conn.push(`<div class="adt-field"><label class="adt-check"><input type="checkbox" data-ek="connIsRobot"${r.connIsRobot === 1 ? ' checked' : ''} />로봇 PLC</label></div>`);
+      // DEXA 저장소의 .xgwx 접속 설정(XGCommSettings)을 읽어 IP·경유 칸을 파일 값으로 되돌린다. 저장 전까지는 폼만 바뀐다.
+      conn.push(`<div class="adt-field">
+        <button class="adt-btn" id="adt-proj-reload" type="button"><span class="material-symbols-outlined">restart_alt</span>PLC 프로젝트에서 파일 값 다시 불러오기</button>
+        <div class="adt-check-result" id="adt-proj-result" style="display:none;"><span class="material-symbols-outlined" id="adt-proj-icon"></span><span id="adt-proj-msg"></span></div>
+      </div>`);
     }
 
     // 헤더는 조회 화면과 동일 톤 유지 (아이콘 + 이름 + 편집중 배지)
@@ -580,6 +585,9 @@
     const checkBtn = $('adt-conn-check');
     if (checkBtn) checkBtn.addEventListener('click', () => checkDriveConnection(syncSave));
 
+    const projBtn = $('adt-proj-reload');
+    if (projBtn) projBtn.addEventListener('click', () => reloadFromProjectFile(syncSave));
+
     $('adt-edit-cancel').addEventListener('click', cancelEdit);
     saveBtn.addEventListener('click', saveEdit);
   }
@@ -679,6 +687,65 @@
       return;
     }
     showDriveCheck('ok', 'check_circle', msg);
+  }
+
+  /* ── PLC 프로젝트 파일 값 다시 불러오기 ───────────────────────────
+     서버가 DEXA 저장소(Storage/Project/{id})의 .xgwx 를 풀어 접속 설정을 돌려준다.
+     stage 2(경유)면 경유 IP·Base/Slot·대상 IP 를, stage 1 이면 IP 만 채우고 경유는 비운다.
+     USB 등 Ethernet 이 아닌 접속으로 저장된 파일은 IP 가 남아 있어도 경고와 함께 채운다(사용자가 확인). */
+  function showProjResult(kind, icon, html) {
+    const box = $('adt-proj-result');
+    if (!box) return;
+    box.className = 'adt-check-result ' + kind;
+    $('adt-proj-icon').textContent = icon;
+    $('adt-proj-msg').innerHTML = html;
+    box.style.display = '';
+  }
+
+  async function reloadFromProjectFile(syncSave) {
+    const r = EDIT.row;
+    const btn = $('adt-proj-reload');
+    btn.disabled = true;
+    showProjResult('info', 'hourglass_top', 'DEXA 저장소의 프로젝트 파일을 읽는 중…');
+    try {
+      const res = await fetch('/api/assets/' + ASSET_ID + '/project-file/inspect', { headers: { 'Accept': 'application/json' } });
+      if (!EDIT.on || EDIT.row !== r) return;
+      if (res.status === 401 || res.status === 403) { showProjResult('err', 'error', '관리자 로그인이 필요합니다.'); return; }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { showProjResult('err', 'error', esc(d.error || '프로젝트 파일을 해석하지 못했습니다.')); return; }
+      const p = d.project || {};
+      if (!p.ip && !p.viaIp) {
+        showProjResult('warn', 'warning', '프로젝트에 접속 IP 가 없습니다.' + ((p.warnings || []).length ? '<br><small>' + p.warnings.map(esc).join('<br>') + '</small>' : ''));
+        return;
+      }
+      const before = esc((r.connIpVia ? r.connIpVia + ' → ' : '') + (r.displayIp || '-'));
+      if (p.stage === 2) {
+        setEditInput('connIpVia', p.viaIp || '');
+        setEditInput('connBase', p.viaBase ?? 0); r.connBase = p.viaBase ?? 0;
+        setEditInput('connSlot', p.viaSlot ?? ''); r.connSlot = p.viaSlot ?? null;
+        setEditInput('displayIp', p.ip || '');
+      } else {
+        setEditInput('connIpVia', ''); r.connIpVia = '';
+        setEditInput('connBase', 0); r.connBase = 0;
+        setEditInput('connSlot', ''); r.connSlot = null;
+        setEditInput('displayIp', p.ip || '');
+      }
+      const after = esc((p.stage === 2 ? (p.viaIp || '-') + ' (Base ' + (p.viaBase ?? 0) + '/Slot ' + (p.viaSlot ?? 0) + ') → ' : '') + (p.ip || '-'));
+      const meta = [p.plcTypeName ? '기종 ' + esc(p.plcTypeName) : null, p.fileName ? esc(p.fileName) : null, p.fileVer ? 'XG5000 ' + esc(p.fileVer) : null].filter(Boolean).join(' · ');
+      let msg = '<b>' + before + ' → ' + after + '</b> 로 채웠습니다' + (meta ? '<br><small>' + meta + '</small>' : '') + '<br><small>저장을 눌러야 반영됩니다.</small>';
+      if (p.medium && p.medium !== 'ethernet') {
+        showProjResult('warn', 'warning', '파일은 <b>' + (p.medium === 'usb' ? 'USB' : 'Ethernet 이 아닌') + '</b> 접속으로 저장되어 있습니다. 남아 있던 IP 를 가져왔으니 현재 백업망 주소인지 확인하세요.<br>' + msg);
+      } else if ((p.warnings || []).length) {
+        showProjResult('warn', 'warning', msg + '<br><small>' + p.warnings.map(esc).join('<br>') + '</small>');
+      } else {
+        showProjResult('ok', 'check_circle', msg);
+      }
+      syncSave();
+    } catch (e) {
+      if (EDIT.on) showProjResult('err', 'error', '불러오기 오류: ' + esc(e.message));
+    } finally {
+      if (EDIT.on && btn.isConnected) btn.disabled = false;
+    }
   }
 
   function cancelEdit() {

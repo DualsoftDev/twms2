@@ -6,6 +6,7 @@ using static Twms2.Server.Helpers.ActionResultHelper;
 using Twms2.Server.Models.Dashboard;
 using Twms2.Server.Models.Dexa;
 using Twms2.Server.Services;
+using Twms2.Server.Services.Xgwx;
 
 using Twms2.Dexa;
 
@@ -258,7 +259,8 @@ public class AssetsController : ControllerBase
         await using (var fs = System.IO.File.Create(path))
             await file.CopyToAsync(fs);
 
-        var md5 = AssetService.Md5Hex(await System.IO.File.ReadAllBytesAsync(path));
+        var bytes = await System.IO.File.ReadAllBytesAsync(path);
+        var md5 = AssetService.Md5Hex(bytes);
 
         // 같은 파일이 이미 다른 자산에 쓰이고 있으면 복붙 실수일 가능성이 높다 — 경고만 하고 막지는 않는다.
         var used = await _dexaRead.GetProjectFileChecksumsAsync();
@@ -266,7 +268,43 @@ public class AssetsController : ControllerBase
             ? $"같은 프로젝트 파일이 이미 '{owner}' 에 사용 중입니다. 파일을 잘못 고르지 않았는지 확인하세요."
             : null;
 
-        return Ok(new { ok = true, token, fileName = safeName, size = file.Length, md5, warning });
+        // PLC(.xgwx) 는 올리는 즉시 접속 설정을 읽어 폼을 채울 수 있게 돌려준다. 서보(.xpj)는 다른 포맷이라 해석하지 않는다.
+        XgwxInspection? project = null;
+        if (string.Equals(ext, ".xgwx", StringComparison.OrdinalIgnoreCase))
+            project = XgwxProjectInspector.Inspect(bytes, safeName);
+
+        return Ok(new { ok = true, token, fileName = safeName, size = file.Length, md5, warning, project });
+    }
+
+    /// <summary>
+    /// 등록된 PLC 자산의 프로젝트 파일(DEXA 저장소 Storage/Project/{id})을 읽어 접속 설정을 해석한다 (Admin 전용).
+    /// 상세 화면 편집의 "PLC 프로젝트에서 파일 값 다시 불러오기" 가 쓴다. 파일을 바꾸지는 않는다.
+    /// </summary>
+    [HttpGet("{id:int}/project-file/inspect")]
+    [Authorize(AuthenticationSchemes = AuthController.Scheme, Roles = "Admin")]
+    public async Task<IActionResult> InspectProjectFile(int id)
+    {
+        var info = await _dexaRead.GetProjectFileInfoAsync(id);
+        if (info is null)
+            return NotFound(new { error = "이 자산에는 프로젝트 파일이 없습니다." });
+
+        var path = _dexaRead.ResolveProjectFilePath(info.Id);
+        if (path is null)
+            return NotFound(new { error = $"DEXA 저장소에서 프로젝트 파일(#{info.Id})을 찾지 못했습니다. TWMS 가 DEXA 서버 PC 에서 실행 중이어야 합니다." });
+
+        var fileName = Path.GetFileName((info.Path ?? "").Trim());
+        if (fileName.EndsWith(".xpj", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "서보(.xpj) 프로젝트는 해석을 지원하지 않습니다." });
+
+        byte[] bytes;
+        try { bytes = await System.IO.File.ReadAllBytesAsync(path); }
+        catch (Exception ex) { return StatusCode(500, new { error = "프로젝트 파일을 읽지 못했습니다: " + ex.Message }); }
+
+        var result = XgwxProjectInspector.Inspect(bytes, string.IsNullOrEmpty(fileName) ? null : fileName);
+        if (result.Error is not null)
+            return BadRequest(new { error = result.Error, project = result });
+
+        return Ok(new { ok = true, projectFileId = info.Id, checksum = info.Checksum, dirty = info.Dirty, project = result });
     }
 
     /// <summary>

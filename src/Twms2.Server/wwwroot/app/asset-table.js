@@ -585,7 +585,7 @@
   }
 
   /* ── 등록 (단건) ─────────────────────────────────────────────────── */
-  const REG = { token: null, fileName: null, identified: null };
+  const REG = { token: null, fileName: null, identified: null, project: null };
 
   // PLC(6)·서보(7)는 프로젝트 파일이 필수다 — 등록 후에는 붙일 수 없다.
   function isFileType(typeId) { return typeId === 6 || typeId === 7; }
@@ -600,6 +600,59 @@
   function regAlert(msg) {
     $('reg-alert-msg').textContent = msg;
     $('reg-alert').style.display = '';
+  }
+
+  /* ── 프로젝트 파일 접속 설정 ───────────────────────────────────
+     DEXA 는 .xgwx 안의 접속 설정(XGCommSettings)으로 XG5000 을 PLC 에 붙인다. 업로드 응답의 project 가 그 해석이다.
+     stage 1 = 로컬(IP 하나), 2 = 리모트 1단(경유 PLC IP + 경유 모듈 Base/Slot + 대상 IP).
+     medium 이 ethernet 이 아니면(USB 로 저장) 파일의 IP 는 "예전 값" 일 뿐이라 자동으로는 채우지 않는다. */
+  function projectSummaryHtml(p) {
+    const parts = [];
+    if (p.plcTypeName) parts.push('기종 <b>' + esc(p.plcTypeName) + '</b>');
+    else if (p.plcTypeCode != null) parts.push('기종 코드 <b>' + p.plcTypeCode + '</b>');
+    const medium = p.medium === 'ethernet' ? 'Ethernet' : (p.medium === 'usb' ? 'USB' : (p.medium ? '기타' : '접속 설정 없음'));
+    parts.push('접속 <b>' + medium + (p.stage === 2 ? ' 2단(경유)' : (p.stage === 1 ? ' 1단' : '')) + '</b>');
+    if (p.stage === 2) {
+      parts.push('경유 <b>' + esc(p.viaIp || '-') + '</b> Base ' + (p.viaBase ?? '-') + ' Slot ' + (p.viaSlot ?? '-'));
+      parts.push('대상 <b>' + esc(p.ip || '-') + '</b>');
+    } else if (p.ip) {
+      parts.push('IP <b>' + esc(p.ip) + '</b>');
+    }
+    if (p.fileVer) parts.push('XG5000 ' + esc(p.fileVer) + (p.format === 'binary' ? ' (바이너리)' : ' (XML)'));
+    return parts.join(' · ');
+  }
+
+  function renderProjectInfo() {
+    const box = $('reg-file-info');
+    const p = REG.project;
+    if (!p || p.error) { box.style.display = 'none'; return; }
+    $('reg-file-info-msg').innerHTML = projectSummaryHtml(p);
+    box.className = 'hist-alert reg-file-info ' + (p.ok ? 'info' : 'warn');
+    // 파일에 IP 가 하나라도 있어야 "다시 불러오기" 가 의미 있다
+    $('reg-file-reapply').style.display = (p.ip || p.viaIp) ? '' : 'none';
+    box.style.display = '';
+  }
+
+  /** 파일의 접속 설정으로 IP·경유 필드를 채운다. 사용자가 그 뒤에 고쳐도 되고, 버튼으로 다시 가져올 수 있다. */
+  function applyProjectInfo() {
+    const p = REG.project;
+    if (!p || p.error) return;
+    if (p.stage === 2) {
+      $('reg-via-use').checked = true;
+      syncViaUse();
+      $('reg-via').value = p.viaIp || '';
+      $('reg-base').value = String(p.viaBase ?? 0);
+      $('reg-slot').value = p.viaSlot != null ? String(p.viaSlot) : '';
+      $('reg-ip').value = p.ip || '';
+    } else {
+      $('reg-via-use').checked = false;
+      syncViaUse();
+      $('reg-via').value = '';
+      $('reg-base').value = '0';
+      $('reg-slot').value = '';
+      $('reg-ip').value = p.ip || '';
+    }
+    clearCheck();
   }
 
   function syncRegType() {
@@ -633,7 +686,8 @@
   }
 
   function openReg() {
-    REG.token = null; REG.fileName = null;
+    REG.token = null; REG.fileName = null; REG.project = null;
+    $('reg-file-info').style.display = 'none';
     ['reg-name', 'reg-desc', 'reg-ip', 'reg-agent', 'reg-via', 'reg-slot', 'reg-modelver']
       .forEach(id => { $(id).value = ''; });
     $('reg-base').value = '0';
@@ -688,12 +742,25 @@
       REG.token = d.token; REG.fileName = d.fileName;
       $('reg-file-name').textContent =
         d.fileName + ' · ' + (d.size / 1024).toFixed(1) + 'KB · md5 ' + String(d.md5).slice(0, 8) + '…';
-      if (d.warning) {
-        $('reg-file-warn-msg').textContent = d.warning;
+
+      // 접속 설정 해석 — 서버가 .xgwx(XML/바이너리) 의 XGCommSettings 와 기종 코드를 읽어 보낸다.
+      REG.project = d.project || null;
+      const warns = [];
+      if (d.warning) warns.push(d.warning);
+      if (REG.project) {
+        if (REG.project.error) warns.push('프로젝트 해석 실패: ' + REG.project.error);
+        (REG.project.warnings || []).forEach(w => warns.push(w));
+      }
+      if (warns.length) {
+        $('reg-file-warn-msg').innerHTML = warns.map(esc).join('<br>');
         $('reg-file-warn').style.display = '';
       } else {
         $('reg-file-warn').style.display = 'none';
       }
+      renderProjectInfo();
+      // Ethernet 접속 설정이면 IP·경유를 바로 채운다. USB 등으로 저장된 파일은 값이 남아 있어도 믿을 수 없으니
+      // 채우지 않고 경고만 보여 사용자가 직접 넣게 한다(파일 값 다시 불러오기로 가져올 수는 있다).
+      if (REG.project && REG.project.ok) applyProjectInfo();
     } catch (e) {
       $('reg-file-name').textContent = '선택된 파일 없음';
       regAlert('업로드 중 오류: ' + e.message);
@@ -1284,6 +1351,12 @@
     $('reg-via-use').addEventListener('change', clearCheck);
     $('reg-file-btn').addEventListener('click', () => $('reg-file').click());
     $('reg-file').addEventListener('change', (e) => uploadProjectFile(e.target.files[0]));
+    $('reg-file-reapply').addEventListener('click', () => {
+      applyProjectInfo();
+      const p = REG.project || {};
+      if (p.medium && p.medium !== 'ethernet')
+        regAlert('파일은 ' + (p.medium === 'usb' ? 'USB' : 'Ethernet 이 아닌') + ' 접속으로 저장되어 있습니다. 가져온 IP 가 현재 백업망 주소인지 확인하세요.');
+    });
     $('reg-submit').addEventListener('click', submitReg);
     $('reg-name').addEventListener('input', () => {
       $('reg-name-err').textContent = winNameError($('reg-name').value.trim()) || '';

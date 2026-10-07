@@ -155,6 +155,50 @@ public class DexaReadService
         }
     }
 
+    /// <summary>자산에 붙은 프로젝트 파일 행(projectFile). PLC·서보가 아니거나 파일이 없으면 null.</summary>
+    public async Task<ProjectFileInfo?> GetProjectFileInfoAsync(int assetId)
+    {
+        try
+        {
+            using var conn = _dexaDb.Create();
+            return await conn.QueryFirstOrDefaultAsync<ProjectFileInfo>("""
+                SELECT pf.id AS Id, pf.path AS Path, pf.checksum AS Checksum, a.projectFileDirty AS Dirty
+                FROM asset a
+                JOIN projectFile pf ON pf.id = a.projectFileId
+                WHERE a.id = @AssetId AND a.deleted = 0
+                """, new { AssetId = assetId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "프로젝트 파일 정보 조회 실패: AssetId={AssetId}", assetId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// DEXA 서버 저장소의 프로젝트 파일 실물 경로. DEXA 는 <c>Storage/Project/{projectFileId}</c>
+    /// (확장자 없음)에 등록 당시 바이트를 그대로 둔다. 저장소 위치는 DEXA DB 파일과 같은 폴더다.
+    /// TWMS 가 DEXA 서버와 다른 PC 에서 돌면 null 을 돌려준다.
+    /// </summary>
+    public string? ResolveProjectFilePath(int projectFileId)
+    {
+        var dbPath = _dexaDb.DbFilePath;
+        if (string.IsNullOrEmpty(dbPath))
+            dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "LS", "DEXA", "Storage", "DEXA.sqlite3");
+        var dir = Path.GetDirectoryName(dbPath);
+        if (string.IsNullOrEmpty(dir)) return null;
+        var path = Path.Combine(dir, "Project", projectFileId.ToString());
+        return File.Exists(path) ? path : null;
+    }
+
+    public sealed class ProjectFileInfo
+    {
+        public int Id { get; set; }
+        public string? Path { get; set; }
+        public string? Checksum { get; set; }
+        public bool Dirty { get; set; }
+    }
+
     /// <summary>
     /// 자산 타입 목록 조회
     /// </summary>
